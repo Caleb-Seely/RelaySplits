@@ -51,7 +51,7 @@ const RunnerEditModal = ({ isOpen, onClose, runner, onSave }: RunnerEditModalPro
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="mx-2 sm:mx-0 max-w-[100vw] sm:max-w-md rounded-md sm:rounded-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg">

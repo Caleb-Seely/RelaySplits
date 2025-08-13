@@ -294,7 +294,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
             : 'border-slate-200 bg-white'
         }`}
       >
-        <CardContent className="p-4">
+        <CardContent className="p-2 sm:p-3 md:p-4">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-start gap-3 min-w-0 flex-1">
               <div
@@ -380,12 +380,12 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
         <table className="w-full">
           <thead>
             <tr className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
-              <th className="text-left p-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Leg</th>
-              <th className="text-left p-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Runner</th>
-              <th className="text-left p-3 text-xs font-semibold text-slate-700 uppercase tracking-wide hidden sm:table-cell">Distance</th>
-              <th className="text-left p-3 text-xs font-semibold text-slate-700 uppercase tracking-wide hidden lg:table-cell">Projected</th>
-              <th className="text-left p-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Actual</th>
-              <th className="text-left p-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Status</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Leg</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Runner</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide hidden sm:table-cell">Distance</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide hidden lg:table-cell">Projected</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Actual</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -403,7 +403,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                     isMajorExchange ? 'bg-gradient-to-r from-amber-50/30 to-transparent border-l-2 border-l-amber-400' : ''
                   }`}
                 >
-                  <td className="p-3">
+                  <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold ${
@@ -423,7 +423,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                       )}
                     </div>
                   </td>
-                  <td className="p-3">
+                  <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <button
                       className="min-w-0 text-left hover:underline"
                       onClick={() => handleRunnerEdit(runner.id, leg.id)}
@@ -432,12 +432,12 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                       <div className="text-xs text-slate-600">{formatTimeShort(leg.projectedStart)}</div>
                     </button>
                   </td>
-                  <td className="p-3 text-sm text-slate-700 hidden sm:table-cell">{leg.distance}mi</td>
-                  <td className="p-3 text-xs text-slate-600 hidden lg:table-cell">
+                  <td className="px-2 py-2 sm:px-3 sm:py-3 text-sm text-slate-700 hidden sm:table-cell">{leg.distance}mi</td>
+                  <td className="px-2 py-2 sm:px-3 sm:py-3 text-xs text-slate-600 hidden lg:table-cell">
                     <div>{formatTime(leg.projectedStart)}</div>
                     <div className="text-slate-500">to {formatTime(leg.projectedFinish)}</div>
                   </td>
-                  <td className="p-3">
+                  <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <div className="space-y-1">
                       <button
                         className={`text-xs font-medium hover:underline block ${
@@ -458,7 +458,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                       </button>
                     </div>
                   </td>
-                  <td className="p-3">{getStatusBadge(leg)}</td>
+                  <td className="px-2 py-2 sm:px-3 sm:py-3">{getStatusBadge(leg)}</td>
                 </tr>
               );
             })}
@@ -471,11 +471,11 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   return (
     <>
       {viewMode === 'cards' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4">
           {filteredLegs.map(renderCompactCard)}
         </div>
       ) : (
-        <div className="p-4">
+        <div className="sm:p-3 md:p-4">
           {renderTableView()}
         </div>
       )}

@@ -241,23 +241,13 @@ const Dashboard = () => {
   return (
     <>
       <div className="min-h-screen bg-background pb-4">
-        <div className="container mx-auto px-3 lg:px-4 lg:pb-4 space-y-4 lg:space-y-5">
+        <div className="container mx-auto px-2 sm:px-3 lg:px-4 lg:pb-4 space-y-4 lg:space-y-5">
           {/* Enhanced Header with Sync Status */}
           <div className="text-center space-y-3">
-            <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="mb-2">
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">
                 {team?.name || 'Team Name'}
               </h1>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyTeamId}
-                className="h-8 px-3"
-                aria-label="Share Team ID"
-              >
-                <Share2 className="h-4 w-4 mr-1" />
-                Share
-              </Button>
             </div>
 
             {/* Race Progress Bar */}
@@ -321,12 +311,12 @@ const Dashboard = () => {
           </div>
 
           {/* Enhanced Current Status Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
             {/* Current Runner Card */}
             <Card className="group relative overflow-hidden border-border shadow-2xl bg-card">
               <div className="absolute inset-0 bg-green-500 h-1"></div>
 
-              <div className="p-4 bg-green-500/10 rounded-b-none rounded-lg">
+              <div className="p-2 sm:p-3 md:p-4 bg-green-500/10 rounded-b-none rounded-lg">
                 {currentRunner && currentRunnerInfo ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -399,10 +389,10 @@ const Dashboard = () => {
                       </div>
                       <div className="flex justify-between items-baseline text-base font-bold text-foreground">
                         <span>
-                          Started: {formatTime(currentRunner.actualStart || currentRunner.projectedStart)}
+                          {formatTime(currentRunner.actualStart || currentRunner.projectedStart)}
                         </span>
                         <span className="text-green-500">
-                          {getRemainingDistance().toFixed(1)} miles remaining
+                          ~{getRemainingDistance().toFixed(1)} miles left
                         </span>
                       </div>
                     </div>
@@ -416,7 +406,7 @@ const Dashboard = () => {
             <Card className="group relative overflow-hidden border-border shadow-2xl bg-card">
               <div className="absolute inset-0 bg-blue-500 h-1"></div>
 
-              <div className="p-4 bg-blue-500/10 rounded-b-none rounded-lg">
+              <div className="p-2 sm:p-3 md:p-4 bg-blue-500/10 rounded-b-none rounded-lg">
                 {nextRunner && nextRunnerInfo ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -525,53 +515,57 @@ const Dashboard = () => {
           {/* Enhanced Van Toggle */}
           <div className="flex justify-center">
             <Card className="bg-card shadow-lg border-border p-2">
-              <div className="flex bg-muted rounded-lg p-1">
-                <Button
-                  variant={currentVan === 1 ? "default" : "ghost"}
-                  size="lg"
-                  onClick={() => setCurrentVan(1)}
-                  className={`relative px-6 py-2 font-semibold transition-all duration-200 ${
-                    currentVan === 1
-                      ? 'bg-primary text-primary-foreground shadow-lg transform scale-105'
-                      : 'text-foreground hover:bg-secondary'
-                  }`}
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Van 1
-                </Button>
-                <Button
-                  variant={currentVan === 2 ? "default" : "ghost"}
-                  size="lg"
-                  onClick={() => setCurrentVan(2)}
-                  className={`relative px-6 py-2 font-semibold transition-all duration-200 ${
-                    currentVan === 2
-                      ? 'bg-primary text-primary-foreground shadow-lg transform scale-105'
-                      : 'text-foreground hover:bg-secondary'
-                  }`}
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Van 2
-                </Button>
+              <div className="relative overflow-hidden bg-muted/70 rounded-lg p-1 border border-border">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/15 via-blue-500/10 to-purple-500/15" />
+                <div className="relative flex">
+                  <Button
+                    variant={currentVan === 1 ? "default" : "ghost"}
+                    size="lg"
+                    onClick={() => setCurrentVan(1)}
+                    className={`relative px-6 py-2 font-semibold transition-all duration-200 ${
+                      currentVan === 1
+                        ? 'bg-primary text-primary-foreground shadow-lg transform scale-105'
+                        : 'text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Van 1
+                  </Button>
+                  <Button
+                    variant={currentVan === 2 ? "default" : "ghost"}
+                    size="lg"
+                    onClick={() => setCurrentVan(2)}
+                    className={`relative px-6 py-2 font-semibold transition-all duration-200 ${
+                      currentVan === 2
+                        ? 'bg-primary text-primary-foreground shadow-lg transform scale-105'
+                        : 'text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Van 2
+                  </Button>
+                </div>
               </div>
             </Card>
           </div>
 
-          {/* Compact Leg Schedule Table */}
+          {/* Leg Schedule Table */}
           <Card className="shadow-lg border-0 overflow-hidden bg-card">
-            <CardHeader className="bg-primary text-primary-foreground py-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardHeader className="relative overflow-hidden bg-muted/70 text-foreground border-b border-border py-2 sm:py-3 md:py-4">
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-blue-500/15 to-purple-500/20" />
+              <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="space-y-3">
                   <CardTitle className="text-lg font-bold flex items-center gap-3">
-                    <div className="p-2 bg-primary-foreground/20 backdrop-blur-sm rounded-lg">
+                    <div className="p-2 bg-muted-foreground/10 backdrop-blur-sm rounded-lg">
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
                       <h2 className="text-xl font-bold">Van {currentVan} Schedule & Progress</h2>
-                      <p className="text-sm text-primary-foreground/80 font-normal">Race Schedule</p>
+                      <p className="text-sm text-muted-foreground font-normal">Race Schedule</p>
                     </div>
                   </CardTitle>
                   
-                  {/* Compact Stats */}
+                  {/* Stats */}
                   <div className="flex flex-wrap gap-2">
                     <div className="flex items-center gap-1.5 bg-secondary text-secondary-foreground px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm">
                       <CheckCircle className="h-3.5 w-3.5 text-green-500" />
@@ -591,15 +585,15 @@ const Dashboard = () => {
                 </div>
                 
                 {/* View Toggle - moved here */}
-                <div className="flex bg-primary-foreground/20 backdrop-blur-sm rounded-lg p-1">
+                <div className="flex bg-muted/60 backdrop-blur-sm rounded-lg p-1">
                   <Button
                     variant={viewMode === 'cards' ? "default" : "ghost"}
                     size="sm"
                     onClick={() => setViewMode('cards')}
                     className={`px-3 text-xs h-8 transition-all duration-200 ${
                       viewMode === 'cards'
-                        ? 'bg-primary-foreground/30 text-primary-foreground shadow-md'
-                        : 'text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary-foreground/20'
+                        ? 'bg-background text-foreground shadow-md'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <Grid3X3 className="h-3 w-3 mr-1.5" />
@@ -611,8 +605,8 @@ const Dashboard = () => {
                     onClick={() => setViewMode('table')}
                     className={`px-3 text-xs h-8 transition-all duration-200 ${
                       viewMode === 'table'
-                        ? 'bg-primary-foreground/30 text-primary-foreground shadow-md'
-                        : 'text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary-foreground/20'
+                        ? 'bg-background text-foreground shadow-md'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <List className="h-3 w-3 mr-1.5" />
@@ -644,6 +638,18 @@ const Dashboard = () => {
                 </Button>
               </div>
               <div className="flex-1" />
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyTeamId}
+                  className="h-9 px-4"
+                  aria-label="Share Team ID"
+                >
+                  <Share2 className="h-4 w-4 mr-1" />
+                  Share
+                </Button>
+              </div>
             </div>
           </div>
         </footer>

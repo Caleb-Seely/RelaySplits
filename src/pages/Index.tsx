@@ -134,7 +134,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Offline status and free tier warnings */}
       {!isOnline && (
-        <Alert className="m-4 border-orange-200 bg-orange-50">
+        <Alert className="m-2 sm:m-4 border-orange-200 bg-orange-50">
           <AlertCircle className="h-4 w-4 text-orange-600" />
           <AlertDescription className="text-orange-800">
             You're currently offline. Changes will be saved locally and synced when you're back online.
@@ -160,7 +160,7 @@ const Index = () => {
       )} */}
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-2">
+      <main className="container mx-auto px-2 sm:px-4 py-2">
         {isSetupComplete ? (
           <>
             <Dashboard />
