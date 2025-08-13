@@ -1,0 +1,179 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Simple black and white design system */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+
+    /* Primary - simple black */
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Accent - light gray */
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 0%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 0 0% 0%;
+
+    --radius: 0.5rem;
+
+    /* Race status colors - simple and clear */
+    --ready: 0 0% 60%;
+    --running: 120 100% 25%; /* Green for running */
+    --finished: 0 0% 45%; /* Gray for finished */
+    --next-up: 240 100% 50%; /* Blue for next up */
+
+    /* Van colors */
+    --van-1: 240 100% 50%;
+    --van-2: 280 100% 50%;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 0 0% 100%;
+
+    --ready: 0 0% 60%;
+    --running: 120 100% 25%;
+    --finished: 0 0% 60%;
+    --next-up: 240 100% 70%;
+
+    --van-1: 240 100% 70%;
+    --van-2: 280 100% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@layer utilities {
+  .status-ready {
+    @apply text-white bg-gray-500;
+  }
+  
+  .status-running {
+    @apply text-white bg-green-600;
+  }
+  
+  .status-finished {
+    @apply text-white bg-gray-600;
+  }
+  
+  .status-next-up {
+    @apply text-white bg-blue-600;
+  }
+
+  .van-1 {
+    @apply text-white bg-blue-600;
+  }
+
+  .van-2 {
+    @apply text-white bg-purple-600;
+  }
+
+  .exchange-highlight {
+    @apply bg-gray-100 border-l-4 border-l-black;
+  }
+
+  .countdown-timer {
+    @apply text-blue-600 font-mono font-semibold;
+  }
+
+  .run-time {
+    @apply text-green-600 font-mono font-medium;
+  }
+
+  /* Mobile-specific utilities */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  .mobile-card {
+    @apply rounded-xl border-2 shadow-lg;
+  }
+
+  .mobile-button {
+    @apply h-12 px-6 text-base font-semibold rounded-xl;
+  }
+
+  /* Responsive text sizing */
+  .text-responsive-xs {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-responsive-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-responsive-base {
+    @apply text-base sm:text-lg;
+  }
+
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl;
+  }
+
+  .text-responsive-xl {
+    @apply text-xl sm:text-2xl;
+  }
+
+  .text-responsive-2xl {
+    @apply text-2xl sm:text-3xl md:text-4xl;
+  }
+}
