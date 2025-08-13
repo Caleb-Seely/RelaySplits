@@ -35,7 +35,7 @@ const MajorExchanges = () => {
               <div className="text-xs font-medium text-blue-900 mb-1">
                 {exchangeNames[legId as keyof typeof exchangeNames]}
               </div>
-              <div className={`relative inline-flex items-center justify-center text-sm font-bold ${actualFinish ? 'text-green-700' : 'text-orange-600'}`}>
+              <div className={`relative inline-flex items-center justify-center text-sm font-bold ${actualFinish ? 'text-green-600' : 'text-orange-600'}`}>
                 <span>{formatTime(actualFinish || projectedFinish)}</span>
                 {actualFinish && (
                   <Badge className="absolute left-full ml-2 bg-green-100 text-green-800 border border-green-200 text-[10px] px-1 py-0.5 leading-none">✓</Badge>

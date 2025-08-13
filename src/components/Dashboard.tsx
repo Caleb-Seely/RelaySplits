@@ -240,8 +240,14 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-4">
-        <div className="container mx-auto px-2 sm:px-3 lg:px-4 lg:pb-4 space-y-4 lg:space-y-5">
+      <div className="relative min-h-screen bg-background pb-4 overflow-hidden">
+        {/* Site-wide pulsing gradient background (intensified) */}
+        <div className="pointer-events-none fixed inset-0 z-0">
+          <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/10 via-blue-600/5 to-purple-700/10 animate-pulse" style={{ animationDuration: '10s' }} />
+          <div className="absolute -top-24 -left-24 h-72 w-72 bg-indigo-600/5 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 h-80 w-80 bg-purple-500/5 rounded-full blur-3xl" />
+        </div>
+        <div className="relative z-10 container mx-auto px-2 sm:px-3 lg:px-4 lg:pb-4 space-y-4 lg:space-y-5">
           {/* Enhanced Header with Sync Status */}
           <div className="text-center space-y-3">
             <div className="mb-2">
@@ -258,23 +264,21 @@ const Dashboard = () => {
                   Leg {progress.current}/{progress.total}
                 </span>
                 <span className={`text-sm font-bold ${
-                  isRaceComplete() ? 'text-green-400' : 'text-foreground'
+                  isRaceComplete() ? 'text-green-600' : 'text-foreground'
                 }`}>
                   {isRaceComplete() 
                     ? formatDuration(getFinalRaceTime()!)
                     : formatDuration(Math.max(0, currentTime.getTime() - actualRaceStartTime))
                   }
-                  {isRaceComplete() && (
-                    <span className="ml-1 text-xs text-green-400">FINAL</span>
-                  )}
+                  
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-2">
                 <div
-                  className="bg-primary h-2 rounded-full transition-all duration-500 relative overflow-hidden"
+                  className="h-2 rounded-full transition-all duration-500 relative overflow-hidden bg-gradient-to-r from-orange-500 via-amber-500 to-blue-500"
                   style={{ width: `${(progress.completed / progress.total) * 100}%` }}
                 >
-                  <div className="absolute inset-0 bg-primary-foreground/30 animate-pulse" />
+                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
                 </div>
               </div>
               <div className="grid grid-cols-3 items-center mt-2">
@@ -552,7 +556,7 @@ const Dashboard = () => {
           {/* Leg Schedule Table */}
           <Card className="shadow-lg border-0 overflow-hidden bg-card">
             <CardHeader className="relative overflow-hidden bg-muted/70 text-foreground border-b border-border py-2 sm:py-3 md:py-4">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-blue-500/15 to-purple-500/20" />
+              <div className="absolute inset-0 bg-blue-500/20" />
               <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="space-y-3">
                   <CardTitle className="text-lg font-bold flex items-center gap-3">
@@ -628,7 +632,7 @@ const Dashboard = () => {
           </Card>
         </div>
         {/* Footer */}
-        <footer className="left-0 right-0 border-t bg-background/80 backdrop-blur z-50">
+        <footer className="left-0 right-0  backdrop-blur z-50">
           <div className="container mx-auto px-3 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -647,7 +651,7 @@ const Dashboard = () => {
                   aria-label="Share Team ID"
                 >
                   <Share2 className="h-4 w-4 mr-1" />
-                  Share
+                  Share w/ Teammates
                 </Button>
               </div>
             </div>
