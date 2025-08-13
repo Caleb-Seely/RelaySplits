@@ -81,7 +81,7 @@ const Index = () => {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading RelayTracker...</p>
+          <p className="text-muted-foreground">Loading TeamSplits...</p>
           {!isOnline && (
             <p className="text-sm text-orange-600 mt-2">Working offline - using cached data</p>
           )}
@@ -95,7 +95,7 @@ const Index = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center max-w-md">
-          <h1 className="text-4xl font-bold mb-4">RelayTracker</h1>
+          <h1 className="text-4xl font-bold mb-4">TeamSplits</h1>
           <p className="text-muted-foreground mb-6">
             Track your relay race in real-time.
           </p>
