@@ -73,10 +73,13 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
 
       // Simplified rule: leg 1 actual start is the official start time if it's in the past; otherwise undefined
       const now = Date.now();
-      updatedLegs[0] = {
-        ...updatedLegs[0],
-        actualStart: time <= now ? time : undefined
-      } as typeof updatedLegs[number];
+      // Only set actualStart if it is not already defined; never overwrite a real actual start
+      if (typeof updatedLegs[0].actualStart !== 'number') {
+        updatedLegs[0] = {
+          ...updatedLegs[0],
+          actualStart: time <= now ? time : undefined
+        } as typeof updatedLegs[number];
+      }
 
       // Recalculate all projections from the first leg
       const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);
@@ -185,15 +188,22 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   // CRITICAL: Method to check if data is in a consistent state
   isDataConsistent: () => {
     const state = get();
-    const hasDefaultData = state.runners.some(r => r.name.startsWith('Runner '));
-    const hasCustomData = state.runners.some(r => !r.name.startsWith('Runner '));
     
-    // Data is consistent if it's either all default or all custom, not mixed
-    return !(hasDefaultData && hasCustomData);
+    // Data is consistent if we have valid runners with reasonable data
+    // Names can be empty when coming from server; only validate structural fields
+    const hasValidRunners = state.runners.length === 12 &&
+      state.runners.every(r =>
+        r.id >= 1 && r.id <= 12 &&
+        typeof r.pace === 'number' && r.pace > 0 &&
+        (r.van === 1 || r.van === 2)
+      );
+    
+    return hasValidRunners;
   },
 
   // CRITICAL: Method to force reset store if data corruption is detected
   forceReset: () => {
+    const currentStart = get().startTime; // Preserve existing official start time
     const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
       id: i + 1,
       name: `Runner ${i + 1}`,
@@ -202,7 +212,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     }));
     
     set({
-      startTime: Date.now(),
+      startTime: currentStart,
       runners: defaultRunners,
       legs: [],
       currentVan: 1,

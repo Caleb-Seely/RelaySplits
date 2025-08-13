@@ -19,6 +19,8 @@ import { Upload, FileSpreadsheet, Users, AlertCircle, Check, X, RefreshCw } from
 interface SpreadsheetImportProps {
   isOpen: boolean;
   onClose: () => void;
+  // Optional: notify parent with imported runners so UI-specific state can sync (e.g., paceInputs)
+  onImported?: (runners: Runner[]) => void;
 }
 
 type ParsedRow = {
@@ -38,7 +40,7 @@ type ValidationError = {
   error: string;
 };
 
-const SpreadsheetImport: React.FC<SpreadsheetImportProps> = ({ isOpen, onClose }) => {
+const SpreadsheetImport: React.FC<SpreadsheetImportProps> = ({ isOpen, onClose, onImported }) => {
   const { setRunners } = useRaceStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -476,6 +478,12 @@ const SpreadsheetImport: React.FC<SpreadsheetImportProps> = ({ isOpen, onClose }
 
     // Actually import the data
     setRunners(previewRunners);
+    // Notify parent so it can update any local UI state (e.g., paceInputs)
+    try {
+      onImported?.(previewRunners);
+    } catch (e) {
+      // no-op safeguard
+    }
     
     // Close modal after brief delay
     setTimeout(() => {

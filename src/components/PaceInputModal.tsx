@@ -82,8 +82,8 @@ const PaceInputModal: React.FC<PaceInputModalProps> = ({
         return { valid: false, seconds: 0, error: 'Pace too fast (minimum 3:00/mile)' };
       }
 
-      if (totalSeconds > 900) { // More than 15:00 per mile
-        return { valid: false, seconds: 0, error: 'Pace too slow (maximum 15:00/mile)' };
+      if (totalSeconds > 3540 ) { // More than 15:00 per mile
+        return { valid: false, seconds: 0, error: 'Pace too slow (maximum 59:00/mile)' };
       }
 
       return { valid: true, seconds: totalSeconds, error: '' };
@@ -101,8 +101,8 @@ const PaceInputModal: React.FC<PaceInputModalProps> = ({
       return { valid: false, seconds: 0, error: 'Pace too fast (minimum 3:00/mile)' };
     }
 
-    if (totalSeconds > 900) {
-      return { valid: false, seconds: 0, error: 'Pace too slow (maximum 15:00/mile)' };
+    if (totalSeconds > 3540 ) {
+      return { valid: false, seconds: 0, error: 'Pace too slow (maximum 59:00/mile)' };
     }
 
     return { valid: true, seconds: totalSeconds, error: '' };

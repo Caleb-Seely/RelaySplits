@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useSecureSync } from '@/hooks/useSecureSync';
 import type { Runner, Leg } from '@/types/race';
+import { initializeRace, recalculateProjections } from '@/utils/raceUtils';
 
 // Offline data persistence keys
 const getOfflineKey = (teamId: string, dataType: string) => `relay_tracker_${teamId}_${dataType}`;
@@ -30,6 +31,8 @@ export const useSupabaseSync = () => {
   const isInitialSyncRef = useRef(false);
   const lastSyncDataRef = useRef<{ runners: string; legs: string }>({ runners: '', legs: '' });
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastConsistencyWarnAtRef = useRef<number>(0);
+  const warnedForTeamRef = useRef<Record<string, boolean>>({});
 
   // Save data to localStorage for offline persistence
   const saveToLocalStorage = useCallback((teamId: string, data: any, type: string) => {
@@ -479,41 +482,107 @@ export const useSupabaseSync = () => {
       const legs = legsResult.data;
 
       if (runners && runners.length > 0) {
-        const localRunners: Runner[] = runners.map((runner, index) => ({
-          id: index + 1,
-          name: runner.name,
-          pace: Number(runner.pace),
-          van: parseInt(runner.van) as 1 | 2
-        }));
-        
-        raceStore.setRaceData({
-          runners: localRunners,
-          isSetupComplete: true
+        let incomingRunners: Runner[] = runners.map((runner, index) => {
+          const parsedPace = Number(runner.pace);
+          const safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 420;
+          const parsedVan = parseInt(runner.van);
+          const safeVan = (parsedVan === 1 || parsedVan === 2) ? parsedVan as 1 | 2 : ((index < 6 ? 1 : 2) as 1 | 2);
+          return {
+            id: index + 1,
+            name: runner.name,
+            pace: safePace,
+            van: safeVan
+          };
         });
+        // Ensure we always have 12 runners locally to keep projections and UI consistent
+        if (incomingRunners.length < 12) {
+          const defaults: Runner[] = Array.from({ length: 12 }, (_, i) => ({
+            id: i + 1,
+            name: `Runner ${i + 1}`,
+            pace: 420,
+            van: (i < 6 ? 1 : 2) as 1 | 2
+          }));
+          // Overlay server-provided onto defaults by index
+          incomingRunners = defaults.map((d, i) => incomingRunners[i] ? { ...d, ...incomingRunners[i], id: i + 1 } : d);
+        }
+
+        // Avoid clobbering in-progress local edits during initial setup.
+        const current = useRaceStore.getState();
+        const localNames = (current.runners || []).map(r => r.name);
+        const incomingNames = incomingRunners.map(r => r.name);
+        const defaultNames = Array.from({ length: 12 }, (_, i) => `Runner ${i + 1}`);
+        const isAllDefaultLocal = localNames.length === 12 && localNames.every((n, i) => n === defaultNames[i]);
+        const matchesIncoming = localNames.length === incomingNames.length && localNames.every((n, i) => n === incomingNames[i]);
+
+        const safeToOverwrite = current.isSetupComplete || isAllDefaultLocal || matchesIncoming;
+
+        if (safeToOverwrite) {
+          raceStore.setRaceData({
+            runners: incomingRunners,
+            isSetupComplete: true
+          });
+        } else {
+          // Preserve local edits; just mark setup complete so autosync can proceed later.
+          raceStore.setRaceData({ isSetupComplete: true });
+        }
+
+        // Normalize runners to ensure we always have 12 with valid fields (without clobbering local names)
+        {
+          const currentAfter = useRaceStore.getState().runners || [];
+          const normalized: Runner[] = Array.from({ length: 12 }, (_, i) => {
+            const existing = currentAfter[i];
+            const pace = Number(existing?.pace);
+            const safePace = Number.isFinite(pace) && pace > 0 ? pace : 420;
+            const van = existing?.van;
+            const safeVan: 1 | 2 = (van === 1 || van === 2) ? van : ((i < 6 ? 1 : 2) as 1 | 2);
+            return {
+              id: i + 1,
+              name: existing?.name ?? `Runner ${i + 1}`,
+              pace: safePace,
+              van: safeVan
+            };
+          });
+          raceStore.setRaceData({ runners: normalized });
+        }
 
         if (legs && legs.length > 0) {
-          const runnerIdMapping = new Map();
+          // Build base projections from current official start time and incoming runners
+          const baseStartTime = useRaceStore.getState().startTime;
+          let projectedLegs: Leg[] = initializeRace(baseStartTime, incomingRunners);
+
+          // Map Supabase runner IDs -> local runner ids (1..12 based on incoming order above)
+          const runnerIdMapping = new Map<number, number>();
           runners.forEach((supabaseRunner, index) => {
             runnerIdMapping.set(supabaseRunner.id, index + 1);
           });
 
-          const localLegs: Leg[] = legs.map(leg => ({
-            id: leg.number,
-            runnerId: runnerIdMapping.get(leg.runner_id) || 1,
-            distance: Number(leg.distance),
-            projectedStart: leg.start_time ? new Date(leg.start_time).getTime() : Date.now(),
-            projectedFinish: leg.finish_time ? new Date(leg.finish_time).getTime() : Date.now(),
-            actualStart: leg.start_time ? new Date(leg.start_time).getTime() : undefined,
-            actualFinish: leg.finish_time ? new Date(leg.finish_time).getTime() : undefined
-          }));
+          // Overlay server-provided assignments, distances, and actual times
+          projectedLegs = projectedLegs.map((leg) => {
+            const dbLeg = legs.find((l: any) => l.number === leg.id);
+            if (!dbLeg) return leg;
+            const actualStart = dbLeg.start_time ? new Date(dbLeg.start_time).getTime() : undefined;
+            const actualFinish = dbLeg.finish_time ? new Date(dbLeg.finish_time).getTime() : undefined;
+            const mappedRunnerId = dbLeg.runner_id ? (runnerIdMapping.get(dbLeg.runner_id) || leg.runnerId) : leg.runnerId;
+            const dist = Number(dbLeg.distance);
+            return {
+              ...leg,
+              runnerId: mappedRunnerId,
+              distance: isNaN(dist) ? leg.distance : dist,
+              // Do NOT set projectedStart/Finish from DB; treat DB times as actuals only
+              actualStart,
+              actualFinish
+            } as Leg;
+          });
 
-          raceStore.setRaceData({ legs: localLegs });
+          // Recalculate projections across all legs after overlay
+          const finalLegs = recalculateProjections(projectedLegs, 0, incomingRunners);
+          raceStore.setRaceData({ legs: finalLegs });
         } else {
           raceStore.initializeLegs();
         }
 
         // Save synced data to localStorage
-        saveToLocalStorage(team.id, localRunners, 'runners');
+        saveToLocalStorage(team.id, incomingRunners, 'runners');
         if (legs && legs.length > 0) {
           saveToLocalStorage(team.id, legs, 'legs');
         }
@@ -541,18 +610,31 @@ export const useSupabaseSync = () => {
           // Mark last successful sync time after offline-first push
           raceStore.setLastSyncedAt(Date.now());
         } else {
-          const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
-            id: i + 1,
-            name: `Runner ${i + 1}`,
-            pace: 420,
-            van: (i < 6 ? 1 : 2) as 1 | 2
-          }));
-          raceStore.setRaceData({
-            runners: defaultRunners,
-            legs: [],
-            isSetupComplete: false
-          });
-          raceStore.setupStep = 1;
+          // No server data. If locals have diverged from defaults (user started typing), do not reset.
+          const current = useRaceStore.getState();
+          const localNames = (current.runners || []).map(r => r.name);
+          const defaultNames = Array.from({ length: 12 }, (_, i) => `Runner ${i + 1}`);
+          const isAllDefaultLocal = localNames.length === 12 && localNames.every((n, i) => n === defaultNames[i]);
+
+          if (isAllDefaultLocal) {
+            const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
+              id: i + 1,
+              name: `Runner ${i + 1}`,
+              pace: 420,
+              van: (i < 6 ? 1 : 2) as 1 | 2
+            }));
+            raceStore.setRaceData({
+              runners: defaultRunners,
+              legs: [],
+              isSetupComplete: false
+            });
+            raceStore.setupStep = 1;
+          } else {
+            // Preserve local runner edits
+            if (!current.legs || current.legs.length === 0) {
+              raceStore.initializeLegs();
+            }
+          }
         }
       }
 
@@ -667,13 +749,33 @@ export const useSupabaseSync = () => {
         return () => clearTimeout(timeoutId);
       }
     } else {
-      if (team && raceStore.teamId === team.id && !isDataConsistent) {
-        console.warn('⚠️ [SYNC] Data inconsistency detected, attempting recovery...');
-        raceStore.forceReset();
-        
-        setTimeout(() => {
-          syncFromSupabase();
-        }, 1000);
+      // Only attempt inconsistency recovery AFTER setup is complete to avoid clobbering edits
+      // Suppress during initial or in-progress syncs, and throttle warnings.
+      if (
+        team &&
+        raceStore.teamId === team.id &&
+        raceStore.isSetupComplete &&
+        !isDataConsistent &&
+        !syncInProgressRef.current &&
+        !isInitialSyncRef.current
+      ) {
+        const now = Date.now();
+        const sinceLast = now - (lastConsistencyWarnAtRef.current || 0);
+        const hasWarnedThisTeam = warnedForTeamRef.current[team.id] === true;
+        if (sinceLast > 30000 && !hasWarnedThisTeam) {
+          lastConsistencyWarnAtRef.current = now;
+          warnedForTeamRef.current[team.id] = true;
+          console.warn('⚠️ [SYNC] Data inconsistency detected post-setup, attempting soft recovery (no reset).');
+        }
+        // Soft recovery: avoid flipping isSetupComplete; just re-sync from server (debounced)
+        if (!hasWarnedThisTeam) {
+          const timeoutId = setTimeout(() => {
+            if (!syncInProgressRef.current) {
+              syncFromSupabase();
+            }
+          }, 800);
+          return () => clearTimeout(timeoutId);
+        }
       }
     }
   }, [team, raceStore.runners, raceStore.legs, raceStore.isSetupComplete, raceStore.teamId, syncToSupabase, syncFromSupabase]);

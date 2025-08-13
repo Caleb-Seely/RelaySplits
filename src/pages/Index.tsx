@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,8 +19,13 @@ const Index = () => {
   const { user } = useAuth();
     const { team, teamMember, loading: teamLoading, createTeam, joinTeam } = useTeamSync();
   const [isNewTeam, setIsNewTeam] = useState(false);
-  const raceStore = useRaceStore();
+  // Select only the pieces we need from the store to avoid effect thrash
+  const teamId = useRaceStore((s) => s.teamId);
+  const isSetupComplete = useRaceStore((s) => s.isSetupComplete);
+  const restoreFromOffline = useRaceStore((s) => s.restoreFromOffline);
+  const isDataConsistent = useRaceStore((s) => s.isDataConsistent);
   const { isOnline, offlineChangesCount, loadOfflineState } = useOfflineData();
+  const hasRestoredOfflineRef = useRef(false);
   
   // Initialize Supabase sync
   useSupabaseSync();
@@ -29,7 +34,6 @@ const Index = () => {
   const startTime = new Date('2024-08-12T00:00:00Z').getTime();
   const currentTime = Date.now();
   const isWithinFreeHours = (currentTime - startTime) < (8 * 60 * 60 * 1000);
-  const isSetupComplete = raceStore.isSetupComplete;
 
   // Global auto-start: ensure leg 1 starts at or after official start time regardless of view mounted
   useEffect(() => {
@@ -50,18 +54,24 @@ const Index = () => {
 
   // Initialize offline data if available and no current data
   useEffect(() => {
-    if (team && !teamLoading && raceStore.teamId === team.id) {
-      const offlineState = loadOfflineState();
-      if (offlineState && !raceStore.isDataConsistent()) {
-        console.log('🔄 [OFFLINE] Restoring state from offline storage...');
-        raceStore.restoreFromOffline(
-          offlineState.runners,
-          offlineState.legs,
-          offlineState.isSetupComplete
-        );
-      }
+    // Do NOT restore offline state during setup wizard to avoid resetting form inputs
+    if (!isSetupComplete) return;
+    if (!team || teamLoading) return;
+    if (hasRestoredOfflineRef.current) return;
+    if (teamId !== team.id) return;
+
+    const offlineState = loadOfflineState();
+    if (offlineState && !isDataConsistent()) {
+      console.log('🔄 [OFFLINE] Restoring state from offline storage...');
+      restoreFromOffline(
+        offlineState.runners,
+        offlineState.legs,
+        offlineState.isSetupComplete
+      );
     }
-  }, [team, teamLoading, raceStore.teamId, loadOfflineState, raceStore]);
+    // Ensure we only attempt restore once per mount/team session
+    hasRestoredOfflineRef.current = true;
+  }, [isSetupComplete, team, teamLoading, teamId, loadOfflineState, isDataConsistent, restoreFromOffline]);
 
   // Run comprehensive diagnostics when team is loaded - MUST BE AT TOP LEVEL
 //   useEffect(() => {

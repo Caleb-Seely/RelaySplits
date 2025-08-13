@@ -38,12 +38,14 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
   const [importModalOpen, setImportModalOpen] = useState(false);
   // Local ref no longer used for init; we persist via store
+  // Local UI state for pace text inputs to avoid auto-formatting on each keystroke
+  const [paceInputs, setPaceInputs] = useState<Record<number, string>>({});
 
   // Validation schema: require names and reasonable pace (3:00–15:00 min/mi)
   const runnerSchema = z.object({
     id: z.number(),
     name: z.string().trim().min(1, 'Name is required'),
-    pace: z.number().int().min(180, 'Pace too fast (<3:00)').max(900, 'Pace too slow (>15:00)')
+    pace: z.number().int().min(180, 'Pace too fast (<3:00)').max(3540, 'Pace too slow (>59:00)')
   });
 
   // Initialize start time from team data when component loads (guarded via store to survive StrictMode remount)
@@ -71,13 +73,35 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const parsePace = (paceString: string) => {
-    const parts = paceString.split(':');
-    if (parts.length === 2) {
-      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  // Strict-ish parser: accepts "MM", or "M:SS"/"MM:SS" (SS < 60). Returns null if incomplete/invalid.
+  const parsePaceInput = (value: string): number | null => {
+    const v = value.trim();
+    if (v === '') return null;
+    if (/^\d+$/.test(v)) {
+      // Minutes only
+      return parseInt(v, 10) * 60;
     }
-    return parseInt(paceString) * 60; // If just a number, assume minutes
+    const m = v.match(/^(\d+):(\d{1,2})$/);
+    if (m) {
+      const minutes = parseInt(m[1], 10);
+      const seconds = parseInt(m[2], 10);
+      if (seconds < 60) return minutes * 60 + seconds;
+    }
+    return null;
   };
+
+  // Initialize local paceInputs from store runners once on mount or when runners change
+  useEffect(() => {
+    setPaceInputs(prev => {
+      const next: Record<number, string> = { ...prev };
+      for (const r of runners) {
+        if (next[r.id] === undefined) {
+          next[r.id] = formatPace(r.pace);
+        }
+      }
+      return next;
+    });
+  }, [runners]);
 
   const handleFinishSetup = async () => {
     // Validate runner inputs before proceeding
@@ -159,13 +183,23 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
                       />
                       <Input
                         placeholder="7:30"
-                        value={formatPace(runner.pace)}
+                        value={paceInputs[runner.id] ?? ''}
                         onChange={(e) => {
-                          try {
-                            const pace = parsePace(e.target.value);
-                            handleRunnerUpdate(runner.id, 'pace', pace);
-                          } catch (error) {
-                            // Handle invalid pace format
+                          const text = e.target.value;
+                          setPaceInputs((s) => ({ ...s, [runner.id]: text }));
+                          // If the input is a fully valid pace, update the store immediately
+                          const seconds = parsePaceInput(text);
+                          if (seconds !== null) {
+                            handleRunnerUpdate(runner.id, 'pace', seconds);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const seconds = parsePaceInput(e.target.value);
+                          if (seconds !== null) {
+                            handleRunnerUpdate(runner.id, 'pace', seconds);
+                            setPaceInputs((s) => ({ ...s, [runner.id]: formatPace(seconds) }));
+                          } else {
+                            // Keep whatever the user typed; do not force-format
                           }
                         }}
                         className="text-sm font-mono"
@@ -202,13 +236,20 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
                       />
                       <Input
                         placeholder="7:30"
-                        value={formatPace(runner.pace)}
+                        value={paceInputs[runner.id] ?? ''}
                         onChange={(e) => {
-                          try {
-                            const pace = parsePace(e.target.value);
-                            handleRunnerUpdate(runner.id, 'pace', pace);
-                          } catch (error) {
-                            // Handle invalid pace format
+                          const text = e.target.value;
+                          setPaceInputs((s) => ({ ...s, [runner.id]: text }));
+                          const seconds = parsePaceInput(text);
+                          if (seconds !== null) {
+                            handleRunnerUpdate(runner.id, 'pace', seconds);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const seconds = parsePaceInput(e.target.value);
+                          if (seconds !== null) {
+                            handleRunnerUpdate(runner.id, 'pace', seconds);
+                            setPaceInputs((s) => ({ ...s, [runner.id]: formatPace(seconds) }));
                           }
                         }}
                         className="text-sm font-mono"
@@ -225,6 +266,16 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
         <SpreadsheetImport
           isOpen={importModalOpen}
           onClose={() => setImportModalOpen(false)}
+          onImported={(imported) => {
+            // Rebuild local paceInputs from imported runner paces
+            setPaceInputs(() => {
+              const next: Record<number, string> = {};
+              for (const r of imported) {
+                next[r.id] = formatPace(r.pace);
+              }
+              return next;
+            });
+          }}
         />
       </div>
     </div>
