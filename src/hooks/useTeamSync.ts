@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSecureSync } from '@/hooks/useSecureSync';
@@ -26,8 +26,7 @@ export const useTeamSync = () => {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const { secureQuery, secureUpdate } = useSecureSync();
-  // Timer to auto-start leg 1 when official start time is in the future
-  const pendingStartTimer = useRef<number | null>(null);
+  // Simplified: no timer-based auto-start for leg 1
 
   useEffect(() => {
     if (user) {
@@ -35,15 +34,7 @@ export const useTeamSync = () => {
     }
   }, [user]);
 
-  // Cleanup any pending auto-start timer when this hook unmounts
-  useEffect(() => {
-    return () => {
-      if (pendingStartTimer.current) {
-        clearTimeout(pendingStartTimer.current);
-        pendingStartTimer.current = null;
-      }
-    };
-  }, []);
+  // No timer to clean up under simplified logic
 
   const fetchUserTeam = async () => {
     if (!user) {
@@ -76,6 +67,17 @@ export const useTeamSync = () => {
 
         if (!teamResult.error && teamResult.data) {
           setTeam(teamResult.data);
+          // Propagate official team start time to race store
+          const race = useRaceStore.getState();
+          const startIso = teamResult.data.start_time;
+          if (startIso) {
+            const startMs = new Date(startIso).getTime();
+            race.setStartTime(startMs);
+            // Ensure legs are initialized so UI can reflect immediately
+            if (race.legs.length === 0) {
+              race.initializeLegs();
+            }
+          }
         }
       }
     } catch (error) {
@@ -224,33 +226,12 @@ export const useTeamSync = () => {
       const latest = useRaceStore.getState();
       const firstLeg = latest.legs[0];
 
-      // Clear any previous pending auto-start
-      if (pendingStartTimer.current) {
-        clearTimeout(pendingStartTimer.current);
-        pendingStartTimer.current = null;
-      }
-
       const now = Date.now();
       if (startMs <= now) {
         // Official time is in the past: set leg 1 actual start to that time immediately
         if (firstLeg && firstLeg.actualStart !== startMs) {
           latest.updateLegActualTime(1, 'actualStart', startMs);
         }
-      } else {
-        // Official time is in the future: ensure leg 1 will auto-start when the time comes
-        const delay = Math.max(0, startMs - now);
-        pendingStartTimer.current = window.setTimeout(() => {
-          const s = useRaceStore.getState();
-          const fl = s.legs[0];
-          if (fl && typeof fl.actualStart !== 'number') {
-            s.updateLegActualTime(1, 'actualStart', startMs);
-          }
-          // Clear reference after firing
-          if (pendingStartTimer.current) {
-            clearTimeout(pendingStartTimer.current);
-            pendingStartTimer.current = null;
-          }
-        }, delay);
       }
 
       // Update sync indicator since this was a successful backend update

@@ -71,22 +71,12 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         // Note: we don't set actualStart here unless we are explicitly resetting it below
       };
 
-      if (typeof firstLeg.actualStart === 'number') {
-        // If new official start is later than recorded actual start, clear actual start
-        if (time > firstLeg.actualStart) {
-          updatedLegs[0] = {
-            ...updatedLegs[0],
-            actualStart: undefined
-          } as typeof updatedLegs[number];
-        }
-        // If new official start is earlier than recorded actual start, move actual start back
-        else if (time < firstLeg.actualStart) {
-          updatedLegs[0] = {
-            ...updatedLegs[0],
-            actualStart: time
-          } as typeof updatedLegs[number];
-        }
-      }
+      // Simplified rule: leg 1 actual start is the official start time if it's in the past; otherwise undefined
+      const now = Date.now();
+      updatedLegs[0] = {
+        ...updatedLegs[0],
+        actualStart: time <= now ? time : undefined
+      } as typeof updatedLegs[number];
 
       // Recalculate all projections from the first leg
       const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);

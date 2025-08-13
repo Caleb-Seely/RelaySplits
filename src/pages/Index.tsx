@@ -31,6 +31,23 @@ const Index = () => {
   const isWithinFreeHours = (currentTime - startTime) < (8 * 60 * 60 * 1000);
   const isSetupComplete = raceStore.isSetupComplete;
 
+  // Global auto-start: ensure leg 1 starts at or after official start time regardless of view mounted
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { legs, startTime, updateLegActualTime, initializeLegs } = useRaceStore.getState();
+      if (legs.length === 0) {
+        initializeLegs();
+        return;
+      }
+      const firstLeg = legs[0];
+      const now = Date.now();
+      if (typeof firstLeg.actualStart !== 'number' && now >= startTime) {
+        updateLegActualTime(1, 'actualStart', startTime);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Initialize offline data if available and no current data
   useEffect(() => {
     if (team && !teamLoading && raceStore.teamId === team.id) {
@@ -80,7 +97,7 @@ const Index = () => {
         <div className="text-center max-w-md">
           <h1 className="text-4xl font-bold mb-4">RelayTracker</h1>
           <p className="text-muted-foreground mb-6">
-            Track your relay race in real-time. Sign in to get started or continue as a guest with read-only access.
+            Track your relay race in real-time.
           </p>
           <div className="space-y-3">
             <Link to="/auth">
