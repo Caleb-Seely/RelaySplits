@@ -48,6 +48,7 @@ import TimePicker from './TimePicker';
 import PaceInputModal from './PaceInputModal';
 import RunnerAssignmentModal from './RunnerAssignmentModal';
 import SyncStatusIndicator from './SyncStatusIndicator';
+import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
 
 const Dashboard = () => {
@@ -694,6 +695,9 @@ const Dashboard = () => {
         initialLegId={initialLegId ?? undefined}
         onSave={handleRunnerAssignSave}
       />
+
+      {/* Real-time database sync integration */}
+      <RunnerSyncIntegration />
     </>
   );
 };
