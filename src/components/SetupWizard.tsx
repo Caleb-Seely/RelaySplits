@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
-import { useSupabaseSync } from '@/hooks/useSupabaseSync';
+import { useSyncManager } from '@/hooks/useSyncManager';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { Clock, Users, Play } from 'lucide-react';
 import { formatTime, formatDate } from '@/utils/raceUtils';
@@ -33,9 +33,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     initializeLegs
   } = useRaceStore();
 
-  const { syncToSupabase } = useSupabaseSync();
+  const { saveInitialRows } = useSyncManager();
   const { team } = useTeamSync();
 
+  const [isSaving, setIsSaving] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   // Local ref no longer used for init; we persist via store
   // Local UI state for pace text inputs to avoid auto-formatting on each keystroke
@@ -104,7 +105,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   }, [runners]);
 
   const handleFinishSetup = async () => {
-    // Validate runner inputs before proceeding
+    // Validate runner inputs
     const invalids = runners
       .map(r => ({ r, res: runnerSchema.safeParse(r) }))
       .filter(x => !x.res.success);
@@ -116,14 +117,38 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
       return;
     }
 
-    // Initialize legs before completing setup
-    initializeLegs();
-    completeSetup();
-    
-    // Sync to Supabase after setup is complete
-    setTimeout(() => {
-      syncToSupabase();
-    }, 500);
+    setIsSaving(true);
+    const toastId = toast.loading('Saving your team...');
+    console.log('[SetupWizard] Starting finish flow. isNewTeam:', isNewTeam, 'team:', team?.id);
+
+    try {
+      // Ensure legs exist before any save
+      console.log('[SetupWizard] Ensuring legs are initialized');
+      initializeLegs();
+
+      // For new teams, insert initial rows for the team created in TeamSetup
+      if (isNewTeam && team?.id) {
+        console.log('[SetupWizard] Calling saveInitialRows for team', team.id);
+        const { error } = await saveInitialRows(team.id);
+        if (error) {
+          console.error('[SetupWizard] saveInitialRows failed:', error);
+          toast.error(`Failed to save initial data: ${error.message}`, { id: toastId });
+          return;
+        }
+      }
+
+      // Complete local setup
+      completeSetup();
+      console.log('[SetupWizard] Finish flow complete');
+      toast.success('Your team is ready!', { id: toastId });
+    } catch (e: any) {
+      console.error('[SetupWizard] Unexpected error during finish flow:', e);
+      toast.error(e?.message || 'Failed to complete setup', { id: toastId });
+    } finally {
+      setIsSaving(false);
+      console.log('[SetupWizard] Dismissing toast id', toastId);
+      toast.dismiss(toastId);
+    }
   };
 
 
@@ -131,6 +156,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   const renderStep1 = () => (
     <div className="space-y-6">
       <div className="text-center">
+        {/* Team name input removed; TeamSetup handles team creation */}
         <p className="text-gray-600">Set names and estimated paces for all 12 runners</p>
         <p className="text-gray-500 text-sm mt-1">You can edit this later from the Dashboard after setup.</p>
         <div className="mt-4">

@@ -6,9 +6,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
-import { useSupabaseSync } from '@/hooks/useSupabaseSync';
-import { useOfflineData } from '@/hooks/useOfflineData';
+import { useSyncManager } from '@/hooks/useSyncManager';
 import { useRaceStore } from '@/store/raceStore';
+import { useOfflineData } from '@/hooks/useOfflineData';
 import { runDiagnostics } from '@/utils/diagnostics';
 import Dashboard from '@/components/Dashboard';
 import SetupWizard from '@/components/SetupWizard';
@@ -28,7 +28,30 @@ const Index = () => {
   const hasRestoredOfflineRef = useRef(false);
   
   // Initialize Supabase sync
-  useSupabaseSync();
+  const { fetchInitialData, setupRealtimeSubscriptions } = useSyncManager();
+
+  useEffect(() => {
+    // Ensure store knows current teamId so sync hooks can run
+    if (team?.id) {
+      const current = useRaceStore.getState().teamId;
+      if (current !== team.id) {
+        useRaceStore.getState().setTeamId(team.id);
+      }
+    }
+  }, [team?.id]);
+
+  useEffect(() => {
+    if (teamId) {
+      fetchInitialData(teamId);
+    }
+  }, [teamId, fetchInitialData]);
+
+  useEffect(() => {
+    if (teamId) {
+      const cleanup = setupRealtimeSubscriptions(teamId);
+      return cleanup;
+    }
+  }, [teamId, setupRealtimeSubscriptions]);
 
   // Check if we're within free hours (8 hours from start)
   const startTime = new Date('2024-08-12T00:00:00Z').getTime();

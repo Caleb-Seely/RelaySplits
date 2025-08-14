@@ -131,8 +131,25 @@ export const useTeamSync = () => {
       setTeam(teamResult.data);
       // Optionally set member locally for quicker access
       setTeamMember({ id: memberResult.data?.[0]?.id ?? '', user_id: user.id, team_id: teamResult.data.id, role: 'owner' });
-      // Stop blocking UI on extra refetch; run in background to reconcile
-      fetchUserTeam();
+      
+      // Reset race store so a brand-new team starts in the Setup Wizard
+      try {
+        const race = useRaceStore.getState();
+        // Set the current team id
+        race.setTeamId(teamResult.data.id);
+        // Ensure we start setup fresh for a new team
+        race.setRaceData({ isSetupComplete: false });
+        race.setSetupStep(1);
+        race.setDidInitFromTeam(false);
+        // Propagate team start time to store
+        const startMs = new Date(teamResult.data.start_time).getTime();
+        if (!Number.isNaN(startMs)) {
+          race.setStartTime(startMs);
+        }
+      } catch (e) {
+        console.warn('[useTeamSync] Failed to reset race store after team creation', e);
+      }
+      // The UI will now be responsible for navigation and any subsequent fetching.
       setLoading(false);
       
       return { success: true };
@@ -183,6 +200,23 @@ export const useTeamSync = () => {
       // Immediately reflect joined team
       setTeam(teamResult.data);
       setTeamMember({ id: memberResult.data?.[0]?.id ?? '', user_id: user.id, team_id: teamId, role: 'member' });
+      
+      // Reset race store flags on team switch so we don't carry over previous team's completion state
+      try {
+        const race = useRaceStore.getState();
+        race.setTeamId(teamId);
+        race.setRaceData({ isSetupComplete: false });
+        race.setSetupStep(1);
+        race.setDidInitFromTeam(false);
+        // Set start time from team if present
+        const startIso = teamResult.data.start_time;
+        if (startIso) {
+          const startMs = new Date(startIso).getTime();
+          if (!Number.isNaN(startMs)) race.setStartTime(startMs);
+        }
+      } catch (e) {
+        console.warn('[useTeamSync] Failed to reset race store after joinTeam', e);
+      }
       // Background reconciliation
       fetchUserTeam();
       setLoading(false);

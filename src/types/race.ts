@@ -13,6 +13,8 @@ export type Runner = {
   van: 1 | 2;
   /** Optional Supabase row id for this runner, used for stable identity when syncing */
   remoteId?: string;
+  /** Last updated timestamp from Supabase, for conflict resolution */
+  updated_at: string | null;
 };
 
 /**
@@ -35,6 +37,10 @@ export type Leg = {
   actualFinish?: number;
   /** Optional per-leg pace override in seconds per mile (if set, used instead of runner pace for projections) */
   paceOverride?: number;
+  /** Optional Supabase row id for this leg, used for stable identity when syncing */
+  remoteId?: string;
+  /** Last updated timestamp from Supabase, for conflict resolution */
+  updated_at: string | null;
 };
 
 /**

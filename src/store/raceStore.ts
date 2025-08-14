@@ -3,6 +3,9 @@ import type { RaceData, Runner, Leg } from '@/types/race';
 import { initializeRace, recalculateProjections } from '@/utils/raceUtils';
 
 interface RaceStore extends RaceData {
+  // Add updated_at to the store's Leg and Runner types
+  runners: (Runner & { updated_at: string | null; remoteId?: string })[];
+  legs: (Leg & { updated_at: string | null; remoteId?: string })[];
   currentVan: 1 | 2;
   setupStep: number;
   isSetupComplete: boolean;
@@ -45,7 +48,9 @@ const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   name: `Runner ${i + 1}`,
   pace: 420, // 7:00 pace default
-  van: (i < 6 ? 1 : 2) as 1 | 2
+  van: (i < 6 ? 1 : 2) as 1 | 2,
+  remoteId: undefined,
+  updated_at: null
 }));
 
 export const useRaceStore = create<RaceStore>((set, get) => ({
@@ -208,7 +213,9 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       id: i + 1,
       name: `Runner ${i + 1}`,
       pace: 420, // 7:00 pace default
-      van: (i < 6 ? 1 : 2) as 1 | 2
+      van: (i < 6 ? 1 : 2) as 1 | 2,
+      remoteId: undefined,
+      updated_at: null
     }));
     
     set({
