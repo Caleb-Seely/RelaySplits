@@ -256,6 +256,64 @@ export const useSyncManager = () => {
 
   const setupRealtimeSubscriptions = useCallback((teamId: string) => {
     console.log('[realtime] Setting up subscriptions for team', teamId);
+    // Simple exponential backoff helper
+    const makeBackoff = () => {
+      let attempt = 0;
+      return {
+        nextDelay() {
+          // Exponential backoff with full jitter
+          // base grows 1s,2s,4s,... up to 30s; jitter randomizes delay in [minDelay, base]
+          const base = Math.min(30000, 1000 * Math.pow(2, attempt));
+          attempt = Math.min(attempt + 1, 10);
+          const minDelay = 500; // ensure we don't hammer on immediate retries
+          const delay = Math.max(minDelay, Math.floor(Math.random() * base));
+          return delay;
+        },
+        reset() { attempt = 0; }
+      };
+    };
+
+    const runnersBackoff = makeBackoff();
+    const legsBackoff = makeBackoff();
+    let reconcileTimer: number | undefined;
+    let onlineHandler: ((this: Window, ev: Event) => any) | undefined;
+
+    const subscribeWithRetry = (
+      channelName: string,
+      table: 'runners' | 'legs',
+      onEvent: (payload: any) => void,
+      onStatusLog: (status: string) => void,
+    ) => {
+      const backoff = table === 'runners' ? runnersBackoff : legsBackoff;
+
+      const doSubscribe = () => {
+        const ch = supabase
+          .channel(channelName)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table, filter: `team_id=eq.${teamId}` },
+            onEvent
+          )
+          .subscribe((status) => {
+            onStatusLog(status);
+            if (status === 'SUBSCRIBED') {
+              backoff.reset();
+            }
+            if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+              const delay = backoff.nextDelay();
+              console.warn(`[realtime] ${table} channel ${status}. Retrying in ${delay}ms`);
+              setTimeout(() => {
+                try {
+                  supabase.removeChannel(ch);
+                } catch {}
+                doSubscribe();
+              }, delay);
+            }
+          });
+        return ch;
+      };
+      return doSubscribe();
+    };
     const handleSubscriptionEvent = (payload: any, table: 'runners' | 'legs') => {
       const storeState = useRaceStore.getState();
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -316,46 +374,61 @@ export const useSyncManager = () => {
       }
     };
 
-    const runnersChannel = supabase
-      .channel(`realtime-runners-${teamId}`)
-      .on<Tables<'runners'>>(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'runners', filter: `team_id=eq.${teamId}` },
-        (payload) => {
-          console.log('[realtime] runners event', {
-            eventType: payload.eventType,
-            new: (payload as any).new?.id,
-            old: (payload as any).old?.id,
-          });
-          handleSubscriptionEvent(payload, 'runners');
-        }
-      )
-      .subscribe((status) => {
-        console.log('[realtime] runners channel status:', status);
-      });
+    const runnersChannel = subscribeWithRetry(
+      `realtime-runners-${teamId}`,
+      'runners',
+      (payload) => {
+        console.log('[realtime] runners event', {
+          eventType: payload.eventType,
+          new: (payload as any).new?.id,
+          old: (payload as any).old?.id,
+        });
+        handleSubscriptionEvent(payload, 'runners');
+      },
+      (status) => console.log('[realtime] runners channel status:', status)
+    );
 
-    const legsChannel = supabase
-      .channel(`realtime-legs-${teamId}`)
-      .on<Tables<'legs'>>(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'legs', filter: `team_id=eq.${teamId}` },
-        (payload) => {
-          console.log('[realtime] legs event', {
-            eventType: payload.eventType,
-            new: (payload as any).new?.id,
-            old: (payload as any).old?.id,
-          });
-          handleSubscriptionEvent(payload, 'legs');
-        }
-      )
-      .subscribe((status) => {
-        console.log('[realtime] legs channel status:', status);
-      });
+    const legsChannel = subscribeWithRetry(
+      `realtime-legs-${teamId}`,
+      'legs',
+      (payload) => {
+        console.log('[realtime] legs event', {
+          eventType: payload.eventType,
+          new: (payload as any).new?.id,
+          old: (payload as any).old?.id,
+        });
+        handleSubscriptionEvent(payload, 'legs');
+      },
+      (status) => console.log('[realtime] legs channel status:', status)
+    );
+
+    // Periodic reconciliation (defense-in-depth) e.g., every 60s
+    reconcileTimer = window.setInterval(() => {
+      const state = useRaceStore.getState();
+      if (state.teamId) {
+        console.log('[realtime] reconciling state via fetchInitialData');
+        fetchInitialData(state.teamId);
+      }
+    }, 60000) as unknown as number;
+
+    // Resubscribe on network re-connection
+    onlineHandler = () => {
+      console.log('[realtime] online event: triggering reconciliation');
+      const state = useRaceStore.getState();
+      if (state.teamId) fetchInitialData(state.teamId);
+    };
+    window.addEventListener('online', onlineHandler);
 
     return () => {
       console.log('[realtime] Cleaning up subscriptions for team', teamId);
       supabase.removeChannel(runnersChannel);
       supabase.removeChannel(legsChannel);
+      if (reconcileTimer) {
+        clearInterval(reconcileTimer);
+      }
+      if (onlineHandler) {
+        window.removeEventListener('online', onlineHandler);
+      }
     };
   }, [merge]);
 
