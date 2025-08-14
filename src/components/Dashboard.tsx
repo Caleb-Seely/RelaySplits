@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useRaceStore } from '@/store/raceStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
-import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
+import { useSyncManager } from '@/hooks/useSyncManager';
+
 import {
   getCurrentRunner,
   getNextRunner,
@@ -65,10 +66,17 @@ const Dashboard = () => {
     teamId,
     assignRunnerToLegs
   } = useRaceStore();
+  const { setupRealtimeSubscriptions } = useSyncManager();
+
+  // Ensure realtime subscriptions are active when Dashboard is mounted
+  useEffect(() => {
+    if (!teamId) return;
+    const cleanup = setupRealtimeSubscriptions(teamId);
+    return cleanup;
+  }, [teamId, setupRealtimeSubscriptions]);
 
   const { signOut } = useAuth();
-    const { team, updateTeamStartTime } = useTeamSync();
-  useRealtimeUpdates();
+  const { team, updateTeamStartTime } = useTeamSync();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingDistance, setEditingDistance] = useState<number | null>(null);

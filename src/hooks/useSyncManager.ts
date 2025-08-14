@@ -3,6 +3,7 @@ import { useRaceStore } from '@/store/raceStore';
 import { supabase } from '@/integrations/supabase/client';
 import type { Runner, Leg } from '@/types/race';
 import type { Tables } from '@/integrations/supabase/types';
+import { recalculateProjections } from '@/utils/raceUtils';
 
 // A generic type for items that have an ID and an updated_at timestamp
 interface Syncable {
@@ -189,7 +190,7 @@ export const useSyncManager = () => {
       let { data, error } = await supabase
         .from(table)
         .update(payload)
-        .match({ id: remoteId, updated_at: matchUpdatedAt })
+        .eq('id', remoteId)
         .select()
         .single();
 
@@ -254,23 +255,63 @@ export const useSyncManager = () => {
   );
 
   const setupRealtimeSubscriptions = useCallback((teamId: string) => {
+    console.log('[realtime] Setting up subscriptions for team', teamId);
     const handleSubscriptionEvent = (payload: any, table: 'runners' | 'legs') => {
       const storeState = useRaceStore.getState();
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-        const newItem = payload.new as unknown as Syncable;
-        merge(
-          [newItem],
-          table === 'runners' ? storeState.runners : storeState.legs,
-          table === 'runners'
-            ? storeState.setRunners
-            : (items) => storeState.setRaceData({ legs: items as Leg[] })
-        );
+        if (table === 'runners') {
+          const r = payload.new as Tables<'runners'>;
+          const idx = storeState.runners.findIndex((x) => x.remoteId === r.id);
+          if (idx !== -1) {
+            const updated = {
+              ...storeState.runners[idx],
+              name: r.name,
+              pace: r.pace,
+              van: r.van === '1' ? 1 : 2,
+              updated_at: r.updated_at,
+            } as (typeof storeState.runners)[number];
+            const arr = [...storeState.runners];
+            arr[idx] = updated;
+            storeState.setRunners(arr);
+            // Recalculate legs projections since runner pace/van can affect timing
+            if (storeState.legs.length > 0) {
+              const finalLegs = recalculateProjections(storeState.legs as unknown as Leg[], 0, arr as unknown as Runner[]);
+              storeState.setRaceData({ legs: finalLegs });
+            }
+          } else {
+            // Optional: handle remote runner INSERT by appending or ignoring
+            console.warn('[realtime] runner update for unknown remoteId', r.id);
+          }
+        } else {
+          const l = payload.new as Tables<'legs'>;
+          const idx = storeState.legs.findIndex((x) => x.remoteId === l.id);
+          if (idx !== -1) {
+            const mappedRunnerId = l.runner_id
+              ? storeState.runners.find((rr) => rr.remoteId === l.runner_id)?.id || 0
+              : 0;
+            const updated = {
+              ...storeState.legs[idx],
+              runnerId: mappedRunnerId,
+              distance: l.distance,
+              actualStart: l.start_time ? new Date(l.start_time).getTime() : undefined,
+              actualFinish: l.finish_time ? new Date(l.finish_time).getTime() : undefined,
+              updated_at: l.updated_at,
+            } as (typeof storeState.legs)[number];
+            const arr = [...storeState.legs];
+            arr[idx] = updated;
+            // Recalculate projections from the changed index
+            const finalLegs = recalculateProjections(arr as unknown as Leg[], idx, storeState.runners as unknown as Runner[]);
+            storeState.setRaceData({ legs: finalLegs });
+          } else {
+            console.warn('[realtime] leg update for unknown remoteId', l.id);
+          }
+        }
       } else if (payload.eventType === 'DELETE') {
         const oldId = payload.old.id;
         if (table === 'runners') {
-          storeState.setRunners(storeState.runners.filter(r => r.remoteId !== oldId));
+          storeState.setRunners(storeState.runners.filter((r) => r.remoteId !== oldId));
         } else {
-          storeState.setRaceData({ legs: storeState.legs.filter(l => l.remoteId !== oldId) });
+          storeState.setRaceData({ legs: storeState.legs.filter((l) => l.remoteId !== oldId) });
         }
       }
     };
@@ -280,20 +321,39 @@ export const useSyncManager = () => {
       .on<Tables<'runners'>>(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'runners', filter: `team_id=eq.${teamId}` },
-        (payload) => handleSubscriptionEvent(payload, 'runners')
+        (payload) => {
+          console.log('[realtime] runners event', {
+            eventType: payload.eventType,
+            new: (payload as any).new?.id,
+            old: (payload as any).old?.id,
+          });
+          handleSubscriptionEvent(payload, 'runners');
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[realtime] runners channel status:', status);
+      });
 
     const legsChannel = supabase
       .channel(`realtime-legs-${teamId}`)
       .on<Tables<'legs'>>(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'legs', filter: `team_id=eq.${teamId}` },
-        (payload) => handleSubscriptionEvent(payload, 'legs')
+        (payload) => {
+          console.log('[realtime] legs event', {
+            eventType: payload.eventType,
+            new: (payload as any).new?.id,
+            old: (payload as any).old?.id,
+          });
+          handleSubscriptionEvent(payload, 'legs');
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[realtime] legs channel status:', status);
+      });
 
     return () => {
+      console.log('[realtime] Cleaning up subscriptions for team', teamId);
       supabase.removeChannel(runnersChannel);
       supabase.removeChannel(legsChannel);
     };

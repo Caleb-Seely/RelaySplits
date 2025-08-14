@@ -28,7 +28,7 @@ const Index = () => {
   const hasRestoredOfflineRef = useRef(false);
   
   // Initialize Supabase sync
-  const { fetchInitialData, setupRealtimeSubscriptions } = useSyncManager();
+  const { fetchInitialData } = useSyncManager();
 
   useEffect(() => {
     // Ensure store knows current teamId so sync hooks can run
@@ -46,12 +46,7 @@ const Index = () => {
     }
   }, [teamId, fetchInitialData]);
 
-  useEffect(() => {
-    if (teamId) {
-      const cleanup = setupRealtimeSubscriptions(teamId);
-      return cleanup;
-    }
-  }, [teamId, setupRealtimeSubscriptions]);
+  // Realtime subscriptions are established in Dashboard.tsx
 
   // Check if we're within free hours (8 hours from start)
   const startTime = new Date('2024-08-12T00:00:00Z').getTime();
