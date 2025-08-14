@@ -161,25 +161,81 @@ export const useSyncManager = () => {
         return { error: new Error('Local item not found for update.') };
       }
 
-      // Perform the conditional update
-      const { data, error } = await supabase
+      // Ensure we have an updated_at to match against; if missing, fetch latest
+      let matchUpdatedAt = (localItem as any).updated_at as string | null | undefined;
+      if (!matchUpdatedAt) {
+        const { data: fresh, error: freshErr } = await supabase
+          .from(table)
+          .select('*')
+          .eq('id', remoteId)
+          .single();
+        if (freshErr) {
+          console.error(`[safeUpdate] Failed to fetch fresh ${table} before update:`, freshErr);
+          return { error: freshErr };
+        }
+        const freshItem = fresh as unknown as Syncable;
+        // Merge fresh into local to align state
+        merge(
+          [freshItem],
+          table === 'runners' ? storeState.runners : storeState.legs,
+          table === 'runners'
+            ? storeState.setRunners
+            : (items) => storeState.setRaceData({ legs: items as Leg[] })
+        );
+        matchUpdatedAt = (fresh as any).updated_at as string | null | undefined;
+      }
+
+      // Perform the conditional update with current matchUpdatedAt
+      let { data, error } = await supabase
         .from(table)
         .update(payload)
-        .match({ id: remoteId, updated_at: localItem.updated_at })
+        .match({ id: remoteId, updated_at: matchUpdatedAt })
         .select()
         .single();
 
-      if (error) {
-        console.error(`[safeUpdate] Error updating ${table}:`, error);
-        return { error };
-      }
+      // If conflict (no rows) or explicit PGRST116, refetch latest and retry once
+      if (error || !data) {
+        const code = (error as any)?.code;
+        if (code === 'PGRST116' || !data) {
+          console.warn(`[safeUpdate] Conflict detected for ${table}:${remoteId}. Retrying with fresh updated_at.`);
+          const { data: fresh2, error: freshErr2 } = await supabase
+            .from(table)
+            .select('*')
+            .eq('id', remoteId)
+            .single();
+          if (freshErr2 || !fresh2) {
+            console.error(`[safeUpdate] Failed to fetch fresh ${table} on retry:`, freshErr2);
+            return { error: error || freshErr2 || new Error('Unknown update conflict') };
+          }
 
-      if (!data) {
-        // This means the .match() condition failed -> A conflict occurred!
-        console.warn(`[safeUpdate] Conflict detected for ${table} with id ${remoteId}. Refetching data.`);
-        // Fetch the latest data to resolve the conflict
-        await fetchInitialData(teamId);
-        return { error: new Error('Update conflict resolved by refetching.') };
+          // Merge fresh2 into local state so UI reflects latest
+          const freshSyncable = fresh2 as unknown as Syncable;
+          merge(
+            [freshSyncable],
+            table === 'runners' ? storeState.runners : storeState.legs,
+            table === 'runners'
+              ? storeState.setRunners
+              : (items) => storeState.setRaceData({ legs: items as Leg[] })
+          );
+
+          // Retry update with the newly fetched updated_at
+          const retryMatch = (fresh2 as any).updated_at as string | null | undefined;
+          const retry = await supabase
+            .from(table)
+            .update(payload)
+            .match({ id: remoteId, updated_at: retryMatch })
+            .select()
+            .single();
+
+          if (retry.error) {
+            console.error(`[safeUpdate] Retry failed for ${table}:${remoteId}:`, retry.error);
+            return { error: retry.error };
+          }
+          data = retry.data as any;
+        } else {
+          console.error(`[safeUpdate] Error updating ${table}:`, error);
+          return { error };
+        }
       }
 
       // Success! Merge the updated item back into the store.

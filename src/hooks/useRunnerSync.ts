@@ -33,8 +33,7 @@ export const useRunnerSync = () => {
     }
 
     const payload = {
-      [field === 'actualStart' ? 'start_time' : 'finish_time']: new Date(time).toISOString(),
-      updated_at: new Date().toISOString()
+      [field === 'actualStart' ? 'start_time' : 'finish_time']: new Date(time).toISOString()
     };
 
     try {
