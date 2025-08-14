@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useRaceStore } from '@/store/raceStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
+import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
 import {
   getCurrentRunner,
   getNextRunner,
@@ -66,7 +67,8 @@ const Dashboard = () => {
   } = useRaceStore();
 
   const { signOut } = useAuth();
-  const { team, updateTeamStartTime } = useTeamSync();
+    const { team, updateTeamStartTime } = useTeamSync();
+  useRealtimeUpdates();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
