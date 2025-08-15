@@ -7,16 +7,24 @@ import { useRunnerSync } from '@/hooks/useRunnerSync';
  * This component monitors store changes and automatically syncs to database
  */
 export const RunnerSyncIntegration = () => {
-  const { legs, runners, teamId } = useRaceStore();
+  const { legs, runners, teamId, isSetupComplete } = useRaceStore();
   const { syncLegActualTime, syncRunnerUpdate, syncLegAssignment } = useRunnerSync();
   
   // Track previous state to detect changes
   const prevLegsRef = useRef(legs);
   const prevRunnersRef = useRef(runners);
 
+  // When setup completes or teamId changes, reset previous refs to current
+  // to prevent the first post-setup run from syncing the entire dataset.
   useEffect(() => {
-    // Only sync if we have a team (not during initial setup)
-    if (!teamId) return;
+    if (!teamId || !isSetupComplete) return;
+    prevLegsRef.current = legs;
+    prevRunnersRef.current = runners;
+  }, [teamId, isSetupComplete]);
+
+  useEffect(() => {
+    // Only sync if we have a team and setup is complete (avoid auto-submitting defaults during setup)
+    if (!teamId || !isSetupComplete) return;
 
     const prevLegs = prevLegsRef.current;
     const currentLegs = legs;
@@ -47,11 +55,11 @@ export const RunnerSyncIntegration = () => {
 
     // Update ref for next comparison
     prevLegsRef.current = currentLegs;
-  }, [legs, teamId, syncLegActualTime, syncLegAssignment]);
+  }, [legs, teamId, isSetupComplete, syncLegActualTime, syncLegAssignment]);
 
   useEffect(() => {
-    // Only sync if we have a team (not during initial setup)
-    if (!teamId) return;
+    // Only sync if we have a team and setup is complete (avoid auto-submitting defaults during setup)
+    if (!teamId || !isSetupComplete) return;
 
     const prevRunners = prevRunnersRef.current;
     const currentRunners = runners;
@@ -80,7 +88,7 @@ export const RunnerSyncIntegration = () => {
 
     // Update ref for next comparison
     prevRunnersRef.current = currentRunners;
-  }, [runners, teamId, syncRunnerUpdate]);
+  }, [runners, teamId, isSetupComplete, syncRunnerUpdate]);
 
   // This component doesn't render anything, it just handles sync logic
   return null;

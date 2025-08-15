@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useRaceStore } from '@/store/raceStore';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
@@ -19,6 +19,11 @@ export const useSyncManager = () => {
   // and ignore broadcasts originating from this device.
   let lastBroadcastRefetchAt = 0;
   const BROADCAST_REFETCH_COOLDOWN_MS = 1500;
+
+  // In-flight guards and debounced broadcast timer
+  const isFetchingRunners = useRef(false);
+  const isFetchingLegs = useRef(false);
+  const broadcastRefetchTimerRef = useRef<number | undefined>(undefined);
 
   // Lightweight local queue to avoid circular hook dependency
   const enqueueChange = (change: { table: 'runners' | 'legs'; remoteId: string; payload: any }) => {
@@ -74,62 +79,90 @@ export const useSyncManager = () => {
     []
   );
 
-    const fetchInitialData = useCallback(async (teamId: string) => {
-    console.log('[fetchInitialData] Fetching via Edge Functions for team', teamId);
-    const deviceId = getDeviceId();
-    const [runnersRes, legsRes] = await Promise.all([
-      invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId }),
-      invokeEdge<{ legs: any[] }>('legs-list', { teamId, deviceId }),
-    ]);
-    if ((runnersRes as any).error || (legsRes as any).error) {
-      console.error('Error fetching initial data via Edge:', (runnersRes as any).error || (legsRes as any).error);
+  // Fetch helpers with in-flight guards
+  const fetchAndMergeRunners = useCallback(async (teamId: string) => {
+    if (isFetchingRunners.current) {
+      console.log('[fetch] Runners fetch already in progress, skipping.');
       return;
     }
-    const remoteRunners = (runnersRes as any).data?.runners ?? [];
-    const remoteLegs = (legsRes as any).data?.legs ?? [];
+    isFetchingRunners.current = true;
+    try {
+      const deviceId = getDeviceId();
+      const res = await invokeEdge<{ runners: Tables<'runners'>[] }>('runners-list', { teamId, deviceId });
+      if ((res as any).error) {
+        console.error('Error fetching runners:', (res as any).error);
+        return;
+      }
+      const remoteRunners = (res as any).data?.runners ?? [];
+      // Stabilize local runner IDs by mapping incoming remoteIds to existing local IDs.
+      // This avoids reshuffling runner IDs when the remote list order changes,
+      // which can otherwise trigger sync loops.
+      const existingRemoteToLocalId = new Map<string, number>(
+        useRaceStore
+          .getState()
+          .runners
+          .filter((rr) => !!rr.remoteId)
+          .map((rr) => [rr.remoteId as string, rr.id as number])
+      );
 
-    // Map Supabase data to our local store's data structure
-    // Create a mapping from remote runner IDs to local runner IDs (1-12)
-    const remoteToLocalRunnerMap = new Map<string, number>();
-    const runners: Runner[] = remoteRunners.map((r: Tables<'runners'>, index) => {
-      const localId = index + 1; // Local IDs are 1-12
-      remoteToLocalRunnerMap.set(r.id, localId);
-      return {
-        id: localId,
+      const runners: Runner[] = remoteRunners.map((r: Tables<'runners'>, index: number) => ({
+        id: existingRemoteToLocalId.get(r.id) ?? (index + 1),
         name: r.name,
         pace: r.pace,
         van: r.van === '1' ? 1 : 2,
         remoteId: r.id,
         updated_at: r.updated_at,
-      };
-    });
-
-    const legs: Leg[] = remoteLegs.map((l: Tables<'legs'>) => ({
-      id: l.number,
-      runnerId: l.runner_id ? remoteToLocalRunnerMap.get(l.runner_id) || 0 : 0,
-      distance: l.distance,
-      projectedStart: 0, // Will be recalculated
-      projectedFinish: 0, // Will be recalculated
-      actualStart: l.start_time ? new Date(l.start_time).getTime() : undefined,
-      actualFinish: l.finish_time ? new Date(l.finish_time).getTime() : undefined,
-      remoteId: l.id,
-      updated_at: l.updated_at,
-    }));
-
-    console.log('[fetchInitialData] Loaded', remoteRunners?.length ?? 0, 'runners and', remoteLegs?.length ?? 0, 'legs');
-    // Merge the fetched data into the store
-    merge(runners, store.runners, store.setRunners);
-    merge(legs, store.legs, (items) => store.setRaceData({ legs: items }));
-
-    console.log('[fetchInitialData] Merge complete');
-
-    // If remote data exists (e.g., when joining a team), consider setup complete
-    if ((remoteRunners?.length ?? 0) === 12 && (remoteLegs?.length ?? 0) > 0) {
-      console.log('[fetchInitialData] Remote data present. Marking setup complete.');
-      store.setRaceData({ isSetupComplete: true });
+      }));
+      merge(runners, useRaceStore.getState().runners, store.setRunners);
+    } finally {
+      isFetchingRunners.current = false;
     }
+  }, [merge, store.setRunners]);
 
+  const fetchAndMergeLegs = useCallback(async (teamId: string) => {
+    if (isFetchingLegs.current) {
+      console.log('[fetch] Legs fetch already in progress, skipping.');
+      return;
+    }
+    isFetchingLegs.current = true;
+    try {
+      const deviceId = getDeviceId();
+      const res = await invokeEdge<{ legs: Tables<'legs'>[] }>('legs-list', { teamId, deviceId });
+      if ((res as any).error) {
+        console.error('Error fetching legs:', (res as any).error);
+        return;
+      }
+      const remoteLegs = (res as any).data?.legs ?? [];
+      const remoteToLocalRunnerMap = new Map<string, number>(
+        useRaceStore.getState().runners.map(r => [r.remoteId as string, r.id as number])
+      );
+      const legs: Leg[] = remoteLegs.map((l: Tables<'legs'>) => ({
+        id: l.number,
+        runnerId: l.runner_id ? remoteToLocalRunnerMap.get(l.runner_id) || 0 : 0,
+        distance: l.distance,
+        projectedStart: 0,
+        projectedFinish: 0,
+        actualStart: l.start_time ? new Date(l.start_time).getTime() : undefined,
+        actualFinish: l.finish_time ? new Date(l.finish_time).getTime() : undefined,
+        remoteId: l.id,
+        updated_at: l.updated_at,
+      }));
+      merge(legs, useRaceStore.getState().legs, (items) => useRaceStore.getState().setRaceData({ legs: items }));
+    } finally {
+      isFetchingLegs.current = false;
+    }
   }, [merge]);
+
+  const fetchInitialData = useCallback(async (teamId: string) => {
+    console.log('[fetchInitialData] Fetching via Edge Functions for team', teamId);
+    await fetchAndMergeRunners(teamId);
+    await fetchAndMergeLegs(teamId);
+    console.log('[fetchInitialData] Merge complete');
+    // Do NOT auto-mark setup complete here. The Setup Wizard controls completion
+    // explicitly via `completeSetup()` after the user confirms. Auto-completing
+    // based on presence of remote rows can prematurely finish setup for newly
+    // created teams and appear to submit default names/paces.
+  }, [fetchAndMergeRunners, fetchAndMergeLegs]);
 
   const safeUpdate = useCallback(
     async <T extends { updated_at?: string | null }>(
@@ -352,30 +385,42 @@ export const useSyncManager = () => {
     );
 
     // Subscribe to broadcast channel for realtime updates from Edge Functions
+    // Coalesced, selective refetch on broadcast
+    let pendingFetch: { runners: boolean; legs: boolean } = { runners: false, legs: false };
     const broadcastChannel = supabase
       .channel(`team-${teamId}`)
-      .on('broadcast', { event: 'data_updated' }, (payload) => {
+      .on('broadcast', { event: 'data_updated' }, (outer) => {
         try {
+          const payload = (outer as any)?.payload;
           console.log('[broadcast] Received data update:', payload);
-          const originDeviceId = (payload as any)?.payload?.device_id;
+          const originDeviceId = payload?.device_id;
           const myDeviceId = getDeviceId();
           if (originDeviceId && myDeviceId && originDeviceId === myDeviceId) {
             console.log('[broadcast] Ignoring self-originated broadcast');
             return;
           }
 
-          const now = Date.now();
-          if (now - lastBroadcastRefetchAt < BROADCAST_REFETCH_COOLDOWN_MS) {
-            console.log('[broadcast] Skipping refetch due to cooldown');
-            return;
+          const type = payload?.type as 'runners' | 'legs' | undefined;
+          if (!type) {
+            // Unknown type, fall back to full refetch
+            pendingFetch.runners = true;
+            pendingFetch.legs = true;
+          } else {
+            if (type === 'runners') pendingFetch.runners = true;
+            if (type === 'legs') pendingFetch.legs = true;
           }
-          lastBroadcastRefetchAt = now;
 
-          // Trigger data refetch when broadcast message is received
-          const state = useRaceStore.getState();
-          if (state.teamId) {
-            console.log('[broadcast] Triggering data reconciliation');
-            fetchInitialData(state.teamId);
+          if (!broadcastRefetchTimerRef.current) {
+            console.log('[broadcast] Scheduling debounced selective refetch in 500ms');
+            broadcastRefetchTimerRef.current = window.setTimeout(() => {
+              const state = useRaceStore.getState();
+              if (state.teamId) {
+                if (pendingFetch.runners) fetchAndMergeRunners(state.teamId);
+                if (pendingFetch.legs) fetchAndMergeLegs(state.teamId);
+              }
+              pendingFetch = { runners: false, legs: false };
+              broadcastRefetchTimerRef.current = undefined;
+            }, 500) as unknown as number;
           }
         } catch (e) {
           console.warn('[broadcast] Handler error', e);
@@ -407,6 +452,10 @@ export const useSyncManager = () => {
       supabase.removeChannel(runnersChannel);
       supabase.removeChannel(legsChannel);
       supabase.removeChannel(broadcastChannel);
+      if (broadcastRefetchTimerRef.current) {
+        clearTimeout(broadcastRefetchTimerRef.current);
+        broadcastRefetchTimerRef.current = undefined;
+      }
       if (reconcileTimer) {
         clearInterval(reconcileTimer);
       }
