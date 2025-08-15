@@ -152,7 +152,15 @@ export const useSyncManager = () => {
         remoteId: l.id,
         updated_at: l.updated_at,
       }));
-      merge(legs, useRaceStore.getState().legs, (items) => useRaceStore.getState().setRaceData({ legs: items }));
+      merge(legs, useRaceStore.getState().legs, (items) => {
+        useRaceStore.getState().setRaceData({ legs: items });
+        // Recalculate projections after merging legs from remote
+        const storeState = useRaceStore.getState();
+        if (items.length > 0) {
+          const recalculatedLegs = recalculateProjections(items, 0, storeState.runners);
+          useRaceStore.getState().setRaceData({ legs: recalculatedLegs });
+        }
+      });
       return remoteLegs.length;
     } finally {
       isFetchingLegs.current = false;
@@ -164,9 +172,16 @@ export const useSyncManager = () => {
     const runnersCount = await fetchAndMergeRunners(teamId);
     const legsCount = await fetchAndMergeLegs(teamId);
     console.log('[fetchInitialData] Merge complete');
+    
+    // Ensure projections are recalculated after initial data fetch
+    const storeState = useRaceStore.getState();
+    if (storeState.legs.length > 0) {
+      const recalculatedLegs = recalculateProjections(storeState.legs, 0, storeState.runners);
+      storeState.setRaceData({ legs: recalculatedLegs });
+    }
+    
     // Auto-lock setup once any remote runners exist for this team.
     try {
-      const storeState = useRaceStore.getState();
       const anyRemoteRunners = runnersCount > 0 || storeState.runners.some(r => !!r.remoteId);
       if (anyRemoteRunners) {
         const lockKey = `relay_setup_locked_${teamId}`;
@@ -249,7 +264,14 @@ export const useSyncManager = () => {
         table === 'runners' ? storeState.runners : storeState.legs,
         table === 'runners'
           ? storeState.setRunners
-          : (items) => storeState.setRaceData({ legs: items as Leg[] })
+          : (items) => {
+              storeState.setRaceData({ legs: items as Leg[] });
+              // Recalculate projections after leg updates
+              if (table === 'legs' && items.length > 0) {
+                const recalculatedLegs = recalculateProjections(items as Leg[], 0, storeState.runners);
+                storeState.setRaceData({ legs: recalculatedLegs });
+              }
+            }
       );
 
       return { data: updatedItem };

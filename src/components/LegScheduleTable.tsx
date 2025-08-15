@@ -346,17 +346,17 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
             <div className="space-y-1">
               <div className="text-slate-500 font-medium">Projected</div>
               <div className="text-slate-700 font-medium">{formatTime(leg.projectedStart)}</div>
-              <div className="text-slate-600">to {formatTime(leg.projectedFinish)}</div>
+              <div className="text-slate-500 text-xs">to {formatTime(leg.projectedFinish)}</div>
             </div>
             <div className="space-y-1">
               <div className="text-slate-500 font-medium">Actual</div>
               <button
-                className={`text-left text-xs font-medium hover:underline block ${
+                className={`text-xs font-medium hover:underline block text-left ${
                   leg.actualStart ? 'text-green-600' : 'text-blue-600'
                 }`}
                 onClick={() => handleTimeEdit(leg.id, 'actualStart')}
               >
-                {leg.actualStart ? formatTime(leg.actualStart) : 'Set Start'}
+                {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
               </button>
               <button
                 className={`block text-left text-xs font-medium hover:underline ${
@@ -365,7 +365,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                 onClick={() => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
                 disabled={!leg.actualStart}
               >
-                {leg.actualFinish ? formatTime(leg.actualFinish) : leg.actualStart ? 'Set Finish' : 'Pending'}
+                {leg.actualFinish ? formatTime(leg.actualFinish) : leg.projectedFinish ? `${formatTime(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
               </button>
             </div>
           </div>
@@ -445,7 +445,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                         }`}
                         onClick={() => handleTimeEdit(leg.id, 'actualStart')}
                       >
-                        {leg.actualStart ? formatTime(leg.actualStart) : 'Set Start'}
+                        {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
                       </button>
                       <button
                         className={`block text-left text-xs font-medium hover:underline ${
@@ -454,7 +454,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                         onClick={() => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
                         disabled={!leg.actualStart}
                       >
-                        {leg.actualFinish ? formatTime(leg.actualFinish) : leg.actualStart ? 'Set Finish' : 'Pending'}
+                        {leg.actualFinish ? formatTime(leg.actualFinish) : leg.projectedFinish ? `${formatTime(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
                       </button>
                     </div>
                   </td>

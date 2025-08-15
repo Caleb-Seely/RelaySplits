@@ -165,6 +165,7 @@ export function recalculateProjections(legs: Leg[], updatedIndex: number, runner
       const startTime = currentLeg.actualStart || currentLeg.projectedStart;
       updatedLegs[i] = {
         ...currentLeg,
+        projectedStart: startTime,
         projectedFinish: calculateProjectedFinish(
           startTime,
           currentLeg.paceOverride ?? runner.pace,
