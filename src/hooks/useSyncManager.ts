@@ -84,10 +84,10 @@ export const useSyncManager = () => {
   );
 
   // Fetch helpers with in-flight guards
-  const fetchAndMergeRunners = useCallback(async (teamId: string) => {
+  const fetchAndMergeRunners = useCallback(async (teamId: string): Promise<number> => {
     if (isFetchingRunners.current) {
       console.log('[fetch] Runners fetch already in progress, skipping.');
-      return;
+      return 0;
     }
     isFetchingRunners.current = true;
     try {
@@ -95,7 +95,7 @@ export const useSyncManager = () => {
       const res = await invokeEdge<{ runners: Tables<'runners'>[] }>('runners-list', { teamId, deviceId });
       if ((res as any).error) {
         console.error('Error fetching runners:', (res as any).error);
-        return;
+        return 0;
       }
       const remoteRunners = (res as any).data?.runners ?? [];
       // Stabilize local runner IDs by mapping incoming remoteIds to existing local IDs.
@@ -118,15 +118,16 @@ export const useSyncManager = () => {
         updated_at: r.updated_at,
       }));
       merge(runners, useRaceStore.getState().runners, store.setRunners);
+      return remoteRunners.length;
     } finally {
       isFetchingRunners.current = false;
     }
   }, [merge, store.setRunners]);
 
-  const fetchAndMergeLegs = useCallback(async (teamId: string) => {
+  const fetchAndMergeLegs = useCallback(async (teamId: string): Promise<number> => {
     if (isFetchingLegs.current) {
       console.log('[fetch] Legs fetch already in progress, skipping.');
-      return;
+      return 0;
     }
     isFetchingLegs.current = true;
     try {
@@ -134,7 +135,7 @@ export const useSyncManager = () => {
       const res = await invokeEdge<{ legs: Tables<'legs'>[] }>('legs-list', { teamId, deviceId });
       if ((res as any).error) {
         console.error('Error fetching legs:', (res as any).error);
-        return;
+        return 0;
       }
       const remoteLegs = (res as any).data?.legs ?? [];
       const remoteToLocalRunnerMap = new Map<string, number>(
@@ -152,6 +153,7 @@ export const useSyncManager = () => {
         updated_at: l.updated_at,
       }));
       merge(legs, useRaceStore.getState().legs, (items) => useRaceStore.getState().setRaceData({ legs: items }));
+      return remoteLegs.length;
     } finally {
       isFetchingLegs.current = false;
     }
@@ -159,13 +161,23 @@ export const useSyncManager = () => {
 
   const fetchInitialData = useCallback(async (teamId: string) => {
     console.log('[fetchInitialData] Fetching via Edge Functions for team', teamId);
-    await fetchAndMergeRunners(teamId);
-    await fetchAndMergeLegs(teamId);
+    const runnersCount = await fetchAndMergeRunners(teamId);
+    const legsCount = await fetchAndMergeLegs(teamId);
     console.log('[fetchInitialData] Merge complete');
-    // Do NOT auto-mark setup complete here. The Setup Wizard controls completion
-    // explicitly via `completeSetup()` after the user confirms. Auto-completing
-    // based on presence of remote rows can prematurely finish setup for newly
-    // created teams and appear to submit default names/paces.
+    // Auto-lock setup once any remote runners exist for this team.
+    try {
+      const storeState = useRaceStore.getState();
+      const anyRemoteRunners = runnersCount > 0 || storeState.runners.some(r => !!r.remoteId);
+      if (anyRemoteRunners) {
+        const lockKey = `relay_setup_locked_${teamId}`;
+        localStorage.setItem(lockKey, '1');
+        if (!storeState.isSetupComplete) {
+          storeState.setRaceData({ isSetupComplete: true });
+        }
+      }
+    } catch (e) {
+      console.warn('[fetchInitialData] failed to persist/setup lock flag', e);
+    }
   }, [fetchAndMergeRunners, fetchAndMergeLegs]);
 
   const safeUpdate = useCallback(

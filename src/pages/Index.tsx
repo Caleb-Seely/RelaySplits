@@ -19,9 +19,18 @@ const Index = () => {
   const { deviceInfo, isInTeam, loading: teamContextLoading } = useTeam();
   const { team, deviceInfo: teamSyncDeviceInfo, loading: teamLoading, createTeam, joinTeam } = useTeamSync();
   const [isNewTeam, setIsNewTeam] = useState(false);
+  const isAdmin = teamSyncDeviceInfo?.role === 'admin';
   // Select only the pieces we need from the store to avoid effect thrash
   const teamId = useRaceStore((s) => s.teamId);
   const isSetupComplete = useRaceStore((s) => s.isSetupComplete);
+  // If the lock flag is present for this team, treat setup as complete locally to avoid any wizard flash
+  const isSetupLocked = (() => {
+    try {
+      return teamId ? localStorage.getItem(`relay_setup_locked_${teamId}`) === '1' : false;
+    } catch {
+      return false;
+    }
+  })();
   const restoreFromOffline = useRaceStore((s) => s.restoreFromOffline);
   const isDataConsistent = useRaceStore((s) => s.isDataConsistent);
   const { isOnline, offlineChangesCount, loadOfflineState } = useOfflineData();
@@ -185,7 +194,7 @@ const Index = () => {
 
       {/* Main content */}
       <main className="container mx-auto px-2 sm:px-4 py-2">
-        {isSetupComplete ? (
+        {isSetupComplete || isSetupLocked || !isAdmin ? (
           <>
             <Dashboard />
           </>
