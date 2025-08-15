@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useRaceStore } from '@/store/raceStore';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useSyncManager } from '@/hooks/useSyncManager';
 
@@ -39,8 +38,6 @@ import {
   CheckCircle,
   Grid3X3,
   List,
-  Copy,
-  LogOut,
   Share2
 } from 'lucide-react';
 import LegScheduleTable from './LegScheduleTable';
@@ -77,7 +74,6 @@ const Dashboard = () => {
     return cleanup;
   }, [teamId, setupRealtimeSubscriptions]);
 
-  const { signOut } = useAuth();
   const { team, updateTeamStartTime } = useTeamSync();
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -172,11 +168,13 @@ const Dashboard = () => {
     return lastLeg.actualFinish! - actualRaceStartTime;
   };
 
-  const copyTeamId = () => {
-    const idToCopy = team?.id || teamId;
-    if (idToCopy) {
-      navigator.clipboard.writeText(idToCopy);
-      toast.success('Team ID copied to clipboard');
+  const copyJoinCode = () => {
+    const codeToCopy = team?.join_code || team?.id || teamId;
+    if (codeToCopy) {
+      navigator.clipboard.writeText(codeToCopy);
+      toast.success(team?.join_code ? 'Join code copied to clipboard' : 'Team ID copied to clipboard');
+    } else {
+      toast.error('No team code available');
     }
   };
 
@@ -658,22 +656,19 @@ const Dashboard = () => {
                   <Settings className="h-4 w-4 mr-2" />
                   Settings
                 </Button>
-                <Button variant="outline" size="sm" onClick={signOut}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </Button>
+                {/* Sign Out removed as requested */}
               </div>
               <div className="flex-1" />
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={copyTeamId}
+                  onClick={copyJoinCode}
                   className="h-9 px-4"
-                  aria-label="Share Team ID"
+                  aria-label="Copy team join code"
                 >
                   <Share2 className="h-4 w-4 mr-1" />
-                  Share w/ Teammates
+                  {team?.join_code ? `Join: ${team.join_code}` : 'Share w/ Teammates'}
                 </Button>
               </div>
             </div>

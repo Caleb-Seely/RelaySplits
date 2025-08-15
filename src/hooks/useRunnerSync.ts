@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useRaceStore } from '@/store/raceStore';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { toast } from 'sonner';
@@ -10,6 +10,18 @@ import { toast } from 'sonner';
 export const useRunnerSync = () => {
   const { teamId } = useRaceStore();
   const { safeUpdate } = useSyncManager();
+
+  // Deduplication windows (ms)
+  const RUNNER_SYNC_COOLDOWN_MS = 1200;
+  const LEG_SYNC_COOLDOWN_MS = 1200;
+
+  // Track last sync timestamps to avoid duplicate syncs in a short window
+  const lastRunnerSyncRef = useRef<Map<number, number>>(new Map());
+  const lastLegFieldSyncRef = useRef<Map<string, number>>(new Map()); // key: `${legId}:${field}`
+
+  // Track in-flight requests to avoid overlapping calls for same entity
+  const inflightRunnerRef = useRef<Set<number>>(new Set());
+  const inflightLegFieldRef = useRef<Set<string>>(new Set());
 
   /**
    * Sync leg actual times (start/finish) to database
@@ -37,6 +49,19 @@ export const useRunnerSync = () => {
     };
 
     try {
+      const key = `${legId}:${field}`;
+      const now = Date.now();
+      const last = lastLegFieldSyncRef.current.get(key) ?? 0;
+      if (now - last < LEG_SYNC_COOLDOWN_MS) {
+        console.log(`[useRunnerSync] Skipping duplicate ${field} sync for leg ${legId} within cooldown`);
+        return;
+      }
+      if (inflightLegFieldRef.current.has(key)) {
+        console.log(`[useRunnerSync] Skipping overlapping ${field} sync for leg ${legId}`);
+        return;
+      }
+      inflightLegFieldRef.current.add(key);
+
       const result = await safeUpdate('legs', teamId, leg.remoteId, payload);
       
       if (result.error) {
@@ -45,11 +70,15 @@ export const useRunnerSync = () => {
       } else {
         console.log(`[useRunnerSync] Successfully synced ${field} for leg ${legId}`);
         // Update last sync timestamp
-        store.setLastSyncedAt(Date.now());
+        lastLegFieldSyncRef.current.set(key, now);
+        store.setLastSyncedAt(now);
       }
     } catch (error) {
       console.error(`[useRunnerSync] Error syncing ${field}:`, error);
       toast.error(`Error syncing ${field === 'actualStart' ? 'start' : 'finish'} time`);
+    } finally {
+      const key = `${legId}:${field}`;
+      inflightLegFieldRef.current.delete(key);
     }
   }, [teamId, safeUpdate]);
 
@@ -80,6 +109,18 @@ export const useRunnerSync = () => {
     };
 
     try {
+      const now = Date.now();
+      const last = lastRunnerSyncRef.current.get(runnerId) ?? 0;
+      if (now - last < RUNNER_SYNC_COOLDOWN_MS) {
+        console.log(`[useRunnerSync] Skipping duplicate runner sync for runner ${runnerId} within cooldown`);
+        return;
+      }
+      if (inflightRunnerRef.current.has(runnerId)) {
+        console.log(`[useRunnerSync] Skipping overlapping runner sync for runner ${runnerId}`);
+        return;
+      }
+      inflightRunnerRef.current.add(runnerId);
+
       const result = await safeUpdate('runners', teamId, runner.remoteId, payload);
       
       if (result.error) {
@@ -88,11 +129,14 @@ export const useRunnerSync = () => {
       } else {
         console.log(`[useRunnerSync] Successfully synced runner ${runnerId}`);
         // Update last sync timestamp
-        store.setLastSyncedAt(Date.now());
+        lastRunnerSyncRef.current.set(runnerId, now);
+        store.setLastSyncedAt(now);
       }
     } catch (error) {
       console.error(`[useRunnerSync] Error syncing runner:`, error);
       toast.error('Error syncing runner changes');
+    } finally {
+      inflightRunnerRef.current.delete(runnerId);
     }
   }, [teamId, safeUpdate]);
 
@@ -129,6 +173,19 @@ export const useRunnerSync = () => {
     };
 
     try {
+      const key = `${legId}:assignment`;
+      const now = Date.now();
+      const last = lastLegFieldSyncRef.current.get(key) ?? 0;
+      if (now - last < LEG_SYNC_COOLDOWN_MS) {
+        console.log(`[useRunnerSync] Skipping duplicate leg assignment sync for leg ${legId} within cooldown`);
+        return;
+      }
+      if (inflightLegFieldRef.current.has(key)) {
+        console.log(`[useRunnerSync] Skipping overlapping leg assignment sync for leg ${legId}`);
+        return;
+      }
+      inflightLegFieldRef.current.add(key);
+
       const result = await safeUpdate('legs', teamId, leg.remoteId, payload);
       
       if (result.error) {
@@ -137,11 +194,15 @@ export const useRunnerSync = () => {
       } else {
         console.log(`[useRunnerSync] Successfully synced leg assignment for leg ${legId}`);
         // Update last sync timestamp
-        store.setLastSyncedAt(Date.now());
+        lastLegFieldSyncRef.current.set(key, now);
+        store.setLastSyncedAt(now);
       }
     } catch (error) {
       console.error(`[useRunnerSync] Error syncing leg assignment:`, error);
       toast.error('Error syncing leg assignment');
+    } finally {
+      const key = `${legId}:assignment`;
+      inflightLegFieldRef.current.delete(key);
     }
   }, [teamId, safeUpdate]);
 

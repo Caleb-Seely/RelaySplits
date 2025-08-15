@@ -25,6 +25,10 @@ export const useSyncManager = () => {
   const isFetchingLegs = useRef(false);
   const broadcastRefetchTimerRef = useRef<number | undefined>(undefined);
 
+  // Broadcast deduplication to prevent processing duplicate messages
+  const recentBroadcasts = useRef<Map<string, number>>(new Map());
+  const BROADCAST_DEDUP_WINDOW_MS = 2000; // 2 second window for deduplication
+
   // Lightweight local queue to avoid circular hook dependency
   const enqueueChange = (change: { table: 'runners' | 'legs'; remoteId: string; payload: any }) => {
     try {
@@ -392,13 +396,38 @@ export const useSyncManager = () => {
       .on('broadcast', { event: 'data_updated' }, (outer) => {
         try {
           const payload = (outer as any)?.payload;
-          console.log('[broadcast] Received data update:', payload);
           const originDeviceId = payload?.device_id;
           const myDeviceId = getDeviceId();
+          
+          // Ignore self-originated broadcasts
           if (originDeviceId && myDeviceId && originDeviceId === myDeviceId) {
             console.log('[broadcast] Ignoring self-originated broadcast');
             return;
           }
+
+          // Create deduplication key based on device_id, type, and timestamp (rounded to nearest second)
+          const timestamp = payload?.timestamp ? new Date(payload.timestamp).getTime() : Date.now();
+          const roundedTimestamp = Math.floor(timestamp / 1000) * 1000; // Round to nearest second
+          const dedupKey = `${originDeviceId}-${payload?.type}-${roundedTimestamp}`;
+          const now = Date.now();
+          
+          // Check if we've seen this broadcast recently
+          const lastSeen = recentBroadcasts.current.get(dedupKey);
+          if (lastSeen && (now - lastSeen) < BROADCAST_DEDUP_WINDOW_MS) {
+            console.log('[broadcast] Ignoring duplicate broadcast within dedup window:', payload);
+            return;
+          }
+          
+          // Clean up old entries from deduplication map
+          for (const [key, time] of recentBroadcasts.current.entries()) {
+            if (now - time > BROADCAST_DEDUP_WINDOW_MS) {
+              recentBroadcasts.current.delete(key);
+            }
+          }
+          
+          // Record this broadcast
+          recentBroadcasts.current.set(dedupKey, now);
+          console.log('[broadcast] Received data update:', payload);
 
           const type = payload?.type as 'runners' | 'legs' | undefined;
           if (!type) {

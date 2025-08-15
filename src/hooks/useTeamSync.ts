@@ -9,6 +9,7 @@ interface Team {
   name: string;
   start_time: string;
   invite_token?: string;
+  join_code?: string;
 }
 
 interface DeviceInfo {
@@ -94,10 +95,12 @@ export const useTeamSync = () => {
       const {
         teamId,
         invite_token: inviteToken,
+        join_code: joinCode,
         deviceId,
       } = (result as any).data as {
         teamId: string;
         invite_token: string;
+        join_code: string;
         deviceId: string;
       };
 
@@ -116,7 +119,7 @@ export const useTeamSync = () => {
       // Ensure the global deviceId used by Edge Functions matches the server-registered one
       localStorage.setItem('relay_device_id', deviceId);
       
-      setTeam({ id: teamId, name, start_time: startTime.toISOString(), invite_token: inviteToken });
+      setTeam({ id: teamId, name, start_time: startTime.toISOString(), invite_token: inviteToken, join_code: joinCode });
       setDeviceInfo(newDeviceInfo);
 
       // Reset race store for new team
