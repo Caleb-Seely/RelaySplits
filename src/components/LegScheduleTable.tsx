@@ -11,9 +11,9 @@ import {
   formatDuration, 
   getCountdownTime, 
   formatCountdown, 
-  MAJOR_EXCHANGES,
   calculateActualPace
 } from '@/utils/raceUtils';
+import { MAJOR_EXCHANGES, getLegDirectionsUrl } from '@/utils/legData';
 import { 
   Edit, 
   Clock, 
@@ -306,8 +306,12 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
         <CardContent className="p-2 sm:p-3 md:p-4">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-start gap-3 min-w-0 flex-1">
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shadow-sm flex-shrink-0 ${
+              <button
+                onClick={() => {
+                  const directionsUrl = getLegDirectionsUrl(leg.id);
+                  window.open(directionsUrl, '_blank');
+                }}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shadow-sm flex-shrink-0 hover:opacity-80 transition-opacity cursor-pointer ${
                   status === 'running'
                     ? 'bg-orange-500'
                     : status === 'finished'
@@ -316,9 +320,10 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                     ? 'bg-blue-500'
                     : 'bg-slate-500'
                 }`}
+                title={`Get directions to Leg ${leg.id}`}
               >
                 {leg.id}
-              </div>
+              </button>
 
               <button
                 className="min-w-0 flex-1 text-left hover:bg-slate-50 p-2 -m-2 rounded transition-colors"
@@ -414,8 +419,12 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                 >
                   <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <div className="flex items-center gap-2">
-                      <div
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold ${
+                      <button
+                        onClick={() => {
+                          const directionsUrl = getLegDirectionsUrl(leg.id);
+                          window.open(directionsUrl, '_blank');
+                        }}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold hover:opacity-80 transition-opacity cursor-pointer ${
                           status === 'running'
                             ? 'bg-orange-500'
                             : status === 'finished'
@@ -424,9 +433,10 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                             ? 'bg-blue-500'
                             : 'bg-slate-500'
                         }`}
+                        title={`Get directions to Leg ${leg.id}`}
                       >
                         {leg.id}
-                      </div>
+                      </button>
                       {isMajorExchange && (
                         <Badge className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 hidden sm:inline-flex">EX</Badge>
                       )}

@@ -1,27 +1,16 @@
 
 import { format } from 'date-fns';
 import type { Leg, Runner, RaceStatus } from '@/types/race';
+import { LEG_DISTANCES, MAJOR_EXCHANGES, getLegDirectionsUrl } from '@/utils/legData';
 
 /**
  * Standard Hood to Coast relay race distances for all 36 legs (in miles).
  * These are the official distances used in the Hood to Coast relay race.
  * Teams can customize these distances for other relay races.
  */
-export const DEFAULT_LEG_DISTANCES = [
-   6.26, 6.05, 4.08, 6.64, 6.05, 7.10, // Legs 1-6 (Van 1 first rotation)
-   5.25, 6.00, 5.38, 5.04, 3.92, 5.85, // Legs 7-12 (Van 2 first rotation)
-   5.21, 7.91, 6.00, 4.00, 5.32, 4.15, // Legs 13-18 (Van 1 second rotation)
-   5.89, 5.58, 5.06, 6.82, 4.16, 4.83, // Legs 19-24 (Van 2 second rotation)
-   3.80, 5.77, 5.79, 3.83, 5.97, 5.32, // Legs 25-30 (Van 1 final rotation)
-   3.96, 4.20, 7.72, 4.12, 7.07, 5.03  // Legs 31-36 (Van 2 final rotation)
- ];
- 
+export const DEFAULT_LEG_DISTANCES = LEG_DISTANCES;
 
-/**
- * Major van exchange points where teams swap between Van 1 and Van 2.
- * These are the leg numbers where major handoffs occur in a relay race.
- */
-export const MAJOR_EXCHANGES = [6, 12, 18, 24, 30, 36];
+
 
 /**
  * Parses a pace string and converts it to seconds per mile.

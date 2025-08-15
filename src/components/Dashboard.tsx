@@ -22,6 +22,7 @@ import {
   calculateTotalDistanceTraveled,
   getEffectiveStartTime
 } from '@/utils/raceUtils';
+import { getLegDirectionsUrl } from '@/utils/legData';
 import {
   Clock,
   Users,
@@ -320,7 +321,7 @@ const Dashboard = () => {
                     {calculateTotalDistanceTraveled(legs).toFixed(1)} mi
                   </div>
                   <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                    <MapPin className="h-3 w-3" />
+                    <MapPin className="h-4 w-4" />
                     <span>Distance</span>
                   </div>
                 </div>
@@ -348,7 +349,14 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <div className="text-center">
-                        <Badge className="bg-green-500 animate-pulse text-white text-sm px-3 py-1 font-semibold mb-2">
+                        <Badge 
+                          onClick={() => {
+                            const directionsUrl = getLegDirectionsUrl(currentRunner.id);
+                            window.open(directionsUrl, '_blank');
+                          }}
+                          className="bg-green-500 animate-pulse text-white text-sm px-3 py-1 font-semibold mb-2 cursor-pointer hover:bg-green-600 transition-colors "
+                        >
+                          <MapPin className="h-4 w-4 mr-0.5" />
                           Leg {currentRunner.id}
                         </Badge>
                         <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
@@ -438,7 +446,14 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <div className="text-center">
-                        <Badge className="bg-blue-500 text-white text-sm px-3 py-1 font-semibold mb-2">
+                        <Badge 
+                          onClick={() => {
+                            const directionsUrl = getLegDirectionsUrl(nextRunner.id);
+                            window.open(directionsUrl, '_blank');
+                          }}
+                          className="bg-blue-500 text-white text-sm px-3 py-1 font-semibold mb-2 cursor-pointer hover:bg-blue-600 transition-colors duration-200"
+                        >
+                          <MapPin className="h-4 w-4 mr-0.5" />
                           Leg {nextRunner.id}
                         </Badge>
                         <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">

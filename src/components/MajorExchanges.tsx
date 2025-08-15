@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
 import { getMajorExchangeTimes, formatTime } from '@/utils/raceUtils';
+import { getLegDirectionsUrl } from '@/utils/legData';
 import { MapPin } from 'lucide-react';
 
 const MajorExchanges = () => {
@@ -31,7 +32,14 @@ const MajorExchanges = () => {
       <CardContent className="pt-0">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           {majorExchanges.map(({ legId, projectedFinish, actualFinish }) => (
-            <div key={legId} className="text-center p-2 bg-blue-50 rounded border">
+            <div 
+              key={legId} 
+              className="text-center p-2 bg-blue-50 rounded border cursor-pointer hover:bg-blue-100 transition-colors"
+              onClick={() => {
+                const directionsUrl = getLegDirectionsUrl(legId);
+                window.open(directionsUrl, '_blank');
+              }}
+            >
               <div className="text-xs font-medium text-blue-900 mb-1">
                 {exchangeNames[legId as keyof typeof exchangeNames]}
               </div>
