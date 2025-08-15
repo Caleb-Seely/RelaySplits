@@ -149,15 +149,23 @@ export const useSyncManager = () => {
     isFetchingLegs.current = true;
     try {
       const deviceId = getDeviceId();
+      console.log('[fetchAndMergeLegs] Fetching legs for team:', teamId, 'deviceId:', deviceId);
       const res = await invokeEdge<{ legs: Tables<'legs'>[] }>('legs-list', { teamId, deviceId });
+      console.log('[fetchAndMergeLegs] Raw response:', res);
+      
       if ((res as any).error) {
         console.error('Error fetching legs:', (res as any).error);
         return 0;
       }
+      
       const remoteLegs = (res as any).data?.legs ?? [];
+      console.log('[fetchAndMergeLegs] Remote legs received:', remoteLegs);
+      
       const remoteToLocalRunnerMap = new Map<string, number>(
         useRaceStore.getState().runners.map(r => [r.remoteId as string, r.id as number])
       );
+      console.log('[fetchAndMergeLegs] Runner map:', Object.fromEntries(remoteToLocalRunnerMap));
+      
       const legs: Leg[] = remoteLegs.map((l: Tables<'legs'>) => ({
         id: l.number,
         runnerId: l.runner_id ? remoteToLocalRunnerMap.get(l.runner_id) || 0 : 0,
@@ -169,7 +177,10 @@ export const useSyncManager = () => {
         remoteId: l.id,
         updated_at: l.updated_at,
       }));
+      console.log('[fetchAndMergeLegs] Mapped legs:', legs);
+      
       merge(legs, useRaceStore.getState().legs, (items) => {
+        console.log('[fetchAndMergeLegs] Setting', items.length, 'legs in store');
         useRaceStore.getState().setRaceData({ legs: items });
         // Recalculate projections after merging legs from remote
         const storeState = useRaceStore.getState();
@@ -179,16 +190,49 @@ export const useSyncManager = () => {
         }
       });
       return remoteLegs.length;
+    } catch (error) {
+      console.error('[fetchAndMergeLegs] Error fetching legs:', error);
+      return 0;
     } finally {
       isFetchingLegs.current = false;
     }
   }, [merge]);
 
+  const isFetchingInitialData = useRef(false);
+  const lastFetchTime = useRef(0);
+  const FETCH_DEBOUNCE_MS = 2000; // 2 second debounce
+  
   const fetchInitialData = useCallback(async (teamId: string) => {
+    const now = Date.now();
+    const stackTrace = new Error().stack?.split('\n').slice(2, 5).join('\n') || 'No stack trace';
+    
+    console.log('[fetchInitialData] Called with teamId:', teamId, 'from:', stackTrace);
+    
+    if (isFetchingInitialData.current) {
+      console.log('[fetchInitialData] Already in progress, skipping');
+      return;
+    }
+    
+    // Debounce rapid successive calls
+    if (now - lastFetchTime.current < FETCH_DEBOUNCE_MS) {
+      console.log('[fetchInitialData] Debouncing rapid successive calls');
+      return;
+    }
+    
+    isFetchingInitialData.current = true;
+    lastFetchTime.current = now;
     console.log('[fetchInitialData] Fetching via Edge Functions for team', teamId);
-    const runnersCount = await fetchAndMergeRunners(teamId);
-    const legsCount = await fetchAndMergeLegs(teamId);
-    console.log('[fetchInitialData] Merge complete');
+    
+    let runnersCount = 0;
+    let legsCount = 0;
+    
+    try {
+      runnersCount = await fetchAndMergeRunners(teamId);
+      legsCount = await fetchAndMergeLegs(teamId);
+      console.log('[fetchInitialData] Merge complete');
+    } finally {
+      isFetchingInitialData.current = false;
+    }
     
     // Ensure projections are recalculated after initial data fetch
     const storeState = useRaceStore.getState();
@@ -298,6 +342,13 @@ export const useSyncManager = () => {
 
   const setupRealtimeSubscriptions = useCallback((teamId: string) => {
     console.log('[realtime] Setting up subscriptions for team', teamId);
+    
+    // Check if current device is a viewer - viewers don't need realtime subscriptions
+    const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+    if (deviceInfo.role === 'viewer') {
+      console.log('[realtime] Skipping realtime setup for viewer role');
+      return () => {}; // Return no-op cleanup function
+    }
     
     // Enhanced backoff helper with max retries and connection state tracking
     const makeBackoff = () => {
@@ -456,6 +507,13 @@ export const useSyncManager = () => {
       return doSubscribe();
     };
     const handleSubscriptionEvent = (payload: any, table: 'runners' | 'legs') => {
+      // Check if current device is a viewer - viewers don't need subscription events
+      const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+      if (deviceInfo.role === 'viewer') {
+        console.log('[realtime] Ignoring subscription event for viewer role');
+        return;
+      }
+      
       const storeState = useRaceStore.getState();
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         if (table === 'runners') {
@@ -542,6 +600,13 @@ export const useSyncManager = () => {
       .channel(`team-${teamId}`)
       .on('broadcast', { event: 'data_updated' }, (outer) => {
         try {
+          // Check if current device is a viewer - viewers don't need broadcast updates
+          const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+          if (deviceInfo.role === 'viewer') {
+            console.log('[broadcast] Ignoring broadcast for viewer role');
+            return;
+          }
+          
           const payload = (outer as any)?.payload;
           const originDeviceId = payload?.device_id;
           const myDeviceId = getDeviceId();
@@ -608,8 +673,17 @@ export const useSyncManager = () => {
 
     // Periodic reconciliation and health check (defense-in-depth) e.g., every 60s
     reconcileTimer = window.setInterval(() => {
+      console.log('[realtime] Reconciliation timer triggered');
       const state = useRaceStore.getState();
       if (state.teamId) {
+        // Check if current device is a viewer - viewers don't need realtime reconciliation
+        const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+        console.log('[realtime] Device info from localStorage:', deviceInfo);
+        if (deviceInfo.role === 'viewer') {
+          console.log('[realtime] Skipping reconciliation for viewer role');
+          return;
+        }
+        
         console.log('[realtime] reconciling state via fetchInitialData');
         fetchInitialData(state.teamId);
         
@@ -633,6 +707,13 @@ export const useSyncManager = () => {
       console.log('[realtime] online event: triggering reconciliation and channel resubscription');
       const state = useRaceStore.getState();
       if (state.teamId) {
+        // Check if current device is a viewer - viewers don't need realtime reconciliation
+        const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+        if (deviceInfo.role === 'viewer') {
+          console.log('[realtime] Skipping online reconciliation for viewer role');
+          return;
+        }
+        
         // Reset backoff states when network comes back online
         runnersBackoff.reset();
         legsBackoff.reset();
@@ -655,6 +736,13 @@ export const useSyncManager = () => {
 
     // Manual retry function for debugging
     const manualRetry = () => {
+      // Check if current device is a viewer - viewers don't need manual retry
+      const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+      if (deviceInfo.role === 'viewer') {
+        console.log('[realtime] Skipping manual retry for viewer role');
+        return;
+      }
+      
       if (isManualRetryInProgress.current) {
         console.log('[realtime] Manual retry already in progress, skipping');
         return;
@@ -756,11 +844,17 @@ export const useSyncManager = () => {
 
   // Idempotent: if team already has runners, do nothing. Uses Edge Functions.
   const saveInitialRows = useCallback(async (teamId: string) => {
+    console.log('[saveInitialRows] Starting saveInitialRows for team:', teamId);
     const storeState = useRaceStore.getState();
     const deviceId = getDeviceId();
+    console.log('[saveInitialRows] Device ID:', deviceId);
+    console.log('[saveInitialRows] Store state runners count:', storeState.runners.length);
+    console.log('[saveInitialRows] Store state legs count:', storeState.legs.length);
 
     // If remote data exists, just fetch it
+    console.log('[saveInitialRows] Checking if remote data exists...');
     const runnersList = await invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId });
+    console.log('[saveInitialRows] Runners list response:', runnersList);
     if (!(runnersList as any).error && (runnersList as any).data?.runners?.length > 0) {
       console.log('[saveInitialRows] Remote runners exist. Skipping inserts.');
       await fetchInitialData(teamId);
@@ -770,7 +864,9 @@ export const useSyncManager = () => {
     // Insert runners via Edge
     console.log('[saveInitialRows] Inserting runners via Edge…');
     const runnersPayload = storeState.runners.map(r => ({ id: undefined, name: r.name, pace: r.pace, van: r.van.toString() }));
+    console.log('[saveInitialRows] Runners payload:', runnersPayload);
     const upsertR = await invokeEdge('runners-upsert', { teamId, deviceId, runners: runnersPayload, action: 'upsert' });
+    console.log('[saveInitialRows] Runners upsert response:', upsertR);
     if ((upsertR as any).error) {
       console.error('Error saving runners via Edge:', (upsertR as any).error);
       return { error: (upsertR as any).error };
@@ -799,7 +895,9 @@ export const useSyncManager = () => {
       distance: l.distance,
       runner_id: l.runnerId ? localToRemoteRunnerMap.get(l.runnerId) : null,
     }));
+    console.log('[saveInitialRows] Legs payload:', legsPayload);
     const upsertL = await invokeEdge('legs-upsert', { teamId, deviceId, legs: legsPayload, action: 'upsert' });
+    console.log('[saveInitialRows] Legs upsert response:', upsertL);
     if ((upsertL as any).error) {
       console.error('Error saving legs via Edge:', (upsertL as any).error);
       return { error: (upsertL as any).error };

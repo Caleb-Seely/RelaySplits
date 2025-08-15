@@ -24,6 +24,7 @@ interface SetupWizardProps {
 }
 
 const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
+  console.log('[SetupWizard] Rendering with isNewTeam:', isNewTeam);
   const {
     startTime,
     runners,
@@ -36,7 +37,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     initializeLegs
   } = useRaceStore();
 
-  const { saveInitialRows } = useSyncManager();
+  const { saveInitialRows, fetchInitialData } = useSyncManager();
   const { team } = useTeamSync();
 
   const [isSaving, setIsSaving] = useState(false);
@@ -170,11 +171,25 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
       // For new teams, insert initial rows for the team created in TeamSetup
       if (isNewTeam && team?.id) {
-        console.log('[SetupWizard] Calling saveInitialRows for team', team.id);
-        const { error } = await saveInitialRows(team.id);
-        if (error) {
-          console.error('[SetupWizard] saveInitialRows failed:', error);
-          toast.error(`Failed to save initial data: ${error.message}`, { id: toastId });
+        console.log('[SetupWizard] About to call saveInitialRows for team', team.id);
+        console.log('[SetupWizard] Current store state - runners:', useRaceStore.getState().runners.length, 'legs:', useRaceStore.getState().legs.length);
+        
+        try {
+          const { error } = await saveInitialRows(team.id);
+          console.log('[SetupWizard] saveInitialRows completed, error:', error);
+          if (error) {
+            console.error('[SetupWizard] saveInitialRows failed:', error);
+            toast.error(`Failed to save initial data: ${error.message}`, { id: toastId });
+            return;
+          }
+          
+          // After saving initial data, fetch it to ensure it's loaded into the store
+          console.log('[SetupWizard] Fetching initial data after save');
+          await fetchInitialData(team.id);
+          console.log('[SetupWizard] fetchInitialData completed');
+        } catch (e) {
+          console.error('[SetupWizard] Exception in saveInitialRows:', e);
+          toast.error(`Failed to save initial data: ${(e as Error)?.message || 'Unknown error'}`, { id: toastId });
           return;
         }
       }

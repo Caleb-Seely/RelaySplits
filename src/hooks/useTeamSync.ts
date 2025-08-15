@@ -37,6 +37,7 @@ export const useTeamSync = () => {
       const storedDeviceInfo = localStorage.getItem('relay_device_info');
       const storedTeamName = localStorage.getItem('relay_team_name');
       const storedJoinCode = localStorage.getItem('relay_team_join_code');
+      const storedInviteToken = localStorage.getItem('relay_team_invite_token');
       
 
       
@@ -64,7 +65,8 @@ export const useTeamSync = () => {
             id: storedTeamId, 
             name: storedTeamName, 
             start_time: teamStartTime,
-            join_code: storedJoinCode || undefined
+            join_code: storedJoinCode || undefined,
+            invite_token: storedInviteToken || undefined
           });
           
           // Sync race store start time with team start time
@@ -82,8 +84,9 @@ export const useTeamSync = () => {
   const fetchTeamDetails = async (teamId: string) => {
     try {
       const deviceId = getDeviceId();
-      // Use teams-get to fetch team details including join_code
-      const result = await invokeEdge<{ team: { id: string; name: string; start_time: string; join_code: string } }>('teams-get', { teamId, deviceId });
+      
+      // Use teams-get to fetch team details including join_code and invite_token
+      const result = await invokeEdge<{ team: { id: string; name: string; start_time: string; join_code: string; invite_token?: string } }>('teams-get', { teamId, deviceId });
       
       if (!(result as any).error) {
         const teamData = (result as any).data.team;
@@ -92,13 +95,17 @@ export const useTeamSync = () => {
         localStorage.setItem('relay_team_name', teamData.name);
         localStorage.setItem('relay_team_start_time', teamData.start_time);
         localStorage.setItem('relay_team_join_code', teamData.join_code);
+        if (teamData.invite_token) {
+          localStorage.setItem('relay_team_invite_token', teamData.invite_token);
+        }
         
         // Set team in state
         setTeam({ 
           id: teamData.id, 
           name: teamData.name, 
           start_time: teamData.start_time,
-          join_code: teamData.join_code
+          join_code: teamData.join_code,
+          invite_token: teamData.invite_token
         });
         
         // Sync race store start time with team start time
@@ -169,14 +176,19 @@ export const useTeamSync = () => {
       // Store admin secret securely
       localStorage.setItem('relay_admin_secret', adminSecret);
       
-      // Use race store's current start time for new team
+      // Store team data in localStorage but don't update context yet
+      // This prevents Index.tsx from thinking it's an existing team
+      console.log('[createTeam] Storing team data in localStorage but not updating context yet');
       const race = useRaceStore.getState();
       const teamStartTime = new Date(race.startTime).toISOString();
-      setTeam({ id: teamId, name, start_time: teamStartTime, invite_token: inviteToken, join_code: joinCode });
       localStorage.setItem('relay_team_start_time', teamStartTime);
       localStorage.setItem('relay_team_join_code', joinCode);
-      setDeviceInfo(newDeviceInfo);
-
+      localStorage.setItem('relay_team_invite_token', inviteToken);
+      
+      // Don't call setTeam() or setDeviceInfo() here - this will be done after admin secret dialog
+      // This prevents Index.tsx from immediately thinking it's an existing team
+      console.log('[createTeam] Team context will be updated after admin secret dialog is closed');
+      
       // Reset race store for new team
       race.setTeamId(teamId);
       race.setRaceData({ isSetupComplete: false });
@@ -198,43 +210,31 @@ export const useTeamSync = () => {
     try {
       const deviceId = getDeviceId();
       
-      // Normalize/parse the input which could be:
-      // - a full URL with query (?invite_token=..., ?token=..., ?t=..., ?join_code=..., ?code=...)
-      // - a URL with last path segment as code
-      // - a raw invite token (long)
-      // - a raw short join code
-      const parseJoinInput = (raw: string): { invite_token?: string; join_code?: string } => {
+      // Parse invite token from various formats
+      const parseInviteToken = (raw: string): string => {
         const input = raw.trim();
         // Try URL parsing
         try {
           const u = new URL(input);
           const qp = u.searchParams;
           const invite = qp.get('invite_token') || qp.get('token') || qp.get('t');
-          const code = qp.get('join_code') || qp.get('code') || qp.get('c');
-          if (invite) return { invite_token: invite.trim() };
-          if (code) return { join_code: code.trim() };
+          if (invite) return invite.trim();
           // Fall back to last path segment if present
           const segments = u.pathname.split('/').filter(Boolean);
           if (segments.length) {
             const last = segments[segments.length - 1];
-            if (last.length >= 3 && last.length <= 64) {
-              return { join_code: last.trim() };
+            if (last.length > 16) { // Invite tokens are long
+              return last.trim();
             }
           }
         } catch (_) {
           // Not a URL; continue
         }
-        // Not a URL: decide by shape
-        if (input.length <= 64) {
-          // Heuristic: short-ish strings without spaces likely join codes
-          if (!input.includes(' ') && input.length <= 16) {
-            return { join_code: input };
-          }
-        }
-        return { invite_token: input };
+        // Not a URL: treat as raw invite token
+        return input;
       };
 
-      const parsed = parseJoinInput(codeOrToken);
+      const inviteToken = parseInviteToken(codeOrToken);
 
       // Base payload
       const basePayload = {
@@ -244,25 +244,24 @@ export const useTeamSync = () => {
           display_name: `${firstName} ${lastName}`,
         },
         device_id: deviceId,
+        invite_token: inviteToken,
       } as const;
 
-      // Call once with the correctly parsed field
-      const result = await invokeEdge<{ teamId: string; role: string; teamName: string; deviceId: string; join_code: string }>('teams-join', {
-        ...basePayload,
-        ...parsed,
-      });
+      // Call teams-join with invite token
+      const result = await invokeEdge<{ teamId: string; role: string; teamName: string; deviceId: string; join_code: string; invite_token: string }>('teams-join', basePayload);
 
       if ((result as any).error) {
         setLoading(false);
         return { error: (result as any).error.message || 'Failed to join team' };
       }
 
-      const { teamId, role, teamName, deviceId: returnedDeviceId, join_code } = (result as any).data as {
+      const { teamId, role, teamName, deviceId: returnedDeviceId, join_code, invite_token } = (result as any).data as {
         teamId: string;
         role: string;
         teamName: string;
         deviceId: string;
         join_code: string;
+        invite_token: string;
       };
 
       // Store team and device info locally
@@ -281,13 +280,25 @@ export const useTeamSync = () => {
       localStorage.setItem('relay_device_id', newDeviceInfo.deviceId);
       localStorage.setItem('relay_team_name', teamName);
       localStorage.setItem('relay_team_join_code', join_code);
+      localStorage.setItem('relay_team_invite_token', invite_token);
       
       // Use race store's current start time for joined team
       const race = useRaceStore.getState();
       const teamStartTime = new Date(race.startTime).toISOString();
-      setTeam({ id: teamId, name: teamName, start_time: teamStartTime, join_code });
       localStorage.setItem('relay_team_start_time', teamStartTime);
       setDeviceInfo(newDeviceInfo);
+
+      // Set team state immediately with the data we have from the join response
+      setTeam({ 
+        id: teamId, 
+        name: teamName, 
+        start_time: teamStartTime, 
+        join_code,
+        invite_token
+      });
+      
+      // Optionally fetch full team details to ensure we have the latest data
+      await fetchTeamDetails(teamId);
 
       // Reset race store for joined team
       race.setTeamId(teamId);
@@ -311,6 +322,7 @@ export const useTeamSync = () => {
     localStorage.removeItem('relay_team_start_time');
     localStorage.removeItem('relay_team_name');
     localStorage.removeItem('relay_team_join_code');
+    localStorage.removeItem('relay_team_invite_token');
     
     // Clear state
     setTeam(null);

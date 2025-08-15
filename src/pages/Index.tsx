@@ -40,29 +40,43 @@ const Index = () => {
   const { fetchInitialData } = useSyncManager();
 
   useEffect(() => {
+    console.log('[Index] Team context updated - team?.id:', team?.id, 'isNewTeam:', isNewTeam);
     // Ensure store knows current teamId so sync hooks can run
     if (team?.id) {
       const current = useRaceStore.getState().teamId;
       if (current !== team.id) {
+        console.log('[Index] Setting teamId in store from', current, 'to', team.id);
         useRaceStore.getState().setTeamId(team.id);
       }
     }
-  }, [team?.id]);
+  }, [team?.id, isNewTeam]);
 
   // Detect freshly-created team and show Setup Wizard as new team once
   useEffect(() => {
     const flag = localStorage.getItem('relay_is_new_team');
+    console.log('[Index] Checking for new team flag:', flag);
     if (flag) {
+      console.log('[Index] Setting isNewTeam to true');
       setIsNewTeam(true);
       localStorage.removeItem('relay_is_new_team');
+    } else {
+      // If no flag is found, explicitly set to false to indicate this is not a new team
+      console.log('[Index] No new team flag found, setting isNewTeam to false');
+      setIsNewTeam(false);
     }
   }, []);
 
   useEffect(() => {
-    if (teamId) {
+    // Only fetch initial data if we have a teamId, user is not a viewer, and we've determined it's not a new team
+    console.log('[Index] fetchInitialData useEffect - teamId:', teamId, 'isNewTeam:', isNewTeam, 'deviceInfo?.role:', deviceInfo?.role);
+    if (teamId && deviceInfo?.role !== 'viewer' && isNewTeam === false) {
+      console.log('[Index] Calling fetchInitialData for team:', teamId);
       fetchInitialData(teamId);
+    } else if (teamId && deviceInfo?.role !== 'viewer' && isNewTeam === undefined) {
+      // If isNewTeam is undefined, we haven't determined yet - skip for now
+      console.log('[Index] Skipping fetchInitialData - isNewTeam is undefined');
     }
-  }, [teamId, fetchInitialData]);
+  }, [teamId, fetchInitialData, deviceInfo?.role, isNewTeam]);
 
   // Realtime subscriptions are established in Dashboard.tsx
 

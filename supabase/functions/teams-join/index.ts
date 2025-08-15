@@ -7,8 +7,7 @@ const corsHeaders = {
 }
 
 interface JoinTeamRequest {
-  invite_token?: string;
-  join_code?: string;
+  invite_token: string;
   device_profile: {
     first_name: string;
     last_name: string;
@@ -23,6 +22,7 @@ interface JoinTeamResponse {
   deviceId: string;
   teamName: string;
   join_code: string;
+  invite_token: string;
 }
 
 serve(async (req) => {
@@ -44,12 +44,12 @@ serve(async (req) => {
       }
     )
 
-    const { invite_token, join_code, device_profile, device_id }: JoinTeamRequest = await req.json()
+    const { invite_token, device_profile, device_id }: JoinTeamRequest = await req.json()
 
     // Validate input
-    if (!invite_token && !join_code) {
+    if (!invite_token) {
       return new Response(
-        JSON.stringify({ error: 'Either invite_token or join_code is required' }),
+        JSON.stringify({ error: 'Invite token is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -61,25 +61,19 @@ serve(async (req) => {
       )
     }
 
-    // Normalize inputs
-    const inviteToken = invite_token?.trim()
-    const joinCode = join_code?.trim()
+    // Normalize input
+    const inviteToken = invite_token.trim()
 
-    // Find team by token or code (case-insensitive for join_code)
-    let teamQuery = supabase.from('teams').select('*')
-    if (inviteToken) {
-      teamQuery = teamQuery.eq('invite_token', inviteToken)
-    } else if (joinCode) {
-      // Use ilike for case-insensitive exact match
-      teamQuery = teamQuery.ilike('join_code', joinCode)
-      // Check if join code is expired (optional - implement expiration logic here)
-    }
-
-    const { data: team, error: teamError } = await teamQuery.single()
+    // Find team by invite token
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('invite_token', inviteToken)
+      .single()
 
     if (teamError || !team) {
       return new Response(
-        JSON.stringify({ error: 'Invalid invite token or join code' }),
+        JSON.stringify({ error: 'Invalid invite token' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -120,7 +114,7 @@ serve(async (req) => {
         team_id: team.id,
         device_id: deviceId,
         action: 'device_rejoined',
-        payload: { device_profile }
+        payload: { device_profile, join_method: 'invite_token' }
       })
 
       const response: JoinTeamResponse = {
@@ -129,6 +123,7 @@ serve(async (req) => {
         deviceId: deviceId,
         teamName: team.name,
         join_code: team.join_code,
+        invite_token: team.invite_token,
       }
 
       return new Response(
@@ -165,7 +160,7 @@ serve(async (req) => {
       team_id: team.id,
       device_id: deviceId,
       action: 'device_joined',
-      payload: { device_profile, join_method: invite_token ? 'invite_token' : 'join_code' }
+      payload: { device_profile, join_method: 'invite_token' }
     })
 
     const response: JoinTeamResponse = {
@@ -174,6 +169,7 @@ serve(async (req) => {
       deviceId: deviceId,
       teamName: team.name,
       join_code: team.join_code,
+      invite_token: team.invite_token,
     }
 
     return new Response(

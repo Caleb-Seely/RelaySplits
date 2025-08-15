@@ -41,7 +41,12 @@ import {
   CheckCircle,
   Grid3X3,
   List,
-  Share2
+  Share2,
+  Copy,
+  Eye,
+  Cloud,
+  Clipboard,
+  Copy as CopyIcon
 } from 'lucide-react';
 import LegScheduleTable from './LegScheduleTable';
 import MajorExchanges from './MajorExchanges';
@@ -55,7 +60,11 @@ import { toast } from 'sonner';
 import TeamSettings from './TeamSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const Dashboard = () => {
+interface DashboardProps {
+  isViewOnly?: boolean;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
   const {
     runners,
     legs,
@@ -70,15 +79,18 @@ const Dashboard = () => {
   } = useRaceStore();
   const { setupRealtimeSubscriptions, manualRetry } = useSyncManager();
 
-  // Ensure realtime subscriptions are active when Dashboard is mounted
+  // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
   useEffect(() => {
-    if (!teamId) return;
+    if (!teamId || isViewOnly) return;
     const cleanup = setupRealtimeSubscriptions(teamId);
     return cleanup;
-  }, [teamId, setupRealtimeSubscriptions]);
+  }, [teamId, setupRealtimeSubscriptions, isViewOnly]);
 
   const { team, updateTeamStartTime } = useTeamSync();
   const { deviceInfo } = useTeam();
+
+  // Determine if user can edit (not in view-only mode and has edit permissions)
+  const canEdit = !isViewOnly && (deviceInfo?.role === 'admin' || deviceInfo?.role === 'member');
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
@@ -178,7 +190,7 @@ const Dashboard = () => {
     const codeToCopy = team?.join_code || team?.id || teamId;
     if (codeToCopy) {
       navigator.clipboard.writeText(codeToCopy);
-      toast.success(team?.join_code ? `Join code "${team.join_code}" copied to clipboard!` : 'Team ID copied to clipboard');
+      toast.success(team?.join_code ? `View Only code "${team.join_code}" copied to clipboard!` : 'Team ID copied to clipboard');
     } else {
       toast.error('No team code available');
     }
@@ -204,6 +216,7 @@ const Dashboard = () => {
   };
 
   const handleDistanceEdit = (legId: number) => {
+    if (!canEdit) return;
     const leg = legs.find(l => l.id === legId);
     if (leg) {
       setEditingDistance(legId);
@@ -212,7 +225,7 @@ const Dashboard = () => {
   };
 
   const handleDistanceSave = () => {
-    if (!editingDistance) return;
+    if (!canEdit || !editingDistance) return;
     const distance = parseFloat(distanceValue);
     if (!isNaN(distance) && distance > 0) {
       updateLegDistance(editingDistance, distance);
@@ -221,6 +234,7 @@ const Dashboard = () => {
   };
 
   const handleTimeEdit = (legId: number, field: 'actualStart' | 'actualFinish') => {
+    if (!canEdit) return;
     const leg = legs.find(l => l.id === legId);
     const runner = leg ? runners.find(r => r.id === leg.runnerId) : null;
 
@@ -236,6 +250,7 @@ const Dashboard = () => {
   };
 
   const handleTimeSubmit = (timestamp: number) => {
+    if (!canEdit) return;
     if (timePickerConfig) {
       updateLegActualTime(timePickerConfig.legId, timePickerConfig.field, timestamp);
     }
@@ -303,8 +318,11 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => setStartTimePickerOpen(true)}
-                  className="justify-self-start text-left group focus:outline-none"
-                  aria-label="Edit official team start time"
+                  disabled={!canEdit}
+                  className={`justify-self-start text-left group focus:outline-none ${
+                    !canEdit ? 'cursor-not-allowed opacity-50' : ''
+                  }`}
+                  aria-label={canEdit ? "Edit official team start time" : "View only - cannot edit"}
                 >
                   <div className="text-sm font-bold text-foreground underline decoration-dotted underline-offset-2 group-hover:text-primary">
                     {formatTime(actualRaceStartTime)}
@@ -532,6 +550,7 @@ const Dashboard = () => {
                         {nextRunner && (
                           <Button
                             onClick={() => {
+                              if (!canEdit) return;
                               const now = Date.now();
                               // If there is a current runner active, end them first
                               if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
@@ -540,8 +559,13 @@ const Dashboard = () => {
                               // Start the next runner
                               updateLegActualTime(nextRunner.id, 'actualStart', now);
                             }}
+                            disabled={!canEdit}
                             size="sm"
-                            className="bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2"
+                            className={`font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                              canEdit 
+                                ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                            }`}
                           >
                             <Play className="h-4 w-4" />
                             Start Runner
@@ -666,29 +690,33 @@ const Dashboard = () => {
             <CardContent className="p-0">
               <LegScheduleTable 
                 viewMode={viewMode}
-                onRunnerClick={(runnerId, legId) => {
+                isViewOnly={isViewOnly}
+                onRunnerClick={canEdit ? (runnerId, legId) => {
                   setSelectedRunner(runnerId);
                   setInitialLegId(legId);
                   setRunnerEditModalOpen(true);
-                }}
+                } : undefined}
               />
             </CardContent>
           </Card>
         </div>
         {/* Footer */}
-        <footer className="left-0 right-0 backdrop-blur z-50 border-t border-border bg-background/80">
-          <div className="container mx-auto px-3 py-3">
-            <div className="flex items-center justify-between">
+        <footer className="left-0 right-0 backdrop-blur z-50 border-t border-border">
+          <div className="container mx-auto px-3 py-4">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
+              {/* Left side - Settings, Sync, and Join Code */}
               <div className="flex items-center gap-2">
-                {/* Always show settings button - content varies based on role */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setSettingsModalOpen(true)}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
+                {/* Settings button - hidden in view-only mode */}
+                {canEdit && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setSettingsModalOpen(true)}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Button>
+                )}
                 
                 <Button
                   variant="outline"
@@ -696,36 +724,25 @@ const Dashboard = () => {
                   onClick={manualRetry}
                   title="Manual retry realtime connections"
                 >
-                  <Zap className="h-4 w-4 mr-2" />
-                  Retry Sync
+                  <Cloud className="h-4 w-4 mr-2" />
+                  Sync
                 </Button>
+
+                {/* Join Code Button */}
+                {team?.join_code && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={copyJoinCode}
+                    title={`Click to copy ${isViewOnly ? 'viewer code' : 'join code'}`}
+                  >
+                    <CopyIcon className="h-4 w-4 mr-0.5" />
+                    {team.join_code}
+                  </Button>
+                )}
               </div>
               
-              {/* Team Join Code - Centered and Prominent */}
-              {team?.join_code && (
-                <div className="flex items-center gap-3">
-                  <div className="text-center">
-                    <div className="text-xs font-medium text-muted-foreground mb-1">
-                      Team Join Code
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 font-mono font-bold text-primary text-lg tracking-wider">
-                        {team.join_code}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={copyJoinCode}
-                        className="h-10 px-3"
-                        aria-label="Copy team join code"
-                      >
-                        <Share2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
+              {/* Right side - Fallback share button */}
               <div className="flex items-center gap-2">
                 {!team?.join_code && (
                   <Button
@@ -783,11 +800,10 @@ const Dashboard = () => {
 
       {/* Team Settings Modal */}
       <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Team Settings</DialogTitle>
-          </DialogHeader>
-          <TeamSettings />
+        <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-2xl rounded-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+          <div className="space-y-6 overflow-y-auto">
+            <TeamSettings />
+          </div>
         </DialogContent>
       </Dialog>
 

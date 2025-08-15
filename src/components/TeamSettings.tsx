@@ -11,6 +11,7 @@ import { useTeam } from '@/contexts/TeamContext';
 import { useTeamManagement } from '@/hooks/useTeamManagement';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import AdminRecovery from './AdminRecovery';
+import { toast } from 'sonner';
 import { 
   Settings, 
   Users, 
@@ -22,7 +23,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Share2,
-  Info
+  Info,
+  Eye
 } from 'lucide-react';
 
 interface Device {
@@ -52,7 +54,6 @@ const TeamSettings: React.FC = () => {
   const [startTime, setStartTime] = useState(team?.start_time || '');
   const [inviteToken, setInviteToken] = useState<string>('');
   const [showRemoveDialog, setShowRemoveDialog] = useState<Device | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string>('');
   const [showStoredAdminSecret, setShowStoredAdminSecret] = useState(false);
 
   // Check if current device is admin
@@ -91,8 +92,7 @@ const TeamSettings: React.FC = () => {
       }
 
       await updateTeam(updates);
-      setSuccessMessage('Team updated successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Team updated successfully!');
     } catch (err) {
       console.error('Failed to update team:', err);
     }
@@ -102,8 +102,7 @@ const TeamSettings: React.FC = () => {
     try {
       const result = await rotateInviteToken();
       setInviteToken(result.invite_token);
-      setSuccessMessage('Invite link rotated successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Invite link rotated successfully!');
     } catch (err) {
       console.error('Failed to rotate invite:', err);
     }
@@ -113,8 +112,7 @@ const TeamSettings: React.FC = () => {
     try {
       await removeDevice(device.device_id);
       setShowRemoveDialog(null);
-      setSuccessMessage(`Removed ${device.display_name} from team`);
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success(`Removed ${device.display_name} from team`);
       await loadDevices(); // Refresh device list
     } catch (err) {
       console.error('Failed to remove device:', err);
@@ -125,8 +123,7 @@ const TeamSettings: React.FC = () => {
     if (inviteToken) {
       const inviteUrl = `${window.location.origin}/join?token=${inviteToken}`;
       navigator.clipboard.writeText(inviteUrl);
-      setSuccessMessage('Invite link copied to clipboard!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Invite link copied to clipboard!');
     }
   };
 
@@ -145,6 +142,7 @@ const TeamSettings: React.FC = () => {
   if (!isAdmin) {
     return (
       <div className="space-y-6">
+
         {/* Admin Recovery for Non-Admin Users */}
         <Card>
           <CardHeader>
@@ -191,22 +189,14 @@ const TeamSettings: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Success Message */}
-      {successMessage && (
-        <Alert className="border-green-200 bg-green-50">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">
-            {successMessage}
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Error Message */}
       {error && (
         <Alert variant="destructive">
@@ -263,38 +253,49 @@ const TeamSettings: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleRotateInvite} 
-              disabled={loading}
-              variant="outline"
-              className="flex-1"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Generate New Invite Link
-            </Button>
-            
-            {inviteToken && (
-              <Button 
-                onClick={copyInviteLink}
-                variant="outline"
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Link
-              </Button>
-            )}
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Share this invite link with people who want to join your team. Only admins can generate new invite links.
+          </p>
           
-          {inviteToken && (
-            <div className="p-3 bg-gray-50 rounded-md">
-              <p className="text-sm text-gray-600 mb-2">New invite link:</p>
-              <code className="text-xs break-all">
-                {`${window.location.origin}/join?token=${inviteToken}`}
-              </code>
+          {/* Current Invite Token - Show for everyone */}
+          {team?.invite_token && (
+            <div className="space-y-3">
+              <div 
+                className="bg-primary/10 border border-primary/20 rounded-lg px-3 sm:px-4 py-3 font-mono font-bold text-primary text-sm sm:text-lg tracking-wider cursor-pointer hover:bg-primary/20 transition-colors relative"
+                onClick={() => {
+                  const inviteUrl = `${window.location.origin}/join?token=${team.invite_token}`;
+                  navigator.clipboard.writeText(inviteUrl);
+                  toast.success('Invite link copied to clipboard!');
+                }}
+                title="Click to copy invite link"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="break-all">{team.invite_token}</span>
+                  <Copy className="h-4 w-4 text-primary/70 hover:text-primary transition-colors ml-2 sm:ml-3 flex-shrink-0" />
+                </div>
+              </div>
+              
+            </div>
+          )}
+          
+          {/* Rotate button - Only for admins */}
+          {isAdmin && (
+            <div className="pt-2 border-t">
+              <Button 
+                onClick={handleRotateInvite} 
+                disabled={loading}
+                variant="outline"
+                className="w-full"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate New Invite Link
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
+
+
 
       {/* Admin Recovery */}
       <Card>
@@ -338,8 +339,7 @@ const TeamSettings: React.FC = () => {
             <AdminRecovery 
               teamId={team?.id || ''}
               onSuccess={() => {
-                setSuccessMessage('Admin access recovered successfully!');
-                setTimeout(() => setSuccessMessage(''), 3000);
+                toast.success('Admin access recovered successfully!');
               }}
             />
           </div>
@@ -358,10 +358,10 @@ const TeamSettings: React.FC = () => {
           <div className="space-y-3">
             {devices.map((device) => (
               <div key={device.device_id} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{device.display_name}</span>
-                    <Badge variant={device.role === 'admin' ? 'default' : 'secondary'}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium truncate">{device.display_name}</span>
+                    <Badge variant={device.role === 'admin' ? 'default' : 'secondary'} className="flex-shrink-0">
                       {device.role === 'admin' ? (
                         <>
                           <Shield className="h-3 w-3 mr-1" />
@@ -372,15 +372,15 @@ const TeamSettings: React.FC = () => {
                       )}
                     </Badge>
                     {device.device_id === deviceInfo?.deviceId && (
-                      <Badge variant="outline">You</Badge>
+                      <Badge variant="outline" className="flex-shrink-0">You</Badge>
                     )}
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">
+                  <div className="text-sm text-gray-500 mt-1 truncate">
                     {device.first_name} {device.last_name}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-                    <Clock className="h-3 w-3" />
-                    Last seen: {formatLastSeen(device.last_seen)}
+                    <Clock className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">Last seen: {formatLastSeen(device.last_seen)}</span>
                   </div>
                 </div>
                 
@@ -396,7 +396,7 @@ const TeamSettings: React.FC = () => {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-2xl rounded-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Remove Team Member</DialogTitle>
                         <DialogDescription>
@@ -404,14 +404,15 @@ const TeamSettings: React.FC = () => {
                           This action cannot be undone and they will lose access to all team data.
                         </DialogDescription>
                       </DialogHeader>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowRemoveDialog(null)}>
+                      <DialogFooter className="flex-col sm:flex-row gap-2">
+                        <Button variant="outline" onClick={() => setShowRemoveDialog(null)} className="w-full sm:w-auto">
                           Cancel
                         </Button>
                         <Button 
                           variant="destructive" 
                           onClick={() => handleRemoveDevice(device)}
                           disabled={loading}
+                          className="w-full sm:w-auto"
                         >
                           {loading ? 'Removing...' : 'Remove Member'}
                         </Button>

@@ -90,7 +90,10 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
         </div>
 
         <DialogFooter>
-          <Button onClick={() => onClose?.()}>
+          <Button onClick={() => {
+            console.log('[AdminSecretDisplay] Button clicked, calling onClose');
+            onClose?.();
+          }}>
             I've Saved My Admin Secret
           </Button>
         </DialogFooter>

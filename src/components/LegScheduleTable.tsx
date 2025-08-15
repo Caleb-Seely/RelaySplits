@@ -36,9 +36,10 @@ import RunnerAssignmentModal from './RunnerAssignmentModal';
 interface LegScheduleTableProps {
   viewMode: 'cards' | 'table';
   onRunnerClick?: (runnerId: number, legId: number) => void;
+  isViewOnly?: boolean;
 }
 
-const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerClick }) => {
+const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerClick, isViewOnly = false }) => {
   const { legs, runners, currentVan, updateRunner, updateLegDistance, updateLegActualTime, assignRunnerToLegs, startTime } = useRaceStore();
   const { team } = useTeamSync();
   const [editingRunner, setEditingRunner] = useState<number | null>(null);
@@ -156,6 +157,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   };
 
   const handleDistanceEdit = (legId: number) => {
+    if (isViewOnly) return;
     const leg = legs.find(l => l.id === legId);
     if (leg) {
       setEditingDistance(legId);
@@ -164,7 +166,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   };
 
   const handleDistanceSubmit = () => {
-    if (!editingDistance) return;
+    if (isViewOnly || !editingDistance) return;
     
     const distance = parseFloat(distanceInput);
     if (!isNaN(distance) && distance > 0) {
@@ -177,11 +179,12 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   };
 
   const handleTimeEdit = (legId: number, field: string) => {
+    if (isViewOnly) return;
     const leg = legs.find(l => l.id === legId);
     const runner = leg ? runners.find(r => r.id === leg.runnerId) : null;
-    
+    const existingTime = leg ? leg[field as keyof typeof leg] as number : null;
+
     if (leg && runner) {
-      const existingTime = leg[field as keyof typeof leg] as number;
       setTimePickerConfig({
         legId,
         field,
@@ -194,6 +197,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   };
 
   const handleTimeSubmit = (timestamp: number) => {
+    if (isViewOnly) return;
     if (timePickerConfig) {
       updateLegActualTime(timePickerConfig.legId, timePickerConfig.field, timestamp);
     }
@@ -326,8 +330,11 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
               </button>
 
               <button
-                className="min-w-0 flex-1 text-left hover:bg-slate-50 p-2 -m-2 rounded transition-colors"
-                onClick={() => handleRunnerEdit(runner.id, leg.id)}
+                className={`min-w-0 flex-1 text-left p-2 -m-2 rounded transition-colors ${
+                  isViewOnly ? 'cursor-default' : 'hover:bg-slate-50'
+                }`}
+                onClick={isViewOnly ? undefined : () => handleRunnerEdit(runner.id, leg.id)}
+                disabled={isViewOnly}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex flex-col gap-1 min-w-0">
@@ -365,19 +372,20 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
             <div className="space-y-1">
               <div className="text-slate-500 font-medium">Actual</div>
               <button
-                className={`text-xs font-medium hover:underline block text-left ${
+                className={`text-xs font-medium block text-left ${
                   leg.actualStart ? 'text-green-600' : 'text-blue-600'
-                }`}
-                onClick={() => handleTimeEdit(leg.id, 'actualStart')}
+                } ${!isViewOnly ? 'hover:underline' : ''}`}
+                onClick={isViewOnly ? undefined : () => handleTimeEdit(leg.id, 'actualStart')}
+                disabled={isViewOnly}
               >
                 {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
               </button>
               <button
-                className={`block text-left text-xs font-medium hover:underline ${
+                className={`block text-left text-xs font-medium ${
                   leg.actualFinish ? 'text-green-600' : leg.actualStart ? 'text-blue-600' : 'text-slate-400'
-                }`}
-                onClick={() => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
-                disabled={!leg.actualStart}
+                } ${!isViewOnly ? 'hover:underline' : ''}`}
+                onClick={isViewOnly ? undefined : () => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
+                disabled={isViewOnly || !leg.actualStart}
               >
                 {leg.actualFinish ? formatTime(leg.actualFinish) : leg.projectedFinish ? `${formatTime(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
               </button>
@@ -444,8 +452,9 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                   </td>
                   <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <button
-                      className="min-w-0 text-left hover:underline"
-                      onClick={() => handleRunnerEdit(runner.id, leg.id)}
+                      className={`min-w-0 text-left ${!isViewOnly ? 'hover:underline' : ''}`}
+                      onClick={isViewOnly ? undefined : () => handleRunnerEdit(runner.id, leg.id)}
+                      disabled={isViewOnly}
                     >
                       <div className="font-medium text-sm text-gray-900 truncate">{runner.name}</div>
                       <div className="text-xs text-slate-600">{formatTimeShort(leg.projectedStart)}</div>
@@ -459,19 +468,20 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                   <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <div className="space-y-1">
                       <button
-                        className={`text-xs font-medium hover:underline block ${
+                        className={`text-xs font-medium block ${
                           leg.actualStart ? 'text-green-600' : 'text-blue-600'
-                        }`}
-                        onClick={() => handleTimeEdit(leg.id, 'actualStart')}
+                        } ${!isViewOnly ? 'hover:underline' : ''}`}
+                        onClick={isViewOnly ? undefined : () => handleTimeEdit(leg.id, 'actualStart')}
+                        disabled={isViewOnly}
                       >
                         {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
                       </button>
                       <button
-                        className={`block text-left text-xs font-medium hover:underline ${
+                        className={`block text-left text-xs font-medium ${
                           leg.actualFinish ? 'text-green-600' : leg.actualStart ? 'text-blue-600' : 'text-slate-400'
-                        }`}
-                        onClick={() => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
-                        disabled={!leg.actualStart}
+                        } ${!isViewOnly ? 'hover:underline' : ''}`}
+                        onClick={isViewOnly ? undefined : () => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
+                        disabled={isViewOnly || !leg.actualStart}
                       >
                         {leg.actualFinish ? formatTime(leg.actualFinish) : leg.projectedFinish ? `${formatTime(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
                       </button>

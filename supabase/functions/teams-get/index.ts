@@ -18,6 +18,7 @@ interface GetTeamResponse {
     name: string;
     start_time: string;
     join_code: string;
+    invite_token?: string;
   };
 }
 
@@ -68,7 +69,7 @@ serve(async (req) => {
     // Get team details
     const { data: team, error: teamError } = await supabase
       .from('teams')
-      .select('id, name, start_time, join_code')
+      .select('id, name, start_time, join_code, invite_token')
       .eq('id', teamId)
       .single()
 
@@ -92,7 +93,8 @@ serve(async (req) => {
         id: team.id,
         name: team.name,
         start_time: team.start_time,
-        join_code: team.join_code
+        join_code: team.join_code,
+        invite_token: team.invite_token
       }
     }
 
