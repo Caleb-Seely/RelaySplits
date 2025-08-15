@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Cloud, CloudOff, Loader2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useOfflineData } from '@/hooks/useOfflineData';
 import { useRaceStore } from '@/store/raceStore';
@@ -12,7 +11,6 @@ type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error' | 'offline-changes'
 const SyncStatusIndicator = () => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const { user } = useAuth();
   const { team } = useTeamSync();
   const { isOnline, offlineChangesCount } = useOfflineData();
   const { lastSyncedAt } = useRaceStore();

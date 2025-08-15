@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useTeam } from '@/contexts/TeamContext';
 import { useTeamManagement } from '@/hooks/useTeamManagement';
-import { useRaceStore } from '@/store/raceStore';
+import { useTeamSync } from '@/hooks/useTeamSync';
+import AdminRecovery from './AdminRecovery';
 import { 
   Settings, 
   Users, 
@@ -20,7 +21,8 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  Share2
+  Share2,
+  Info
 } from 'lucide-react';
 
 interface Device {
@@ -35,7 +37,7 @@ interface Device {
 
 const TeamSettings: React.FC = () => {
   const { deviceInfo } = useTeam();
-  const { team } = useRaceStore();
+  const { team } = useTeamSync();
   const { 
     loading, 
     error, 
@@ -51,6 +53,7 @@ const TeamSettings: React.FC = () => {
   const [inviteToken, setInviteToken] = useState<string>('');
   const [showRemoveDialog, setShowRemoveDialog] = useState<Device | null>(null);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [showStoredAdminSecret, setShowStoredAdminSecret] = useState(false);
 
   // Check if current device is admin
   const isAdmin = deviceInfo?.role === 'admin';
@@ -141,22 +144,54 @@ const TeamSettings: React.FC = () => {
 
   if (!isAdmin) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Team Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Only team administrators can access team settings.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {/* Admin Recovery for Non-Admin Users */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Admin Recovery
+            </CardTitle>
+            <CardDescription>
+              If you've lost access to your admin device, you can recover admin access using your admin secret.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminRecovery 
+              teamId={team?.id || ''}
+              onSuccess={() => {
+                // Refresh the page to update the UI
+                window.location.reload();
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Team Information (Read-only for non-admins) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5" />
+              Team Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Team Name</Label>
+              <div className="p-3 bg-muted rounded-md">
+                {team?.name || 'Loading...'}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Race Start Time</Label>
+              <div className="p-3 bg-muted rounded-md">
+                {team?.start_time ? new Date(team.start_time).toLocaleString() : 'Loading...'}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -258,6 +293,56 @@ const TeamSettings: React.FC = () => {
               </code>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Admin Recovery */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Admin Recovery
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              If you lose access to your admin device, you can recover access using your admin secret.
+              Keep this secret safe - it's your backup way to regain admin access.
+            </p>
+            
+            {/* Show stored admin secret if available */}
+            {(() => {
+              const storedSecret = localStorage.getItem('relay_admin_secret');
+              return storedSecret ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Your Admin Secret</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowStoredAdminSecret(!showStoredAdminSecret)}
+                    >
+                      {showStoredAdminSecret ? 'Hide' : 'Show'}
+                    </Button>
+                  </div>
+                  {showStoredAdminSecret && (
+                    <div className="p-3 bg-gray-100 rounded-md font-mono text-sm">
+                      {storedSecret}
+                    </div>
+                  )}
+                </div>
+              ) : null;
+            })()}
+            
+            <AdminRecovery 
+              teamId={team?.id || ''}
+              onSuccess={() => {
+                setSuccessMessage('Admin access recovered successfully!');
+                setTimeout(() => setSuccessMessage(''), 3000);
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
 

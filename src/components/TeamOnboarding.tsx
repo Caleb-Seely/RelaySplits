@@ -9,6 +9,7 @@ import { useTeamSync } from '@/hooks/useTeamSync';
 import { useTeam } from '@/contexts/TeamContext';
 import { toast } from 'sonner';
 import { useRaceStore } from '@/store/raceStore';
+import AdminSecretDisplay from './AdminSecretDisplay';
 
 const TeamOnboarding = () => {
   const { createTeam, joinTeam, loading } = useTeamSync();
@@ -21,6 +22,9 @@ const TeamOnboarding = () => {
   const [lastName, setLastName] = useState('');
   const [teamName, setTeamName] = useState('');
   const [inviteToken, setInviteToken] = useState('');
+  const [showAdminSecret, setShowAdminSecret] = useState(false);
+  const [adminSecret, setAdminSecret] = useState('');
+  const [createdTeamName, setCreatedTeamName] = useState('');
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,10 +41,10 @@ const TeamOnboarding = () => {
     );
 
     if (result.success) {
-      toast.success('Team created successfully!');
-      // Mark this as a new team so Index will show Setup Wizard with isNewTeam
-      localStorage.setItem('relay_is_new_team', '1');
-      navigate('/');
+      // Show admin secret dialog
+      setAdminSecret(result.adminSecret);
+      setCreatedTeamName(teamName.trim());
+      setShowAdminSecret(true);
     } else {
       toast.error(result.error || 'Failed to create team');
     }
@@ -80,7 +84,7 @@ const TeamOnboarding = () => {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">TeamSplits</CardTitle>
           <CardDescription>
-            Track your rela real-time with your team
+            Track your relay real-time with your team
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -168,6 +172,20 @@ const TeamOnboarding = () => {
           </Tabs>
         </CardContent>
       </Card>
+      
+      {/* Admin Secret Display Dialog */}
+      {showAdminSecret && (
+        <AdminSecretDisplay
+          adminSecret={adminSecret}
+          teamName={createdTeamName}
+          onClose={() => {
+            setShowAdminSecret(false);
+            // Mark this as a new team so Index will show Setup Wizard with isNewTeam
+            localStorage.setItem('relay_is_new_team', '1');
+            navigate('/');
+          }}
+        />
+      )}
     </div>
   );
 };

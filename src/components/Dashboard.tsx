@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useRaceStore } from '@/store/raceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useSyncManager } from '@/hooks/useSyncManager';
+import { useTeam } from '@/contexts/TeamContext';
 
 import {
   getCurrentRunner,
@@ -77,6 +78,7 @@ const Dashboard = () => {
   }, [teamId, setupRealtimeSubscriptions]);
 
   const { team, updateTeamStartTime } = useTeamSync();
+  const { deviceInfo } = useTeam();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
@@ -678,6 +680,7 @@ const Dashboard = () => {
           <div className="container mx-auto px-3 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                {/* Always show settings button - content varies based on role */}
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -686,6 +689,7 @@ const Dashboard = () => {
                   <Settings className="h-4 w-4 mr-2" />
                   Settings
                 </Button>
+                
                 <Button
                   variant="outline"
                   size="sm"

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { useRaceStore } from '@/store/raceStore';
+import { useTeam } from '@/contexts/TeamContext';
 import { toast } from 'sonner';
 
 interface Team {
@@ -23,7 +24,7 @@ interface DeviceInfo {
 
 export const useTeamSync = () => {
   const [team, setTeam] = useState<Team | null>(null);
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const { deviceInfo, setDeviceInfo } = useTeam();
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -37,9 +38,13 @@ export const useTeamSync = () => {
       const storedTeamName = localStorage.getItem('relay_team_name');
       const storedJoinCode = localStorage.getItem('relay_team_join_code');
       
+
+      
       if (storedTeamId && storedDeviceInfo) {
-        const deviceInfo = JSON.parse(storedDeviceInfo) as DeviceInfo;
-        setDeviceInfo(deviceInfo);
+        const deviceInfoData = JSON.parse(storedDeviceInfo) as DeviceInfo;
+        if (!deviceInfo) {
+          setDeviceInfo(deviceInfoData);
+        }
         
         // Set team info in race store
         const race = useRaceStore.getState();
@@ -109,7 +114,7 @@ export const useTeamSync = () => {
     setLoading(true);
     
     try {
-      // Create team via Edge Function (expects: name, optional admin_display_name, device_profile)
+      // Create team via Edge Function (expects: name, admin_display_name, device_profile)
       const result = await invokeEdge<{
         teamId: string;
         invite_token: string;
@@ -135,11 +140,13 @@ export const useTeamSync = () => {
         teamId,
         invite_token: inviteToken,
         join_code: joinCode,
+        admin_secret: adminSecret,
         deviceId,
       } = (result as any).data as {
         teamId: string;
         invite_token: string;
         join_code: string;
+        admin_secret: string;
         deviceId: string;
       };
 
@@ -159,6 +166,9 @@ export const useTeamSync = () => {
       // Ensure the global deviceId used by Edge Functions matches the server-registered one
       localStorage.setItem('relay_device_id', deviceId);
       
+      // Store admin secret securely
+      localStorage.setItem('relay_admin_secret', adminSecret);
+      
       // Use race store's current start time for new team
       const race = useRaceStore.getState();
       const teamStartTime = new Date(race.startTime).toISOString();
@@ -175,7 +185,7 @@ export const useTeamSync = () => {
       // Don't set start time here - it will be set in SetupWizard
 
       setLoading(false);
-      return { success: true, teamId, inviteToken };
+      return { success: true, teamId, inviteToken, adminSecret };
     } catch (error) {
       setLoading(false);
       return { error: 'Failed to create team' };

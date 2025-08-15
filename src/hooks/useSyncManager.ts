@@ -752,90 +752,7 @@ export const useSyncManager = () => {
     };
   }, [merge]);
 
-  const initialSave = useCallback(async (teamName: string) => {
-    const storeState = useRaceStore.getState();
-    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      console.error('User not authenticated for initial save.');
-      return { error: new Error('User not authenticated.') };
-    }
-
-    // 1. Create the team
-    const { data: teamData, error: teamError } = await supabase
-      .from('teams')
-      .insert({
-        name: teamName,
-        owner_id: user.id,
-        start_time: new Date(storeState.startTime).toISOString(),
-      })
-      .select()
-      .single();
-
-    if (teamError) {
-      console.error('Error creating team:', teamError);
-      return { error: teamError };
-    }
-
-    const teamId = teamData.id;
-
-    // 2. Prepare and insert runners
-    const runnersToInsert = storeState.runners.map(r => ({
-      team_id: teamId,
-      name: r.name,
-      pace: r.pace,
-      van: r.van.toString(),
-    }));
-
-    const { data: insertedRunners, error: runnersError } = await supabase
-      .from('runners')
-      .insert(runnersToInsert)
-      .select();
-    
-    if (runnersError) {
-      console.error('Error saving runners:', runnersError);
-      // TODO: Add rollback logic for the created team
-      return { error: runnersError };
-    }
-
-    // Create mapping from local runner IDs to remote runner IDs
-    const localToRemoteRunnerMap = new Map<number, string>();
-    insertedRunners.forEach((remoteRunner, index) => {
-      const localRunnerId = index + 1; // Local IDs are 1-12
-      localToRemoteRunnerMap.set(localRunnerId, remoteRunner.id);
-    });
-
-    // 3. Prepare and insert legs with proper runner_id linkage
-    console.log('[saveInitialRows] Store state legs:', storeState.legs.map(l => ({ id: l.id, runnerId: l.runnerId })));
-    console.log('[saveInitialRows] Local to remote runner map:', Array.from(localToRemoteRunnerMap.entries()));
-    
-    const legsToInsert = storeState.legs.map(l => {
-      const remoteRunnerId = l.runnerId ? localToRemoteRunnerMap.get(l.runnerId) : null;
-      console.log(`[saveInitialRows] Leg ${l.id}: local runnerId=${l.runnerId}, remote runnerId=${remoteRunnerId}`);
-      return {
-        team_id: teamId,
-        number: l.id,
-        distance: l.distance,
-        runner_id: remoteRunnerId,
-      };
-    });
-
-    const { error: legsError } = await supabase.from('legs').insert(legsToInsert);
-    if (legsError) {
-      console.error('Error saving legs:', legsError);
-      // TODO: Add rollback logic
-      return { error: legsError };
-    }
-
-    // 4. Update local store with the new teamId
-    storeState.setTeamId(teamId);
-    
-    // 5. Fetch initial data to get all remoteIds and created_at timestamps
-    await fetchInitialData(teamId);
-
-    return { teamId };
-
-  }, [fetchInitialData]);
 
   // Idempotent: if team already has runners, do nothing. Uses Edge Functions.
   const saveInitialRows = useCallback(async (teamId: string) => {
@@ -897,7 +814,6 @@ export const useSyncManager = () => {
     fetchInitialData, 
     safeUpdate, 
     setupRealtimeSubscriptions, 
-    initialSave, 
     saveInitialRows, 
     merge, 
     manualRetry: () => {

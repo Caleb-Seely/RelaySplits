@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRaceStore } from '@/store/raceStore';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
 
 // Offline data management hook
 export const useOfflineData = () => {
   const raceStore = useRaceStore();
-  const { user } = useAuth();
   const { team } = useTeamSync();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [offlineChangesCount, setOfflineChangesCount] = useState(0);

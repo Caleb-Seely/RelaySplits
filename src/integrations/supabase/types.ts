@@ -121,44 +121,12 @@ export type Database = {
           },
         ]
       }
-      team_members: {
-        Row: {
-          created_at: string | null
-          id: string
-          role: string
-          team_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          role?: string
-          team_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          role?: string
-          team_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "team_members_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+
       teams: {
         Row: {
           created_at: string | null
           id: string
           name: string
-          owner_id: string
           start_time: string
           updated_at: string | null
         }
@@ -166,7 +134,6 @@ export type Database = {
           created_at?: string | null
           id?: string
           name: string
-          owner_id: string
           start_time: string
           updated_at?: string | null
         }
@@ -174,11 +141,92 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
-          owner_id?: string
           start_time?: string
           updated_at?: string | null
         }
         Relationships: []
+      }
+      team_devices: {
+        Row: {
+          id: string
+          team_id: string
+          device_id: string
+          role: string
+          first_name: string | null
+          last_name: string | null
+          display_name: string | null
+          last_seen: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          team_id: string
+          device_id: string
+          role: string
+          first_name?: string | null
+          last_name?: string | null
+          display_name?: string | null
+          last_seen?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          team_id?: string
+          device_id?: string
+          role?: string
+          first_name?: string | null
+          last_name?: string | null
+          display_name?: string | null
+          last_seen?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_devices_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      team_audit: {
+        Row: {
+          id: string
+          team_id: string
+          device_id: string | null
+          action: string
+          payload: any
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          team_id: string
+          device_id?: string | null
+          action: string
+          payload?: any
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          team_id?: string
+          device_id?: string | null
+          action?: string
+          payload?: any
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_audit_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {

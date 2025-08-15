@@ -77,7 +77,7 @@ serve(async (req) => {
       throw new Error('Failed to generate team secrets')
     }
 
-    // Create team without owner_id (team-managed access model)
+    // Create team (team-managed access model)
     const { data: team, error: teamError } = await supabase
       .from('teams')
       .insert({
