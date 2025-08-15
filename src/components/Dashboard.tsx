@@ -98,10 +98,12 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Use the actual start of leg 1 if available; otherwise fall back to scheduled race start
+  // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
   const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
     ? legs[0].actualStart
-    : startTime;
+    : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
+
+
 
   const currentRunner = getCurrentRunner(legs, currentTime);
   const nextRunner = getNextRunner(legs, currentTime);
@@ -116,7 +118,7 @@ const Dashboard = () => {
 
   const getCountdownToNext = () => {
     if (!nextRunner) return null;
-    const countdownMs = getCountdownTime(nextRunner, currentTime, legs);
+    const countdownMs = getCountdownTime(nextRunner, currentTime, legs, actualRaceStartTime);
     return formatCountdown(countdownMs);
   };
 
@@ -473,11 +475,30 @@ const Dashboard = () => {
 
                       <div className="text-center">
                         <div className="text-3xl font-bold text-foreground mb-2">
-                          {formatTime(nextRunner.projectedStart)}
+                          {(() => {
+                            const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
+                            const isFirstLeg = nextRunner && nextRunner.id === 1;
+                            
+                            // Before race starts, show official start time for leg 1
+                            if (isFirstLeg && isBeforeRaceStart) {
+                              return formatTime(actualRaceStartTime);
+                            }
+                            
+                            // For other legs or after race starts, use effective start time
+                            return formatTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime));
+                          })()}
                         </div>
                         <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
                           <Target className="h-4 w-4" />
-                          Projected Start
+                          {(() => {
+                            const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
+                            const isFirstLeg = nextRunner && nextRunner.id === 1;
+                            
+                            if (isFirstLeg && isBeforeRaceStart) {
+                              return 'Official Start';
+                            }
+                            return 'Projected Start';
+                          })()}
                         </div>
                       </div>
                     </div>

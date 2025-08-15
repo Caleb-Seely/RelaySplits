@@ -10,7 +10,6 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  isWithinFreeHours: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,7 +26,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isWithinFreeHours, setIsWithinFreeHours] = useState(false);
 
   useEffect(() => {
     // Set up auth state listener
@@ -37,13 +35,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        
-        // Check free tier status when user signs in
-        if (session?.user) {
-          setTimeout(() => {
-            checkFreeHours(session.user.id);
-          }, 0);
-        }
       }
     );
 
@@ -52,42 +43,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-      
-      if (session?.user) {
-        setTimeout(() => {
-          checkFreeHours(session.user.id);
-        }, 0);
-      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const checkFreeHours = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('signup_time, subscription_status')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error checking free hours:', error);
-        return;
-      }
-
-      if (data) {
-        const signupTime = new Date(data.signup_time);
-        const eightHoursLater = new Date(signupTime.getTime() + 8 * 60 * 60 * 1000);
-        const now = new Date();
-        
-        const withinFreeHours = now < eightHoursLater || data.subscription_status === 'active';
-        setIsWithinFreeHours(withinFreeHours);
-      }
-    } catch (error) {
-      console.error('Error checking free tier status:', error);
-    }
-  };
 
   const signUp = async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
@@ -114,7 +73,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setIsWithinFreeHours(false);
   };
 
   const value = {
@@ -123,8 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading,
     signUp,
     signIn,
-    signOut,
-    isWithinFreeHours
+    signOut
   };
 
   return (

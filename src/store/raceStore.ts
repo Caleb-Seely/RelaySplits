@@ -51,7 +51,7 @@ const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export const useRaceStore = create<RaceStore>((set, get) => ({
-  startTime: Date.now(),
+  startTime: new Date('2025-08-22T13:00').getTime(), // Default to 08/22/25 1:00 PM
   runners: defaultRunners,
   legs: [],
   currentVan: 1,
@@ -78,7 +78,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         } as typeof updatedLegs[number];
       }
 
-      const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);
+      const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, time);
       return { startTime: time, legs: finalLegs };
     }
     return { startTime: time };
@@ -90,7 +90,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     );
     
     if (updates.pace && state.legs.length > 0) {
-      const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners);
+      const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners, state.startTime);
       return { runners: updatedRunners, legs: updatedLegs };
     }
     
@@ -110,7 +110,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     );
     
     const updatedIndex = updatedLegs.findIndex(leg => leg.id === id);
-    const finalLegs = recalculateProjections(updatedLegs, updatedIndex, state.runners);
+    const finalLegs = recalculateProjections(updatedLegs, updatedIndex, state.runners, state.startTime);
     
     return { legs: finalLegs };
   }),
@@ -129,7 +129,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       }
     }
 
-    const finalLegs = recalculateProjections(updatedLegs, legIndex, state.runners);
+    const finalLegs = recalculateProjections(updatedLegs, legIndex, state.runners, state.startTime);
 
     return { legs: finalLegs };
   }),
@@ -238,7 +238,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     const updatedLegs = state.legs.map(leg =>
       legIds.includes(leg.id) ? { ...leg, runnerId } : leg
     );
-    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);
+    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
     return { legs: finalLegs };
   }),
 
@@ -249,7 +249,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         ? { ...leg, paceOverride: paceSeconds }
         : leg
     );
-    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);
+    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
     return { legs: finalLegs };
   }),
 
@@ -261,13 +261,13 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     } else {
       updatedRunners.push(runner);
     }
-    const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners);
+    const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners, state.startTime);
     return { runners: updatedRunners, legs: updatedLegs };
   }),
 
   deleteRunner: (runnerId) => set((state) => {
     const updatedRunners = state.runners.filter((r) => r.id !== runnerId);
-    const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners);
+    const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners, state.startTime);
     return { runners: updatedRunners, legs: updatedLegs };
   }),
 
@@ -279,13 +279,13 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     } else {
       updatedLegs.push(leg);
     }
-    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);
+    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
     return { legs: finalLegs };
   }),
 
   deleteLeg: (legId) => set((state) => {
     const updatedLegs = state.legs.filter((l) => l.id !== legId);
-    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners);
+    const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
     return { legs: finalLegs };
   })
 }));

@@ -8,11 +8,16 @@ import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { useTeamSync } from '@/hooks/useTeamSync';
-import { Clock, Users, Play } from 'lucide-react';
-import { formatTime, formatDate } from '@/utils/raceUtils';
+import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
+import { Clock, Users, Play, Waves } from 'lucide-react';
+import { formatTime, formatDate, formatRaceTime } from '@/utils/raceUtils';
 import SpreadsheetImport from './SpreadsheetImport';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import dayjs, { Dayjs } from 'dayjs';
 
 interface SetupWizardProps {
   isNewTeam?: boolean;
@@ -23,12 +28,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     startTime,
     runners,
     didInitFromTeam,
-    // isSetupComplete, // no longer used in single-step wizard
     setStartTime,
     updateRunner,
     setSetupStep,
     setDidInitFromTeam,
-    // prevSetupStep, // removed navigation
     completeSetup,
     initializeLegs
   } = useRaceStore();
@@ -41,6 +44,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   // Local ref no longer used for init; we persist via store
   // Local UI state for pace text inputs to avoid auto-formatting on each keystroke
   const [paceInputs, setPaceInputs] = useState<Record<number, string>>({});
+  const [selectedDateTime, setSelectedDateTime] = useState<Dayjs | null>(null);
 
   // Validation schema: require names and reasonable pace (3:00–15:00 min/mi)
   const runnerSchema = z.object({
@@ -49,16 +53,31 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     pace: z.number().int().min(180, 'Pace too fast (<3:00)').max(3540, 'Pace too slow (>59:00)')
   });
 
+  // Sync selectedDateTime with startTime when component loads
+  useEffect(() => {
+    if (startTime && !selectedDateTime) {
+      setSelectedDateTime(dayjs(startTime));
+    }
+  }, [startTime, selectedDateTime]);
+
   // Initialize start time from team data when component loads (guarded via store to survive StrictMode remount)
   useEffect(() => {
-    if (team && team.start_time && !didInitFromTeam) {
+    if (team && team.start_time && !didInitFromTeam && !isNewTeam) {
       const initialStartTime = new Date(team.start_time);
       setStartTime(initialStartTime.getTime());
+      setSelectedDateTime(dayjs(initialStartTime));
       // Go directly to runner configuration (single-step wizard)
       setSetupStep(2);
       setDidInitFromTeam(true);
     }
   }, [team, didInitFromTeam, setStartTime, setSetupStep, setDidInitFromTeam, isNewTeam]);
+
+  // Sync selectedDateTime with startTime (only if not already set)
+  useEffect(() => {
+    if (startTime && !selectedDateTime && !isNewTeam) {
+      setSelectedDateTime(dayjs(startTime));
+    }
+  }, [startTime, selectedDateTime, isNewTeam]);
 
   // Use setupStep directly; initial step is set to 2 from team start time once.
 
@@ -104,6 +123,13 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     });
   }, [runners]);
 
+  const handleDateTimeChange = (newValue: Dayjs | null) => {
+    setSelectedDateTime(newValue);
+    if (newValue) {
+      setStartTime(newValue.valueOf());
+    }
+  };
+
   const handleFinishSetup = async () => {
     // Validate runner inputs
     const invalids = runners
@@ -112,8 +138,13 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
     if (invalids.length > 0) {
       const first = invalids[0];
-      const message = (first.res as any).error?.issues?.[0]?.message || 'Please fix runner inputs';
+      const message = (first.res as { error?: { issues?: Array<{ message: string }> } }).error?.issues?.[0]?.message || 'Please fix runner inputs';
       toast.error(`${message} (Runner ${first.r.id})`);
+      return;
+    }
+
+    if (!startTime) {
+      toast.error('Please set a race start time');
       return;
     }
 
@@ -122,6 +153,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     console.log('[SetupWizard] Starting finish flow. isNewTeam:', isNewTeam, 'team:', team?.id);
 
     try {
+      // Save start time to team if this is a new team
+      if (isNewTeam && team?.id) {
+        console.log('[SetupWizard] Updating team start time');
+        const deviceId = getDeviceId();
+        await invokeEdge('teams-update', {
+          teamId: team.id,
+          deviceId,
+          start_time: new Date(startTime).toISOString()
+        });
+      }
+
       // Ensure legs exist before any save
       console.log('[SetupWizard] Ensuring legs are initialized');
       initializeLegs();
@@ -141,9 +183,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
       completeSetup();
       console.log('[SetupWizard] Finish flow complete');
       toast.success('Your team is ready!', { id: toastId });
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[SetupWizard] Unexpected error during finish flow:', e);
-      toast.error(e?.message || 'Failed to complete setup', { id: toastId });
+      toast.error((e as Error)?.message || 'Failed to complete setup', { id: toastId });
     } finally {
       setIsSaving(false);
       console.log('[SetupWizard] Dismissing toast id', toastId);
@@ -156,20 +198,48 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   const renderStep1 = () => (
     <div className="space-y-6">
       <div className="text-center">
-        {/* Team name input removed; TeamSetup handles team creation */}
-        <p className="text-gray-600">Set names and estimated paces for all 12 runners</p>
-        <p className="text-gray-500 text-sm mt-1">You can edit this later from the Dashboard after setup.</p>
-        <div className="mt-4">
-          <div className="flex items-center justify-center gap-2 text-blue-700">
-            <Clock className="h-4 w-4" />
-            <span className="font-medium">Race starts at {formatTime(startTime)}</span>
-          </div>
-          <div className="text-center text-gray-500 text-sm mt-1">
-            {formatDate(startTime)}
-          </div>
-        </div>
+        <p className="text-gray-600">Set your race start time and configure your runners</p>
+        <p className="text-gray-500 text-sm mt-1">You can edit this later from the Dashboard.</p>
       </div>
 
+      {/* Race Start Time Section */}
+      <div className="max-w-md mx-auto">
+        <Card>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>When does your wave start?</Label>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <DateTimePicker
+                    value={selectedDateTime}
+                    onChange={handleDateTimeChange}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        size: 'small',
+                        placeholder: 'Select race start date and time'
+                      }
+                    }}
+                  />
+                </LocalizationProvider>
+              </div>
+              {startTime && (
+                <div className="flex items-center justify-center gap-2 text-blue-700 text-sm">
+                  <Waves className="h-4 w-4" />
+                  <span className="font-medium">Fun starts at {formatRaceTime(startTime)}</span>
+                </div>
+              )}
+              {startTime && (
+                <div className="text-center text-gray-500 text-xs">
+                  {formatDate(startTime)}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Runner Configuration Section */}
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-4">
           <Button
@@ -307,18 +377,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     </div>
   );
 
-  // Review step removed; single-step wizard only
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 p-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Configure Your Runners</h1>
-          {/* Stepper removed for single-step flow */}
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {team?.name ? ` ${team.name}` : 'Welcome'}
+          </h1>
         </div>
 
-        {/* Step Content */}
+        {/* Content */}
         {renderStep1()}
 
         {/* Navigation */}
@@ -326,9 +395,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
           <Button
             onClick={handleFinishSetup}
             className="px-6 bg-green-600 hover:bg-green-700"
+            disabled={isSaving}
           >
             <Play className="h-4 w-4 mr-2" />
-            Start Race Tracking
+            {isSaving ? 'Saving...' : 'Start Race Tracking'}
           </Button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
@@ -65,11 +65,6 @@ const Index = () => {
   }, [teamId, fetchInitialData]);
 
   // Realtime subscriptions are established in Dashboard.tsx
-
-  // Check if we're within free hours (8 hours from start)
-  const startTime = new Date('2024-08-12T00:00:00Z').getTime();
-  const currentTime = Date.now();
-  const isWithinFreeHours = (currentTime - startTime) < (8 * 60 * 60 * 1000);
 
   // Global auto-start: ensure leg 1 starts at or after official start time regardless of view mounted
   useEffect(() => {
@@ -139,33 +134,14 @@ const Index = () => {
     );
   }
 
-  // Show team join/create prompt only when there is no team in state AND nothing stored
-  if (!(team || hasStoredTeam)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="text-center max-w-md">
-          <h1 className="text-4xl font-bold mb-4">TeamSplits</h1>
-          <p className="text-muted-foreground mb-6">
-            Track your relay race in real-time with your team.
-          </p>
-          <div className="space-y-3">
-            <Link to="/auth">
-              <Button className="w-full">
-                Create or Join Team
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+  // Redirect to auth if no team is found
+  if (!isInTeam && !hasStoredTeam) {
+    return <Navigate to="/auth" replace />;
   }
-
-  // Show free tier warning
-  const showFreeWarning = !isWithinFreeHours;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Offline status and free tier warnings */}
+      {/* Offline status warnings */}
       {!isOnline && (
         <Alert className="m-2 sm:m-4 border-orange-200 bg-orange-50">
           <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -179,18 +155,6 @@ const Index = () => {
           </AlertDescription>
         </Alert>
       )}
-
-      {/* {showFreeWarning && (
-        <Alert className="m-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Your free 8-hour trial has expired. Editing is now restricted. 
-            <Button variant="link" className="p-0 h-auto font-semibold ml-1">
-              Upgrade to continue editing
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )} */}
 
       {/* Main content */}
       <main className="container mx-auto px-2 sm:px-4 py-2">

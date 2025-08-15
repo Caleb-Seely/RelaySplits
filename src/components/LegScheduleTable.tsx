@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useRaceStore } from '@/store/raceStore';
+import { useTeamSync } from '@/hooks/useTeamSync';
 import { 
   getLegStatus, 
   getRunTime, 
@@ -38,7 +39,8 @@ interface LegScheduleTableProps {
 }
 
 const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerClick }) => {
-  const { legs, runners, currentVan, updateRunner, updateLegDistance, updateLegActualTime, assignRunnerToLegs } = useRaceStore();
+  const { legs, runners, currentVan, updateRunner, updateLegDistance, updateLegActualTime, assignRunnerToLegs, startTime } = useRaceStore();
+  const { team } = useTeamSync();
   const [editingRunner, setEditingRunner] = useState<number | null>(null);
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
   const [runnerName, setRunnerName] = useState('');
@@ -51,14 +53,21 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
 
   const currentTime = new Date();
   
+  // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
+  const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
+    ? legs[0].actualStart
+    : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
+  
   // Filter legs by current van
   const vanRunners = runners.filter(r => r.van === currentVan);
   const vanRunnerIds = new Set(vanRunners.map(r => r.id));
   const filteredLegs = legs.filter(leg => vanRunnerIds.has(leg.runnerId));
 
+
+
   // Function to format time without seconds, using AM/PM
   const formatTimeShort = (timestamp: number) => {
-    if (!timestamp) return '';
+    if (!timestamp || timestamp <= 0) return '';
     const date = new Date(timestamp);
     const options: Intl.DateTimeFormatOptions = { 
       hour: "2-digit" as const, 
@@ -70,7 +79,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
 
   // Function to format time with seconds, using AM/PM
   const formatTime = (timestamp: number) => {
-    if (!timestamp) return '';
+    if (!timestamp || timestamp <= 0) return '';
     const date = new Date(timestamp);
     const options: Intl.DateTimeFormatOptions = { 
       hour: "2-digit" as const, 
@@ -226,7 +235,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
    
    let label = config.label;
    if (status === 'ready') {
-     const countdownMs = getCountdownTime(leg, currentTime);
+     const countdownMs = getCountdownTime(leg, currentTime, legs, actualRaceStartTime);
      label = countdownMs > 0 ? formatCountdown(countdownMs) : 'Ready';
    }
  
@@ -260,7 +269,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
     }
     
     if (status === 'ready') {
-      const countdownMs = getCountdownTime(leg, currentTime);
+      const countdownMs = getCountdownTime(leg, currentTime, legs, actualRaceStartTime);
       return countdownMs > 0 ? (
         <div className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-md inline-block mt-2">
           {formatCountdown(countdownMs)}
@@ -356,7 +365,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                 }`}
                 onClick={() => handleTimeEdit(leg.id, 'actualStart')}
               >
-                {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
+                {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
               </button>
               <button
                 className={`block text-left text-xs font-medium hover:underline ${
@@ -445,7 +454,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                         }`}
                         onClick={() => handleTimeEdit(leg.id, 'actualStart')}
                       >
-                        {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
+                        {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
                       </button>
                       <button
                         className={`block text-left text-xs font-medium hover:underline ${

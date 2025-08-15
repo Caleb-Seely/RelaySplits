@@ -2,7 +2,7 @@
 import React from 'react';
 import { useEditingPermissions } from '@/hooks/useEditingPermissions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
@@ -19,7 +19,7 @@ const SecurityWrapper: React.FC<SecurityWrapperProps> = ({
   fallback,
   className 
 }) => {
-  const { canEdit, isReadOnly, requiresAuth, requiresSubscription } = useEditingPermissions();
+  const { canEdit, isReadOnly, requiresAuth } = useEditingPermissions();
 
   // If editing is required but user can't edit, show appropriate message
   if (requiresEdit && isReadOnly) {
@@ -35,23 +35,6 @@ const SecurityWrapper: React.FC<SecurityWrapperProps> = ({
                   Sign In
                 </Button>
               </Link>
-            </AlertDescription>
-          </Alert>
-          {fallback}
-        </div>
-      );
-    }
-
-    if (requiresSubscription) {
-      return (
-        <div className={className}>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Your free 8-hour trial has expired. Editing is now restricted.
-              <Button variant="link" className="p-0 h-auto font-semibold ml-1">
-                Upgrade to continue editing
-              </Button>
             </AlertDescription>
           </Alert>
           {fallback}

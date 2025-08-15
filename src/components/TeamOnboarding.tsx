@@ -21,19 +21,17 @@ const TeamOnboarding = () => {
   const [lastName, setLastName] = useState('');
   const [teamName, setTeamName] = useState('');
   const [inviteToken, setInviteToken] = useState('');
-  const [startTime, setStartTime] = useState('');
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!firstName.trim() || !lastName.trim() || !teamName.trim() || !startTime) {
+    if (!firstName.trim() || !lastName.trim() || !teamName.trim()) {
       toast.error('Please fill in all fields');
       return;
     }
 
     const result = await createTeam(
       teamName.trim(),
-      new Date(startTime),
       firstName.trim(),
       lastName.trim()
     );
@@ -82,7 +80,7 @@ const TeamOnboarding = () => {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">TeamSplits</CardTitle>
           <CardDescription>
-            Track your relay race in real-time with your team
+            Track your rela real-time with your team
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -159,16 +157,6 @@ const TeamOnboarding = () => {
                     value={teamName}
                     onChange={(e) => setTeamName(e.target.value)}
                     placeholder="Enter team name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="startTime">Race Start Time</Label>
-                  <Input
-                    id="startTime"
-                    type="datetime-local"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
                     required
                   />
                 </div>

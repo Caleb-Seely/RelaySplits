@@ -74,6 +74,15 @@ export function formatTime(timestamp: number): string {
 }
 
 /**
+ * Formats a timestamp into a time string with AM/PM (no seconds).
+ * @param timestamp - Unix timestamp in milliseconds
+ * @returns Formatted time string (e.g., "2:30 PM")
+ */
+export function formatRaceTime(timestamp: number): string {
+  return format(new Date(timestamp), 'h:mm a');
+}
+
+/**
  * Formats a timestamp into a date and time string.
  * @param timestamp - Unix timestamp in milliseconds
  * @returns Formatted date/time string (e.g., "Jan 15, 2:30:45 PM")
@@ -149,7 +158,7 @@ export function calculateActualPace(leg: Leg): number | null {
   return runTimeMinutes / leg.distance; // Minutes per mile
 }
 
-export function recalculateProjections(legs: Leg[], updatedIndex: number, runners: Runner[]): Leg[] {
+export function recalculateProjections(legs: Leg[], updatedIndex: number, runners: Runner[], raceStartTime?: number): Leg[] {
   const updatedLegs = [...legs];
   
   // Recalculate from the updated leg onwards
@@ -161,8 +170,8 @@ export function recalculateProjections(legs: Leg[], updatedIndex: number, runner
     
     // For the first leg, it should start exactly at race start time
     if (i === 0) {
-      // First leg: always use actual start if available, otherwise projected start
-      const startTime = currentLeg.actualStart || currentLeg.projectedStart;
+      // First leg: use actual start if available, otherwise use the race start time
+      const startTime = currentLeg.actualStart || raceStartTime || currentLeg.projectedStart;
       updatedLegs[i] = {
         ...currentLeg,
         projectedStart: startTime,
@@ -289,7 +298,7 @@ export function getRunTime(leg: Leg): number | null {
   return leg.actualFinish - leg.actualStart;
 }
 
-export function getEffectiveStartTime(leg: Leg, allLegs: Leg[]): number {
+export function getEffectiveStartTime(leg: Leg, allLegs: Leg[], officialRaceStartTime?: number): number {
   // If the leg has an actual start time, use that
   if (leg.actualStart) {
     return leg.actualStart;
@@ -298,7 +307,10 @@ export function getEffectiveStartTime(leg: Leg, allLegs: Leg[]): number {
   // Find the previous leg
   const legIndex = allLegs.findIndex(l => l.id === leg.id);
   if (legIndex <= 0) {
-    // First leg or not found - use projected start
+    // First leg or not found - use official race start time if provided, otherwise projected start
+    if (officialRaceStartTime) {
+      return officialRaceStartTime;
+    }
     return leg.projectedStart;
   }
   
@@ -313,10 +325,10 @@ export function getEffectiveStartTime(leg: Leg, allLegs: Leg[]): number {
   return prevLeg.projectedFinish;
 }
 
-export function getCountdownTime(leg: Leg, now: Date, allLegs?: Leg[]): number {
+export function getCountdownTime(leg: Leg, now: Date, allLegs?: Leg[], officialRaceStartTime?: number): number {
   // Use effective start time for countdown if we have all legs data
   const startTime = allLegs 
-    ? getEffectiveStartTime(leg, allLegs)
+    ? getEffectiveStartTime(leg, allLegs, officialRaceStartTime)
     : leg.actualStart || leg.projectedStart;
   return Math.max(0, startTime - now.getTime());
 }
@@ -338,13 +350,15 @@ export function initializeRace(startTime: number, runners: Runner[]): Leg[] {
     
     const projectedFinish = calculateProjectedFinish(currentStartTime, runner.pace, distance);
     
-    legs.push({
+    const leg = {
       id: legNumber,
       runnerId: runner.id,
       distance,
       projectedStart: currentStartTime,
       projectedFinish
-    });
+    };
+    
+    legs.push(leg);
     
     currentStartTime = projectedFinish;
   });

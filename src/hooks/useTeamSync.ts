@@ -34,6 +34,7 @@ export const useTeamSync = () => {
     try {
       const storedTeamId = localStorage.getItem('relay_team_id');
       const storedDeviceInfo = localStorage.getItem('relay_device_info');
+      const storedTeamName = localStorage.getItem('relay_team_name');
       
       if (storedTeamId && storedDeviceInfo) {
         const deviceInfo = JSON.parse(storedDeviceInfo) as DeviceInfo;
@@ -43,8 +44,28 @@ export const useTeamSync = () => {
         const race = useRaceStore.getState();
         race.setTeamId(storedTeamId);
         
-        // Try to fetch current team details via Edge Function
-        fetchTeamDetails(storedTeamId);
+        // Set team with stored name and start time if available
+        const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+        
+        if (storedTeamName) {
+          // If we have a stored team start time, use it; otherwise use race store's current start time
+          const race = useRaceStore.getState();
+          const teamStartTime = storedTeamStartTime || new Date(race.startTime).toISOString();
+          
+
+          
+          setTeam({ 
+            id: storedTeamId, 
+            name: storedTeamName, 
+            start_time: teamStartTime
+          });
+          
+          // Sync race store start time with team start time
+          race.setStartTime(new Date(teamStartTime).getTime());
+        } else {
+          // Try to fetch current team details via Edge Function
+          fetchTeamDetails(storedTeamId);
+        }
       }
     } catch (error) {
       console.error('Error loading stored team info:', error);
@@ -58,15 +79,29 @@ export const useTeamSync = () => {
       const result = await invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId });
       
       if (!(result as any).error) {
-        // Team access is valid, create minimal team object
-        setTeam({ id: teamId, name: 'Team', start_time: new Date().toISOString() });
+        // Team access is valid, get stored team name and start time or use defaults
+        const storedTeamName = localStorage.getItem('relay_team_name');
+        const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+        
+        // If we have a stored team start time, use it; otherwise use race store's current start time
+        const race = useRaceStore.getState();
+        const teamStartTime = storedTeamStartTime || new Date(race.startTime).toISOString();
+        
+        setTeam({ 
+          id: teamId, 
+          name: storedTeamName || 'Team', 
+          start_time: teamStartTime
+        });
+        
+        // Sync race store start time with team start time
+        race.setStartTime(new Date(teamStartTime).getTime());
       }
     } catch (error) {
       console.error('Error fetching team details:', error);
     }
   };
 
-  const createTeam = async (name: string, startTime: Date, firstName: string, lastName: string) => {
+  const createTeam = async (name: string, firstName: string, lastName: string) => {
     setLoading(true);
     
     try {
@@ -116,19 +151,23 @@ export const useTeamSync = () => {
 
       localStorage.setItem('relay_team_id', teamId);
       localStorage.setItem('relay_device_info', JSON.stringify(newDeviceInfo));
+      localStorage.setItem('relay_team_name', name);
       // Ensure the global deviceId used by Edge Functions matches the server-registered one
       localStorage.setItem('relay_device_id', deviceId);
       
-      setTeam({ id: teamId, name, start_time: startTime.toISOString(), invite_token: inviteToken, join_code: joinCode });
+      // Use race store's current start time for new team
+      const race = useRaceStore.getState();
+      const teamStartTime = new Date(race.startTime).toISOString();
+      setTeam({ id: teamId, name, start_time: teamStartTime, invite_token: inviteToken, join_code: joinCode });
+      localStorage.setItem('relay_team_start_time', teamStartTime);
       setDeviceInfo(newDeviceInfo);
 
       // Reset race store for new team
-      const race = useRaceStore.getState();
       race.setTeamId(teamId);
       race.setRaceData({ isSetupComplete: false });
       race.setSetupStep(1);
       race.setDidInitFromTeam(false);
-      race.setStartTime(startTime.getTime());
+      // Don't set start time here - it will be set in SetupWizard
 
       setLoading(false);
       return { success: true, teamId, inviteToken };
@@ -225,11 +264,14 @@ export const useTeamSync = () => {
       // Ensure the global deviceId used by Edge Functions matches the server-registered one
       localStorage.setItem('relay_device_id', newDeviceInfo.deviceId);
       
-      setTeam({ id: teamId, name: teamName, start_time: new Date().toISOString() });
+      // Use race store's current start time for joined team
+      const race = useRaceStore.getState();
+      const teamStartTime = new Date(race.startTime).toISOString();
+      setTeam({ id: teamId, name: teamName, start_time: teamStartTime });
+      localStorage.setItem('relay_team_start_time', teamStartTime);
       setDeviceInfo(newDeviceInfo);
 
       // Reset race store for joined team
-      const race = useRaceStore.getState();
       race.setTeamId(teamId);
       race.setRaceData({ isSetupComplete: false });
       race.setSetupStep(1);
@@ -248,6 +290,7 @@ export const useTeamSync = () => {
     localStorage.removeItem('relay_team_id');
     localStorage.removeItem('relay_device_info');
     localStorage.removeItem('relay_device_id');
+    localStorage.removeItem('relay_team_start_time');
     
     // Clear state
     setTeam(null);
@@ -266,8 +309,10 @@ export const useTeamSync = () => {
       // For now, just update locally since we don't have a teams-update Edge Function
       // TODO: Add teams-update Edge Function for start time updates
       
-      // Update local team state
-      setTeam({ ...team, start_time: newStartTime.toISOString() });
+      // Update local team state and localStorage
+      const startTimeISO = newStartTime.toISOString();
+      setTeam({ ...team, start_time: startTimeISO });
+      localStorage.setItem('relay_team_start_time', startTimeISO);
 
       // Propagate to race store
       const race = useRaceStore.getState();
