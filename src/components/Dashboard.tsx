@@ -11,6 +11,7 @@ import {
   getCurrentRunner,
   getNextRunner,
   formatTime,
+  formatRaceTime,
   getLegStatus,
   getCountdownTime,
   formatCountdown,
@@ -66,7 +67,7 @@ const Dashboard = () => {
     teamId,
     assignRunnerToLegs
   } = useRaceStore();
-  const { setupRealtimeSubscriptions } = useSyncManager();
+  const { setupRealtimeSubscriptions, manualRetry } = useSyncManager();
 
   // Ensure realtime subscriptions are active when Dashboard is mounted
   useEffect(() => {
@@ -175,7 +176,7 @@ const Dashboard = () => {
     const codeToCopy = team?.join_code || team?.id || teamId;
     if (codeToCopy) {
       navigator.clipboard.writeText(codeToCopy);
-      toast.success(team?.join_code ? 'Join code copied to clipboard' : 'Team ID copied to clipboard');
+      toast.success(team?.join_code ? `Join code "${team.join_code}" copied to clipboard!` : 'Team ID copied to clipboard');
     } else {
       toast.error('No team code available');
     }
@@ -349,14 +350,7 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <div className="text-center">
-                        <Badge 
-                          onClick={() => {
-                            const directionsUrl = getLegDirectionsUrl(currentRunner.id);
-                            window.open(directionsUrl, '_blank');
-                          }}
-                          className="bg-green-500 animate-pulse text-white text-sm px-3 py-1 font-semibold mb-2 cursor-pointer hover:bg-green-600 transition-colors "
-                        >
-                          <MapPin className="h-4 w-4 mr-0.5" />
+                        <Badge className="bg-green-500 animate-pulse text-white text-sm px-3 py-1 font-semibold mb-2">
                           Leg {currentRunner.id}
                         </Badge>
                         <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
@@ -496,11 +490,11 @@ const Dashboard = () => {
                             
                             // Before race starts, show official start time for leg 1
                             if (isFirstLeg && isBeforeRaceStart) {
-                              return formatTime(actualRaceStartTime);
+                              return formatRaceTime(actualRaceStartTime);
                             }
                             
                             // For other legs or after race starts, use effective start time
-                            return formatTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime));
+                            return formatRaceTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime));
                           })()}
                         </div>
                         <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
@@ -680,8 +674,8 @@ const Dashboard = () => {
           </Card>
         </div>
         {/* Footer */}
-        <footer className="left-0 right-0  backdrop-blur z-50">
-          <div className="container mx-auto px-3 py-2">
+        <footer className="left-0 right-0 backdrop-blur z-50 border-t border-border bg-background/80">
+          <div className="container mx-auto px-3 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button 
@@ -692,20 +686,55 @@ const Dashboard = () => {
                   <Settings className="h-4 w-4 mr-2" />
                   Settings
                 </Button>
-                {/* Sign Out removed as requested */}
-              </div>
-              <div className="flex-1" />
-              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={copyJoinCode}
-                  className="h-9 px-4"
-                  aria-label="Copy team join code"
+                  onClick={manualRetry}
+                  title="Manual retry realtime connections"
                 >
-                  <Share2 className="h-4 w-4 mr-1" />
-                  {team?.join_code ? `Join: ${team.join_code}` : 'Share w/ Teammates'}
+                  <Zap className="h-4 w-4 mr-2" />
+                  Retry Sync
                 </Button>
+              </div>
+              
+              {/* Team Join Code - Centered and Prominent */}
+              {team?.join_code && (
+                <div className="flex items-center gap-3">
+                  <div className="text-center">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">
+                      Team Join Code
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 font-mono font-bold text-primary text-lg tracking-wider">
+                        {team.join_code}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copyJoinCode}
+                        className="h-10 px-3"
+                        aria-label="Copy team join code"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                {!team?.join_code && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={copyJoinCode}
+                    className="h-9 px-4"
+                    aria-label="Copy team join code"
+                  >
+                    <Share2 className="h-4 w-4 mr-1" />
+                    Share w/ Teammates
+                  </Button>
+                )}
               </div>
             </div>
           </div>

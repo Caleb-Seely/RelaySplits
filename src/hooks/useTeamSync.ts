@@ -35,6 +35,7 @@ export const useTeamSync = () => {
       const storedTeamId = localStorage.getItem('relay_team_id');
       const storedDeviceInfo = localStorage.getItem('relay_device_info');
       const storedTeamName = localStorage.getItem('relay_team_name');
+      const storedJoinCode = localStorage.getItem('relay_team_join_code');
       
       if (storedTeamId && storedDeviceInfo) {
         const deviceInfo = JSON.parse(storedDeviceInfo) as DeviceInfo;
@@ -57,7 +58,8 @@ export const useTeamSync = () => {
           setTeam({ 
             id: storedTeamId, 
             name: storedTeamName, 
-            start_time: teamStartTime
+            start_time: teamStartTime,
+            join_code: storedJoinCode || undefined
           });
           
           // Sync race store start time with team start time
@@ -75,26 +77,28 @@ export const useTeamSync = () => {
   const fetchTeamDetails = async (teamId: string) => {
     try {
       const deviceId = getDeviceId();
-      // Use runners-list as a proxy to verify team access
-      const result = await invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId });
+      // Use teams-get to fetch team details including join_code
+      const result = await invokeEdge<{ team: { id: string; name: string; start_time: string; join_code: string } }>('teams-get', { teamId, deviceId });
       
       if (!(result as any).error) {
-        // Team access is valid, get stored team name and start time or use defaults
-        const storedTeamName = localStorage.getItem('relay_team_name');
-        const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+        const teamData = (result as any).data.team;
         
-        // If we have a stored team start time, use it; otherwise use race store's current start time
-        const race = useRaceStore.getState();
-        const teamStartTime = storedTeamStartTime || new Date(race.startTime).toISOString();
+        // Store team details in localStorage
+        localStorage.setItem('relay_team_name', teamData.name);
+        localStorage.setItem('relay_team_start_time', teamData.start_time);
+        localStorage.setItem('relay_team_join_code', teamData.join_code);
         
+        // Set team in state
         setTeam({ 
-          id: teamId, 
-          name: storedTeamName || 'Team', 
-          start_time: teamStartTime
+          id: teamData.id, 
+          name: teamData.name, 
+          start_time: teamData.start_time,
+          join_code: teamData.join_code
         });
         
         // Sync race store start time with team start time
-        race.setStartTime(new Date(teamStartTime).getTime());
+        const race = useRaceStore.getState();
+        race.setStartTime(new Date(teamData.start_time).getTime());
       }
     } catch (error) {
       console.error('Error fetching team details:', error);
@@ -160,6 +164,7 @@ export const useTeamSync = () => {
       const teamStartTime = new Date(race.startTime).toISOString();
       setTeam({ id: teamId, name, start_time: teamStartTime, invite_token: inviteToken, join_code: joinCode });
       localStorage.setItem('relay_team_start_time', teamStartTime);
+      localStorage.setItem('relay_team_join_code', joinCode);
       setDeviceInfo(newDeviceInfo);
 
       // Reset race store for new team
@@ -232,7 +237,7 @@ export const useTeamSync = () => {
       } as const;
 
       // Call once with the correctly parsed field
-      const result = await invokeEdge<{ teamId: string; role: string; teamName: string; deviceId: string }>('teams-join', {
+      const result = await invokeEdge<{ teamId: string; role: string; teamName: string; deviceId: string; join_code: string }>('teams-join', {
         ...basePayload,
         ...parsed,
       });
@@ -242,11 +247,12 @@ export const useTeamSync = () => {
         return { error: (result as any).error.message || 'Failed to join team' };
       }
 
-      const { teamId, role, teamName, deviceId: returnedDeviceId } = (result as any).data as {
+      const { teamId, role, teamName, deviceId: returnedDeviceId, join_code } = (result as any).data as {
         teamId: string;
         role: string;
         teamName: string;
         deviceId: string;
+        join_code: string;
       };
 
       // Store team and device info locally
@@ -263,11 +269,13 @@ export const useTeamSync = () => {
       localStorage.setItem('relay_device_info', JSON.stringify(newDeviceInfo));
       // Ensure the global deviceId used by Edge Functions matches the server-registered one
       localStorage.setItem('relay_device_id', newDeviceInfo.deviceId);
+      localStorage.setItem('relay_team_name', teamName);
+      localStorage.setItem('relay_team_join_code', join_code);
       
       // Use race store's current start time for joined team
       const race = useRaceStore.getState();
       const teamStartTime = new Date(race.startTime).toISOString();
-      setTeam({ id: teamId, name: teamName, start_time: teamStartTime });
+      setTeam({ id: teamId, name: teamName, start_time: teamStartTime, join_code });
       localStorage.setItem('relay_team_start_time', teamStartTime);
       setDeviceInfo(newDeviceInfo);
 
@@ -291,6 +299,8 @@ export const useTeamSync = () => {
     localStorage.removeItem('relay_device_info');
     localStorage.removeItem('relay_device_id');
     localStorage.removeItem('relay_team_start_time');
+    localStorage.removeItem('relay_team_name');
+    localStorage.removeItem('relay_team_join_code');
     
     // Clear state
     setTeam(null);

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useRaceStore } from '@/store/raceStore';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
@@ -15,6 +15,14 @@ interface Syncable {
 export const useSyncManager = () => {
   const store = useRaceStore();
 
+  // Reset mounted state on mount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Debounce refetches triggered by broadcast to avoid loops/storms
   // and ignore broadcasts originating from this device.
   let lastBroadcastRefetchAt = 0;
@@ -28,6 +36,15 @@ export const useSyncManager = () => {
   // Broadcast deduplication to prevent processing duplicate messages
   const recentBroadcasts = useRef<Map<string, number>>(new Map());
   const BROADCAST_DEDUP_WINDOW_MS = 2000; // 2 second window for deduplication
+  
+  // Manual retry function ref
+  const manualRetryRef = useRef<(() => void) | null>(null);
+  
+  // Track if component is mounted to prevent retries after unmount
+  const isMountedRef = useRef(true);
+  
+  // Track if manual retry is in progress to prevent conflicts
+  const isManualRetryInProgress = useRef(false);
 
   // Lightweight local queue to avoid circular hook dependency
   const enqueueChange = (change: { table: 'runners' | 'legs'; remoteId: string; payload: any }) => {
@@ -281,20 +298,41 @@ export const useSyncManager = () => {
 
   const setupRealtimeSubscriptions = useCallback((teamId: string) => {
     console.log('[realtime] Setting up subscriptions for team', teamId);
-    // Simple exponential backoff helper
+    
+    // Enhanced backoff helper with max retries and connection state tracking
     const makeBackoff = () => {
       let attempt = 0;
+      const MAX_ATTEMPTS = 5; // Limit retries to prevent infinite loops
+      let isRetrying = false;
+      
       return {
         nextDelay() {
+          if (attempt >= MAX_ATTEMPTS) {
+            console.warn('[realtime] Max retry attempts reached, stopping retries');
+            return -1; // Signal to stop retrying
+          }
+          
           // Exponential backoff with full jitter
           // base grows 1s,2s,4s,... up to 30s; jitter randomizes delay in [minDelay, base]
           const base = Math.min(30000, 1000 * Math.pow(2, attempt));
-          attempt = Math.min(attempt + 1, 10);
-          const minDelay = 500; // ensure we don't hammer on immediate retries
+          attempt = Math.min(attempt + 1, MAX_ATTEMPTS);
+          const minDelay = 1000; // Increased minimum delay
           const delay = Math.max(minDelay, Math.floor(Math.random() * base));
           return delay;
         },
-        reset() { attempt = 0; }
+        reset() { 
+          attempt = 0; 
+          isRetrying = false;
+        },
+        isMaxAttemptsReached() {
+          return attempt >= MAX_ATTEMPTS;
+        },
+        setRetrying(retrying: boolean) {
+          isRetrying = retrying;
+        },
+        getIsRetrying() {
+          return isRetrying;
+        }
       };
     };
 
@@ -302,6 +340,9 @@ export const useSyncManager = () => {
     const legsBackoff = makeBackoff();
     let reconcileTimer: number | undefined;
     let onlineHandler: ((this: Window, ev: Event) => any) | undefined;
+    
+    // Track active channels to prevent duplicate subscriptions
+    const activeChannels = new Map<string, any>();
 
     const subscribeWithRetry = (
       channelName: string,
@@ -312,6 +353,44 @@ export const useSyncManager = () => {
       const backoff = table === 'runners' ? runnersBackoff : legsBackoff;
 
       const doSubscribe = () => {
+        // Prevent multiple subscriptions to the same channel
+        if (activeChannels.has(channelName)) {
+          console.log(`[realtime] Channel ${channelName} already active, skipping subscription`);
+          return activeChannels.get(channelName);
+        }
+        
+        // Check if component is still mounted
+        if (!isMountedRef.current) {
+          console.log(`[realtime] Component unmounted, skipping ${table} channel subscription`);
+          return null;
+        }
+        
+        // Check if we've exceeded max retry attempts
+        if (backoff.isMaxAttemptsReached()) {
+          console.error(`[realtime] Max retry attempts reached for ${table} channel, giving up`);
+          return null;
+        }
+        
+        // Check if we're already retrying
+        if (backoff.getIsRetrying()) {
+          console.log(`[realtime] Already retrying ${table} channel, skipping`);
+          return null;
+        }
+
+        // Check network connectivity before attempting subscription
+        if (!navigator.onLine) {
+          console.warn(`[realtime] Network is offline, skipping ${table} channel subscription`);
+          return null;
+        }
+
+        // Check if Supabase client is available
+        if (!supabase) {
+          console.error(`[realtime] Supabase client not available, skipping ${table} channel subscription`);
+          return null;
+        }
+
+        console.log(`[realtime] Subscribing to ${table} channel: ${channelName}`);
+        
         const ch = supabase
           .channel(channelName)
           .on(
@@ -321,22 +400,59 @@ export const useSyncManager = () => {
           )
           .subscribe((status) => {
             onStatusLog(status);
+            
             if (status === 'SUBSCRIBED') {
+              console.log(`[realtime] ${table} channel successfully subscribed`);
               backoff.reset();
+              activeChannels.set(channelName, ch);
             }
+            
             if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-              const delay = backoff.nextDelay();
-              console.warn(`[realtime] ${table} channel ${status}. Retrying in ${delay}ms`);
-              setTimeout(() => {
-                try {
-                  supabase.removeChannel(ch);
-                } catch {}
-                doSubscribe();
-              }, delay);
+              console.warn(`[realtime] ${table} channel ${status}`);
+              
+              // Remove from active channels
+              activeChannels.delete(channelName);
+              
+              // Only retry if we haven't exceeded max attempts and we're not in the middle of a manual retry
+              if (!backoff.isMaxAttemptsReached() && !backoff.getIsRetrying() && !isManualRetryInProgress.current) {
+                const delay = backoff.nextDelay();
+                if (delay > 0) {
+                  backoff.setRetrying(true);
+                  console.warn(`[realtime] ${table} channel ${status}. Retrying in ${delay}ms (attempt ${backoff.isMaxAttemptsReached() ? 'MAX' : 'remaining'})`);
+                  
+                  setTimeout(() => {
+                    // Check if we're still mounted and not in manual retry mode
+                    if (!isMountedRef.current || backoff.getIsRetrying() || isManualRetryInProgress.current) {
+                      console.log(`[realtime] Skipping retry for ${table} - component unmounted or manual retry in progress`);
+                      return;
+                    }
+                    
+                    try {
+                      // Clean up the old channel
+                      supabase.removeChannel(ch);
+                    } catch (e) {
+                      console.warn(`[realtime] Error removing ${table} channel:`, e);
+                    }
+                    
+                    backoff.setRetrying(false);
+                    doSubscribe();
+                  }, delay);
+                } else {
+                  console.error(`[realtime] ${table} channel max retry attempts reached, stopping retries`);
+                }
+              } else {
+                if (backoff.getIsRetrying() || isManualRetryInProgress.current) {
+                  console.log(`[realtime] ${table} channel ${status} - skipping retry due to manual retry in progress`);
+                } else {
+                  console.error(`[realtime] ${table} channel max retry attempts reached, giving up`);
+                }
+              }
             }
           });
+          
         return ch;
       };
+      
       return doSubscribe();
     };
     const handleSubscriptionEvent = (payload: any, table: 'runners' | 'legs') => {
@@ -399,28 +515,25 @@ export const useSyncManager = () => {
       }
     };
 
-    const runnersChannel = subscribeWithRetry(
-      `realtime-runners-${teamId}`,
-      'runners',
-      (payload) => {
-        console.log('[realtime] runners event', {
-          eventType: payload.eventType,
-          new: (payload as any).new?.id,
-          old: (payload as any).old?.id,
-        });
-        handleSubscriptionEvent(payload, 'runners');
-      },
-      (status) => console.log('[realtime] runners channel status:', status)
-    );
+    const createSubscription = (table: 'runners' | 'legs') => {
+      const channelName = table === 'runners' ? `realtime-runners-${teamId}` : `legs-${teamId}`;
+      const eventHandler = (payload: any) => {
+        if (table === 'runners') {
+          console.log('[realtime] runners event', {
+            eventType: payload.eventType,
+            new: (payload as any).new?.id,
+            old: (payload as any).old?.id,
+          });
+        }
+        handleSubscriptionEvent(payload, table);
+      };
+      const statusHandler = (status: string) => console.log(`[realtime] ${table} channel status:`, status);
+      
+      return subscribeWithRetry(channelName, table, eventHandler, statusHandler);
+    };
 
-    const legsChannel = subscribeWithRetry(
-      `legs-${teamId}`,
-      'legs',
-      (payload) => {
-        handleSubscriptionEvent(payload, 'legs');
-      },
-      (status) => console.log('[realtime] legs channel status:', status)
-    );
+    const runnersChannel = createSubscription('runners');
+    const legsChannel = createSubscription('legs');
 
     // Subscribe to broadcast channel for realtime updates from Edge Functions
     // Coalesced, selective refetch on broadcast
@@ -493,28 +606,135 @@ export const useSyncManager = () => {
         console.log('[broadcast] Channel status:', status);
       });
 
-    // Periodic reconciliation (defense-in-depth) e.g., every 60s
+    // Periodic reconciliation and health check (defense-in-depth) e.g., every 60s
     reconcileTimer = window.setInterval(() => {
       const state = useRaceStore.getState();
       if (state.teamId) {
         console.log('[realtime] reconciling state via fetchInitialData');
         fetchInitialData(state.teamId);
+        
+        // Health check: if we have no active channels but should, try to resubscribe
+        if (activeChannels.size === 0 && navigator.onLine) {
+          console.log('[realtime] No active channels detected, attempting resubscription');
+          runnersBackoff.reset();
+          legsBackoff.reset();
+          
+          // This will trigger resubscription on next interval
+          setTimeout(() => {
+            createSubscription('runners');
+            createSubscription('legs');
+          }, 1000);
+        }
       }
     }, 60000) as unknown as number;
 
     // Resubscribe on network re-connection
     onlineHandler = () => {
-      console.log('[realtime] online event: triggering reconciliation');
+      console.log('[realtime] online event: triggering reconciliation and channel resubscription');
       const state = useRaceStore.getState();
-      if (state.teamId) fetchInitialData(state.teamId);
+      if (state.teamId) {
+        // Reset backoff states when network comes back online
+        runnersBackoff.reset();
+        legsBackoff.reset();
+        
+        // Clear any existing channels and resubscribe
+        for (const [channelName, channel] of activeChannels.entries()) {
+          try {
+            supabase.removeChannel(channel);
+          } catch (e) {
+            console.warn(`[realtime] Error removing channel ${channelName} during online event:`, e);
+          }
+        }
+        activeChannels.clear();
+        
+        // Trigger initial data fetch and resubscribe
+        fetchInitialData(state.teamId);
+      }
     };
     window.addEventListener('online', onlineHandler);
 
+    // Manual retry function for debugging
+    const manualRetry = () => {
+      if (isManualRetryInProgress.current) {
+        console.log('[realtime] Manual retry already in progress, skipping');
+        return;
+      }
+      
+      console.log('[realtime] Manual retry triggered');
+      isManualRetryInProgress.current = true;
+      
+      // Reset backoff states
+      runnersBackoff.reset();
+      legsBackoff.reset();
+      
+      // Clear existing channels and wait for cleanup
+      const cleanupPromises = [];
+      for (const [channelName, channel] of activeChannels.entries()) {
+        try {
+          console.log(`[realtime] Removing channel ${channelName} during manual retry`);
+          supabase.removeChannel(channel);
+          cleanupPromises.push(Promise.resolve());
+        } catch (e) {
+          console.warn(`[realtime] Error removing channel ${channelName} during manual retry:`, e);
+          cleanupPromises.push(Promise.resolve());
+        }
+      }
+      activeChannels.clear();
+      
+      // Wait for cleanup to complete, then resubscribe with a delay
+      Promise.all(cleanupPromises).then(() => {
+        console.log('[realtime] Cleanup complete, resubscribing in 500ms');
+        setTimeout(() => {
+          console.log('[realtime] Starting resubscription');
+          // Create subscriptions sequentially to avoid conflicts
+          const runnersChannel = createSubscription('runners');
+          if (runnersChannel) {
+            setTimeout(() => {
+              console.log('[realtime] Creating legs subscription');
+              createSubscription('legs');
+              // Reset manual retry flag after both subscriptions are attempted
+              setTimeout(() => {
+                isManualRetryInProgress.current = false;
+                console.log('[realtime] Manual retry completed');
+              }, 1000);
+            }, 200);
+          } else {
+            console.log('[realtime] Runners subscription failed, skipping legs');
+            isManualRetryInProgress.current = false;
+          }
+        }, 500);
+      });
+    };
+
+    // Store the manual retry function in the ref so it can be accessed outside this callback
+    manualRetryRef.current = manualRetry;
+
     return () => {
       console.log('[realtime] Cleaning up subscriptions for team', teamId);
-      supabase.removeChannel(runnersChannel);
-      supabase.removeChannel(legsChannel);
-      supabase.removeChannel(broadcastChannel);
+      
+      // Mark component as unmounted to prevent new retries
+      isMountedRef.current = false;
+      isManualRetryInProgress.current = false;
+      
+      // Clean up all active channels
+      for (const [channelName, channel] of activeChannels.entries()) {
+        try {
+          console.log(`[realtime] Removing channel: ${channelName}`);
+          supabase.removeChannel(channel);
+        } catch (e) {
+          console.warn(`[realtime] Error removing channel ${channelName}:`, e);
+        }
+      }
+      activeChannels.clear();
+      
+      // Clean up broadcast channel
+      try {
+        supabase.removeChannel(broadcastChannel);
+      } catch (e) {
+        console.warn('[realtime] Error removing broadcast channel:', e);
+      }
+      
+      // Clean up timers
       if (broadcastRefetchTimerRef.current) {
         clearTimeout(broadcastRefetchTimerRef.current);
         broadcastRefetchTimerRef.current = undefined;
@@ -525,6 +745,10 @@ export const useSyncManager = () => {
       if (onlineHandler) {
         window.removeEventListener('online', onlineHandler);
       }
+      
+      // Reset backoff states
+      runnersBackoff.reset();
+      legsBackoff.reset();
     };
   }, [merge]);
 
@@ -669,5 +893,16 @@ export const useSyncManager = () => {
     return { ok: true };
   }, [fetchInitialData]);
 
-  return { fetchInitialData, safeUpdate, setupRealtimeSubscriptions, initialSave, saveInitialRows, merge };
+  return { 
+    fetchInitialData, 
+    safeUpdate, 
+    setupRealtimeSubscriptions, 
+    initialSave, 
+    saveInitialRows, 
+    merge, 
+    manualRetry: () => {
+      console.log('[useSyncManager] Manual retry called');
+      manualRetryRef.current?.();
+    }
+  };
 };

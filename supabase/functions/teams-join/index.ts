@@ -22,6 +22,7 @@ interface JoinTeamResponse {
   role: string;
   deviceId: string;
   teamName: string;
+  join_code: string;
 }
 
 serve(async (req) => {
@@ -127,6 +128,7 @@ serve(async (req) => {
         role: existingDevice.role,
         deviceId: deviceId,
         teamName: team.name,
+        join_code: team.join_code,
       }
 
       return new Response(
@@ -171,6 +173,7 @@ serve(async (req) => {
       role: 'member',
       deviceId: deviceId,
       teamName: team.name,
+      join_code: team.join_code,
     }
 
     return new Response(
