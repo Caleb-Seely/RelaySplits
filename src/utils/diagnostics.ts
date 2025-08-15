@@ -1,21 +1,18 @@
 // Diagnostic utilities to help identify dashboard data population issues
 
+import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
+
 export interface DiagnosticInfo {
-  user: {
-    id: string | null;
-    email: string | null;
-    authenticated: boolean;
+  device: {
+    deviceId: string;
+    teamId: string | null;
+    role: string | null;
+    name: string | null;
   };
   team: {
     id: string | null;
     name: string | null;
     loaded: boolean;
-  };
-  teamMember: {
-    userId: string | null;
-    teamId: string | null;
-    role: string | null;
-    exists: boolean;
   };
   raceStore: {
     teamId: string | null;
@@ -38,35 +35,30 @@ export interface DiagnosticInfo {
 }
 
 export const collectDiagnosticInfo = async (
-  user: any,
   team: any,
-  teamMember: any,
-  raceStore: any,
-  supabase: any
+  deviceInfo: any,
+  raceStore: any
 ): Promise<DiagnosticInfo> => {
+  const deviceId = getDeviceId();
+  
   const diagnostics: DiagnosticInfo = {
-    user: {
-      id: user?.id || null,
-      email: user?.email || null,
-      authenticated: !!user
+    device: {
+      deviceId,
+      teamId: deviceInfo?.teamId || null,
+      role: deviceInfo?.role || null,
+      name: deviceInfo?.displayName || null
     },
     team: {
       id: team?.id || null,
       name: team?.name || null,
       loaded: !!team
     },
-    teamMember: {
-      userId: teamMember?.user_id || null,
-      teamId: teamMember?.team_id || null,
-      role: teamMember?.role || null,
-      exists: !!teamMember
-    },
     raceStore: {
       teamId: raceStore.teamId || null,
-      isSetupComplete: raceStore.isSetupComplete,
+      isSetupComplete: raceStore.isSetupComplete || false,
       runnersCount: raceStore.runners?.length || 0,
       legsCount: raceStore.legs?.length || 0,
-      hasNonDefaultData: hasNonDefaultRunnerData(raceStore.runners),
+      hasNonDefaultData: hasNonDefaultRunnerData(raceStore.runners || []),
       hasOfflineData: raceStore.hasOfflineData ? raceStore.hasOfflineData() : false
     },
     database: {
@@ -81,19 +73,22 @@ export const collectDiagnosticInfo = async (
     }
   };
 
-  // Check database data if team exists
+  // Check database data via Edge Functions if team exists
   if (team?.id) {
     try {
       const [runnersResult, legsResult] = await Promise.all([
-        supabase.from('runners').select('*', { count: 'exact' }).eq('team_id', team.id),
-        supabase.from('legs').select('*', { count: 'exact' }).eq('team_id', team.id)
+        invokeEdge<{ runners: any[] }>('runners-list', { teamId: team.id, deviceId }),
+        invokeEdge<{ legs: any[] }>('legs-list', { teamId: team.id, deviceId })
       ]);
 
-      diagnostics.database.runnersInDB = runnersResult.count || 0;
-      diagnostics.database.legsInDB = legsResult.count || 0;
-      diagnostics.database.dataExists = (runnersResult.count || 0) > 0;
+      const runnersCount = !(runnersResult as any).error ? ((runnersResult as any).data?.runners?.length || 0) : 0;
+      const legsCount = !(legsResult as any).error ? ((legsResult as any).data?.legs?.length || 0) : 0;
+
+      diagnostics.database.runnersInDB = runnersCount;
+      diagnostics.database.legsInDB = legsCount;
+      diagnostics.database.dataExists = runnersCount > 0;
     } catch (error) {
-      console.error('Error checking database:', error);
+      console.error('Error checking database via Edge Functions:', error);
     }
 
     // Check for offline changes
@@ -121,23 +116,17 @@ const hasNonDefaultRunnerData = (runners: any[]): boolean => {
 export const logDiagnostics = (diagnostics: DiagnosticInfo) => {
   console.group('🔍 DASHBOARD BUG DIAGNOSTICS');
   
-  console.log('👤 User State:', {
-    authenticated: diagnostics.user.authenticated,
-    id: diagnostics.user.id,
-    email: diagnostics.user.email
+  console.log('📱 Device State:', {
+    deviceId: diagnostics.device.deviceId,
+    teamId: diagnostics.device.teamId,
+    role: diagnostics.device.role,
+    name: diagnostics.device.name
   });
 
   console.log('👥 Team State:', {
     loaded: diagnostics.team.loaded,
     id: diagnostics.team.id,
     name: diagnostics.team.name
-  });
-
-  console.log('🤝 Team Membership:', {
-    exists: diagnostics.teamMember.exists,
-    userId: diagnostics.teamMember.userId,
-    teamId: diagnostics.teamMember.teamId,
-    role: diagnostics.teamMember.role
   });
 
   console.log('🏪 Race Store State:', {
@@ -164,16 +153,16 @@ export const logDiagnostics = (diagnostics: DiagnosticInfo) => {
   // Analysis
   console.group('🔎 Issue Analysis');
   
-  if (!diagnostics.user.authenticated) {
-    console.error('❌ ISSUE: User not authenticated');
+  if (!diagnostics.device.teamId) {
+    console.error('❌ ISSUE: Device not associated with a team');
   }
   
   if (!diagnostics.team.loaded) {
     console.error('❌ ISSUE: Team not loaded');
   }
   
-  if (!diagnostics.teamMember.exists) {
-    console.error('❌ ISSUE: User not a team member');
+  if (!diagnostics.device.role) {
+    console.error('❌ ISSUE: Device has no role assigned');
   }
   
   if (diagnostics.team.id !== diagnostics.raceStore.teamId) {
@@ -216,13 +205,11 @@ export const logDiagnostics = (diagnostics: DiagnosticInfo) => {
 };
 
 export const runDiagnostics = async (
-  user: any,
   team: any,
-  teamMember: any,
-  raceStore: any,
-  supabase: any
+  deviceInfo: any,
+  raceStore: any
 ) => {
-  const diagnostics = await collectDiagnosticInfo(user, team, teamMember, raceStore, supabase);
+  const diagnostics = await collectDiagnosticInfo(team, deviceInfo, raceStore);
   logDiagnostics(diagnostics);
   return diagnostics;
 };

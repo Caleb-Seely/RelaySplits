@@ -1,5 +1,9 @@
 -- Grant SELECT access to team members for runners and legs
 
+-- Make idempotent: drop if already exists
+DROP POLICY IF EXISTS "team_members_can_select_runners" ON public.runners;
+DROP POLICY IF EXISTS "team_members_can_select_legs" ON public.legs;
+
 -- Allow team members to SELECT runners in their team
 CREATE POLICY "team_members_can_select_runners" ON public.runners
 FOR SELECT TO authenticated

@@ -1,8 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { useSecureSync } from '@/hooks/useSecureSync';
+import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { useRaceStore } from '@/store/raceStore';
 import { toast } from 'sonner';
 
@@ -10,217 +8,231 @@ interface Team {
   id: string;
   name: string;
   start_time: string;
-  owner_id: string;
+  invite_token?: string;
 }
 
-interface TeamMember {
-  id: string;
-  user_id: string;
-  team_id: string;
+interface DeviceInfo {
+  deviceId: string;
+  teamId: string;
   role: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
 }
 
 export const useTeamSync = () => {
   const [team, setTeam] = useState<Team | null>(null);
-  const [teamMember, setTeamMember] = useState<TeamMember | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
-  const { secureQuery, secureUpdate } = useSecureSync();
-  // Simplified: no timer-based auto-start for leg 1
 
   useEffect(() => {
-    if (user) {
-      fetchUserTeam();
-    }
-  }, [user]);
+    loadStoredTeamInfo();
+  }, []);
 
-  // No timer to clean up under simplified logic
-
-  const fetchUserTeam = async () => {
-    if (!user) {
-      return;
-    }
-
+  const loadStoredTeamInfo = () => {
     try {
-      // First check if user is a member of any team
-      const memberResult = await secureQuery(
-        supabase
-          .from('team_members')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        'fetch team membership'
-      );
-
-      if (!memberResult.error && memberResult.data) {
-        setTeamMember(memberResult.data);
+      const storedTeamId = localStorage.getItem('relay_team_id');
+      const storedDeviceInfo = localStorage.getItem('relay_device_info');
+      
+      if (storedTeamId && storedDeviceInfo) {
+        const deviceInfo = JSON.parse(storedDeviceInfo) as DeviceInfo;
+        setDeviceInfo(deviceInfo);
         
-        // Fetch team details
-        const teamResult = await secureQuery(
-          supabase
-            .from('teams')
-            .select('*')
-            .eq('id', memberResult.data.team_id)
-            .single(),
-          'fetch team details'
-        );
-
-        if (!teamResult.error && teamResult.data) {
-          setTeam(teamResult.data);
-          // Propagate official team start time to race store
-          const race = useRaceStore.getState();
-          const startIso = teamResult.data.start_time;
-          if (startIso) {
-            const startMs = new Date(startIso).getTime();
-            race.setStartTime(startMs);
-            // Ensure legs are initialized so UI can reflect immediately
-            if (race.legs.length === 0) {
-              race.initializeLegs();
-            }
-          }
-        }
+        // Set team info in race store
+        const race = useRaceStore.getState();
+        race.setTeamId(storedTeamId);
+        
+        // Try to fetch current team details via Edge Function
+        fetchTeamDetails(storedTeamId);
       }
     } catch (error) {
-      console.error('Error in fetchUserTeam:', error);
+      console.error('Error loading stored team info:', error);
     }
   };
 
-  const createTeam = async (name: string, startTime: Date) => {
-    if (!user) return { error: 'User not authenticated' };
-    
+  const fetchTeamDetails = async (teamId: string) => {
+    try {
+      const deviceId = getDeviceId();
+      // Use runners-list as a proxy to verify team access
+      const result = await invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId });
+      
+      if (!(result as any).error) {
+        // Team access is valid, create minimal team object
+        setTeam({ id: teamId, name: 'Team', start_time: new Date().toISOString() });
+      }
+    } catch (error) {
+      console.error('Error fetching team details:', error);
+    }
+  };
+
+  const createTeam = async (name: string, startTime: Date, firstName: string, lastName: string) => {
     setLoading(true);
     
     try {
-      // Create team
-      const teamResult = await secureUpdate(
-        supabase
-          .from('teams')
-          .insert([{
-            name,
-            start_time: startTime.toISOString(),
-            owner_id: user.id
-          }])
-          .select()
-          .single(),
-        'create team'
-      );
+      // Create team via Edge Function (expects: name, optional admin_display_name, device_profile)
+      const result = await invokeEdge<{
+        teamId: string;
+        invite_token: string;
+        join_code: string;
+        admin_secret: string;
+        deviceId: string;
+      }>('teams-create', {
+        name,
+        admin_display_name: `${firstName} ${lastName}`,
+        device_profile: {
+          first_name: firstName,
+          last_name: lastName,
+          display_name: `${firstName} ${lastName}`,
+        },
+      });
 
-      if (teamResult.error) {
+      if ((result as any).error) {
         setLoading(false);
-        return { error: teamResult.error.message };
+        return { error: (result as any).error.message || 'Failed to create team' };
       }
 
-      // Add user as owner to team_members
-      const memberResult = await secureUpdate(
-        supabase
-          .from('team_members')
-          .insert([{
-            user_id: user.id,
-            team_id: teamResult.data.id,
-            role: 'owner'
-          }]),
-        'add team owner'
-      );
+      const {
+        teamId,
+        invite_token: inviteToken,
+        deviceId,
+      } = (result as any).data as {
+        teamId: string;
+        invite_token: string;
+        deviceId: string;
+      };
 
-      if (memberResult.error) {
-        setLoading(false);
-        return { error: memberResult.error.message };
-      }
+      // Store team and device info locally
+      const newDeviceInfo: DeviceInfo = {
+        deviceId,
+        teamId,
+        role: 'admin',
+        firstName,
+        lastName,
+        displayName: `${firstName} ${lastName}`
+      };
 
-      // Immediately reflect new team in state for instant UI transition
-      setTeam(teamResult.data);
-      // Optionally set member locally for quicker access
-      setTeamMember({ id: memberResult.data?.[0]?.id ?? '', user_id: user.id, team_id: teamResult.data.id, role: 'owner' });
+      localStorage.setItem('relay_team_id', teamId);
+      localStorage.setItem('relay_device_info', JSON.stringify(newDeviceInfo));
+      // Ensure the global deviceId used by Edge Functions matches the server-registered one
+      localStorage.setItem('relay_device_id', deviceId);
       
-      // Reset race store so a brand-new team starts in the Setup Wizard
-      try {
-        const race = useRaceStore.getState();
-        // Set the current team id
-        race.setTeamId(teamResult.data.id);
-        // Ensure we start setup fresh for a new team
-        race.setRaceData({ isSetupComplete: false });
-        race.setSetupStep(1);
-        race.setDidInitFromTeam(false);
-        // Propagate team start time to store
-        const startMs = new Date(teamResult.data.start_time).getTime();
-        if (!Number.isNaN(startMs)) {
-          race.setStartTime(startMs);
-        }
-      } catch (e) {
-        console.warn('[useTeamSync] Failed to reset race store after team creation', e);
-      }
-      // The UI will now be responsible for navigation and any subsequent fetching.
+      setTeam({ id: teamId, name, start_time: startTime.toISOString(), invite_token: inviteToken });
+      setDeviceInfo(newDeviceInfo);
+
+      // Reset race store for new team
+      const race = useRaceStore.getState();
+      race.setTeamId(teamId);
+      race.setRaceData({ isSetupComplete: false });
+      race.setSetupStep(1);
+      race.setDidInitFromTeam(false);
+      race.setStartTime(startTime.getTime());
+
       setLoading(false);
-      
-      return { success: true };
+      return { success: true, teamId, inviteToken };
     } catch (error) {
       setLoading(false);
       return { error: 'Failed to create team' };
     }
   };
 
-  const joinTeam = async (teamId: string) => {
-    if (!user) return { error: 'User not authenticated' };
-    
+  const joinTeam = async (codeOrToken: string, firstName: string, lastName: string) => {
     setLoading(true);
     
     try {
-      // Check if team exists
-      const teamResult = await secureQuery(
-        supabase
-          .from('teams')
-          .select('*')
-          .eq('id', teamId)
-          .single(),
-        'verify team exists'
-      );
-
-      if (teamResult.error) {
-        setLoading(false);
-        return { error: 'Team not found or access denied' };
-      }
-
-      // Add user to team_members
-      const memberResult = await secureUpdate(
-        supabase
-          .from('team_members')
-          .insert([{
-            user_id: user.id,
-            team_id: teamId,
-            role: 'member'
-          }]),
-        'join team'
-      );
-
-      if (memberResult.error) {
-        setLoading(false);
-        return { error: memberResult.error.message };
-      }
-
-      // Immediately reflect joined team
-      setTeam(teamResult.data);
-      setTeamMember({ id: memberResult.data?.[0]?.id ?? '', user_id: user.id, team_id: teamId, role: 'member' });
+      const deviceId = getDeviceId();
       
-      // Reset race store flags on team switch so we don't carry over previous team's completion state
-      try {
-        const race = useRaceStore.getState();
-        race.setTeamId(teamId);
-        race.setRaceData({ isSetupComplete: false });
-        race.setSetupStep(1);
-        race.setDidInitFromTeam(false);
-        // Set start time from team if present
-        const startIso = teamResult.data.start_time;
-        if (startIso) {
-          const startMs = new Date(startIso).getTime();
-          if (!Number.isNaN(startMs)) race.setStartTime(startMs);
+      // Normalize/parse the input which could be:
+      // - a full URL with query (?invite_token=..., ?token=..., ?t=..., ?join_code=..., ?code=...)
+      // - a URL with last path segment as code
+      // - a raw invite token (long)
+      // - a raw short join code
+      const parseJoinInput = (raw: string): { invite_token?: string; join_code?: string } => {
+        const input = raw.trim();
+        // Try URL parsing
+        try {
+          const u = new URL(input);
+          const qp = u.searchParams;
+          const invite = qp.get('invite_token') || qp.get('token') || qp.get('t');
+          const code = qp.get('join_code') || qp.get('code') || qp.get('c');
+          if (invite) return { invite_token: invite.trim() };
+          if (code) return { join_code: code.trim() };
+          // Fall back to last path segment if present
+          const segments = u.pathname.split('/').filter(Boolean);
+          if (segments.length) {
+            const last = segments[segments.length - 1];
+            if (last.length >= 3 && last.length <= 64) {
+              return { join_code: last.trim() };
+            }
+          }
+        } catch (_) {
+          // Not a URL; continue
         }
-      } catch (e) {
-        console.warn('[useTeamSync] Failed to reset race store after joinTeam', e);
+        // Not a URL: decide by shape
+        if (input.length <= 64) {
+          // Heuristic: short-ish strings without spaces likely join codes
+          if (!input.includes(' ') && input.length <= 16) {
+            return { join_code: input };
+          }
+        }
+        return { invite_token: input };
+      };
+
+      const parsed = parseJoinInput(codeOrToken);
+
+      // Base payload
+      const basePayload = {
+        device_profile: {
+          first_name: firstName,
+          last_name: lastName,
+          display_name: `${firstName} ${lastName}`,
+        },
+        device_id: deviceId,
+      } as const;
+
+      // Call once with the correctly parsed field
+      const result = await invokeEdge<{ teamId: string; role: string; teamName: string; deviceId: string }>('teams-join', {
+        ...basePayload,
+        ...parsed,
+      });
+
+      if ((result as any).error) {
+        setLoading(false);
+        return { error: (result as any).error.message || 'Failed to join team' };
       }
-      // Background reconciliation
-      fetchUserTeam();
-      setLoading(false);
+
+      const { teamId, role, teamName, deviceId: returnedDeviceId } = (result as any).data as {
+        teamId: string;
+        role: string;
+        teamName: string;
+        deviceId: string;
+      };
+
+      // Store team and device info locally
+      const newDeviceInfo: DeviceInfo = {
+        deviceId: returnedDeviceId || deviceId,
+        teamId,
+        role,
+        firstName,
+        lastName,
+        displayName: `${firstName} ${lastName}`
+      };
+
+      localStorage.setItem('relay_team_id', teamId);
+      localStorage.setItem('relay_device_info', JSON.stringify(newDeviceInfo));
+      // Ensure the global deviceId used by Edge Functions matches the server-registered one
+      localStorage.setItem('relay_device_id', newDeviceInfo.deviceId);
       
+      setTeam({ id: teamId, name: teamName, start_time: new Date().toISOString() });
+      setDeviceInfo(newDeviceInfo);
+
+      // Reset race store for joined team
+      const race = useRaceStore.getState();
+      race.setTeamId(teamId);
+      race.setRaceData({ isSetupComplete: false });
+      race.setSetupStep(1);
+      race.setDidInitFromTeam(false);
+
+      setLoading(false);
       return { success: true };
     } catch (error) {
       setLoading(false);
@@ -228,27 +240,33 @@ export const useTeamSync = () => {
     }
   };
 
+  const leaveTeam = () => {
+    // Clear local storage
+    localStorage.removeItem('relay_team_id');
+    localStorage.removeItem('relay_device_info');
+    localStorage.removeItem('relay_device_id');
+    
+    // Clear state
+    setTeam(null);
+    setDeviceInfo(null);
+    
+    // Reset race store
+    const race = useRaceStore.getState();
+    race.setTeamId(undefined);
+    race.forceReset();
+  };
+
   const updateTeamStartTime = async (newStartTime: Date) => {
-    if (!user || !team) return { error: 'Not ready' };
+    if (!team || !deviceInfo) return { error: 'Not ready' };
+    
     try {
-      const updateResult = await secureUpdate(
-        supabase
-          .from('teams')
-          .update({ start_time: newStartTime.toISOString() })
-          .eq('id', team.id)
-          .select()
-          .single(),
-        'update team start time'
-      );
+      // For now, just update locally since we don't have a teams-update Edge Function
+      // TODO: Add teams-update Edge Function for start time updates
+      
+      // Update local team state
+      setTeam({ ...team, start_time: newStartTime.toISOString() });
 
-      if (updateResult.error) {
-        toast.error('Failed to update team start time');
-        return { error: updateResult.error.message };
-      }
-
-      setTeam(updateResult.data);
-
-      // Propagate to race store so UI and projections reflect immediately
+      // Propagate to race store
       const race = useRaceStore.getState();
       const startMs = newStartTime.getTime();
       race.setStartTime(startMs);
@@ -257,18 +275,18 @@ export const useTeamSync = () => {
       if (race.legs.length === 0) {
         race.initializeLegs();
       }
+      
       const latest = useRaceStore.getState();
       const firstLeg = latest.legs[0];
 
       const now = Date.now();
       if (startMs <= now) {
-        // Official time is in the past: set leg 1 actual start to that time immediately
+        // Set leg 1 actual start to that time immediately
         if (firstLeg && firstLeg.actualStart !== startMs) {
           latest.updateLegActualTime(1, 'actualStart', startMs);
         }
       }
 
-      // Update sync indicator since this was a successful backend update
       latest.setLastSyncedAt(Date.now());
 
       toast.success('Team start time updated');
@@ -281,11 +299,12 @@ export const useTeamSync = () => {
 
   return {
     team,
-    teamMember,
+    deviceInfo,
     loading,
     createTeam,
     joinTeam,
-    refetch: fetchUserTeam,
+    leaveTeam,
+    refetch: loadStoredTeamInfo,
     updateTeamStartTime
   };
 };

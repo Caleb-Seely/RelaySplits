@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useRaceStore } from '@/store/raceStore';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import type { Runner, Leg } from '@/types/race';
 import type { Tables } from '@/integrations/supabase/types';
 import { recalculateProjections } from '@/utils/raceUtils';
@@ -13,6 +14,11 @@ interface Syncable {
 
 export const useSyncManager = () => {
   const store = useRaceStore();
+
+  // Debounce refetches triggered by broadcast to avoid loops/storms
+  // and ignore broadcasts originating from this device.
+  let lastBroadcastRefetchAt = 0;
+  const BROADCAST_REFETCH_COOLDOWN_MS = 1500;
 
   // Lightweight local queue to avoid circular hook dependency
   const enqueueChange = (change: { table: 'runners' | 'legs'; remoteId: string; payload: any }) => {
@@ -69,21 +75,18 @@ export const useSyncManager = () => {
   );
 
     const fetchInitialData = useCallback(async (teamId: string) => {
-    console.log('[fetchInitialData] Fetching runners for team', teamId);
-    const { data: remoteRunners, error: runnersError } = await supabase
-      .from('runners')
-      .select('*')
-      .eq('team_id', teamId);
-    console.log('[fetchInitialData] Fetching legs for team', teamId);
-    const { data: remoteLegs, error: legsError } = await supabase
-      .from('legs')
-      .select('*')
-      .eq('team_id', teamId);
-
-    if (runnersError || legsError) {
-      console.error('Error fetching initial data:', runnersError || legsError);
+    console.log('[fetchInitialData] Fetching via Edge Functions for team', teamId);
+    const deviceId = getDeviceId();
+    const [runnersRes, legsRes] = await Promise.all([
+      invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId }),
+      invokeEdge<{ legs: any[] }>('legs-list', { teamId, deviceId }),
+    ]);
+    if ((runnersRes as any).error || (legsRes as any).error) {
+      console.error('Error fetching initial data via Edge:', (runnersRes as any).error || (legsRes as any).error);
       return;
     }
+    const remoteRunners = (runnersRes as any).data?.runners ?? [];
+    const remoteLegs = (legsRes as any).data?.legs ?? [];
 
     // Map Supabase data to our local store's data structure
     // Create a mapping from remote runner IDs to local runner IDs (1-12)
@@ -162,85 +165,36 @@ export const useSyncManager = () => {
         return { error: new Error('Local item not found for update.') };
       }
 
-      // Ensure we have an updated_at to match against; if missing, fetch latest
-      let matchUpdatedAt = (localItem as any).updated_at as string | null | undefined;
-      if (!matchUpdatedAt) {
-        const { data: fresh, error: freshErr } = await supabase
-          .from(table)
-          .select('*')
-          .eq('id', remoteId)
-          .single();
-        if (freshErr) {
-          console.error(`[safeUpdate] Failed to fetch fresh ${table} before update:`, freshErr);
-          return { error: freshErr };
-        }
-        const freshItem = fresh as unknown as Syncable;
-        // Merge fresh into local to align state
-        merge(
-          [freshItem],
-          table === 'runners' ? storeState.runners : storeState.legs,
-          table === 'runners'
-            ? storeState.setRunners
-            : (items) => storeState.setRaceData({ legs: items as Leg[] })
-        );
-        matchUpdatedAt = (fresh as any).updated_at as string | null | undefined;
+      // Build Edge Function payload
+      const deviceId = getDeviceId();
+      let edgeName: 'runners-upsert' | 'legs-upsert';
+      let body: any;
+      if (table === 'runners') {
+        edgeName = 'runners-upsert';
+        const merged = { ...(localItem as any), ...(payload as any) };
+        const runner = {
+          id: remoteId,
+          name: merged.name,
+          pace: merged.pace,
+          van: typeof merged.van === 'number' ? String(merged.van) : merged.van,
+        };
+        body = { teamId, deviceId, runners: [runner], action: 'upsert' };
+      } else {
+        edgeName = 'legs-upsert';
+        // payload may contain runner_id, start_time, finish_time, distance
+        const leg = { id: remoteId, ...(payload as any) };
+        body = { teamId, deviceId, legs: [leg], action: 'upsert' };
       }
 
-      // Perform the conditional update with current matchUpdatedAt
-      let { data, error } = await supabase
-        .from(table)
-        .update(payload)
-        .eq('id', remoteId)
-        .select()
-        .single();
-
-      // If conflict (no rows) or explicit PGRST116, refetch latest and retry once
-      if (error || !data) {
-        const code = (error as any)?.code;
-        if (code === 'PGRST116' || !data) {
-          console.warn(`[safeUpdate] Conflict detected for ${table}:${remoteId}. Retrying with fresh updated_at.`);
-          const { data: fresh2, error: freshErr2 } = await supabase
-            .from(table)
-            .select('*')
-            .eq('id', remoteId)
-            .single();
-          if (freshErr2 || !fresh2) {
-            console.error(`[safeUpdate] Failed to fetch fresh ${table} on retry:`, freshErr2);
-            return { error: error || freshErr2 || new Error('Unknown update conflict') };
-          }
-
-          // Merge fresh2 into local state so UI reflects latest
-          const freshSyncable = fresh2 as unknown as Syncable;
-          merge(
-            [freshSyncable],
-            table === 'runners' ? storeState.runners : storeState.legs,
-            table === 'runners'
-              ? storeState.setRunners
-              : (items) => storeState.setRaceData({ legs: items as Leg[] })
-          );
-
-          // Retry update with the newly fetched updated_at
-          const retryMatch = (fresh2 as any).updated_at as string | null | undefined;
-          const retry = await supabase
-            .from(table)
-            .update(payload)
-            .match({ id: remoteId, updated_at: retryMatch })
-            .select()
-            .single();
-
-          if (retry.error) {
-            console.error(`[safeUpdate] Retry failed for ${table}:${remoteId}:`, retry.error);
-            return { error: retry.error };
-          }
-          data = retry.data as any;
-        } else {
-          console.error(`[safeUpdate] Error updating ${table}:`, error);
-          return { error };
-        }
+      const res = await invokeEdge(edgeName, body);
+      if ((res as any).error) {
+        console.error(`[safeUpdate] Edge ${edgeName} error:`, (res as any).error);
+        return { error: (res as any).error };
       }
 
-      // Success! Merge the updated item back into the store.
-      const updatedItem = data as unknown as Syncable;
+      // Optimistically merge local change since Edge Functions don't return rows
+      const updatedItem = { ...(localItem as any), ...(payload as any) } as unknown as Syncable;
+      (updatedItem as any).updated_at = new Date().toISOString();
       merge(
         [updatedItem],
         table === 'runners' ? storeState.runners : storeState.legs,
@@ -249,7 +203,7 @@ export const useSyncManager = () => {
           : (items) => storeState.setRaceData({ legs: items as Leg[] })
       );
 
-      return { data };
+      return { data: updatedItem };
     },
     [fetchInitialData, merge]
   );
@@ -389,18 +343,47 @@ export const useSyncManager = () => {
     );
 
     const legsChannel = subscribeWithRetry(
-      `realtime-legs-${teamId}`,
+      `legs-${teamId}`,
       'legs',
       (payload) => {
-        console.log('[realtime] legs event', {
-          eventType: payload.eventType,
-          new: (payload as any).new?.id,
-          old: (payload as any).old?.id,
-        });
         handleSubscriptionEvent(payload, 'legs');
       },
       (status) => console.log('[realtime] legs channel status:', status)
     );
+
+    // Subscribe to broadcast channel for realtime updates from Edge Functions
+    const broadcastChannel = supabase
+      .channel(`team-${teamId}`)
+      .on('broadcast', { event: 'data_updated' }, (payload) => {
+        try {
+          console.log('[broadcast] Received data update:', payload);
+          const originDeviceId = (payload as any)?.payload?.device_id;
+          const myDeviceId = getDeviceId();
+          if (originDeviceId && myDeviceId && originDeviceId === myDeviceId) {
+            console.log('[broadcast] Ignoring self-originated broadcast');
+            return;
+          }
+
+          const now = Date.now();
+          if (now - lastBroadcastRefetchAt < BROADCAST_REFETCH_COOLDOWN_MS) {
+            console.log('[broadcast] Skipping refetch due to cooldown');
+            return;
+          }
+          lastBroadcastRefetchAt = now;
+
+          // Trigger data refetch when broadcast message is received
+          const state = useRaceStore.getState();
+          if (state.teamId) {
+            console.log('[broadcast] Triggering data reconciliation');
+            fetchInitialData(state.teamId);
+          }
+        } catch (e) {
+          console.warn('[broadcast] Handler error', e);
+        }
+      })
+      .subscribe((status) => {
+        console.log('[broadcast] Channel status:', status);
+      });
 
     // Periodic reconciliation (defense-in-depth) e.g., every 60s
     reconcileTimer = window.setInterval(() => {
@@ -423,6 +406,7 @@ export const useSyncManager = () => {
       console.log('[realtime] Cleaning up subscriptions for team', teamId);
       supabase.removeChannel(runnersChannel);
       supabase.removeChannel(legsChannel);
+      supabase.removeChannel(broadcastChannel);
       if (reconcileTimer) {
         clearInterval(reconcileTimer);
       }
@@ -517,76 +501,59 @@ export const useSyncManager = () => {
 
   }, [fetchInitialData]);
 
-  // Idempotent: if team already has runners, do nothing
+  // Idempotent: if team already has runners, do nothing. Uses Edge Functions.
   const saveInitialRows = useCallback(async (teamId: string) => {
     const storeState = useRaceStore.getState();
+    const deviceId = getDeviceId();
 
-    // Check if runners already exist for this team
-    console.log('[saveInitialRows] Checking existing runners for team', teamId);
-    const { count, error: countError } = await supabase
-      .from('runners')
-      .select('id', { count: 'exact', head: true })
-      .eq('team_id', teamId);
-
-    if (countError) {
-      console.error('Error checking existing runners:', countError);
-      return { error: countError };
-    }
-
-    if ((count ?? 0) > 0) {
-      console.log('[saveInitialRows] Runners already exist (count =', count, '). Skipping inserts.');
-      // Already initialized; just fetch to populate remoteIds/updated_at
+    // If remote data exists, just fetch it
+    const runnersList = await invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId });
+    if (!(runnersList as any).error && (runnersList as any).data?.runners?.length > 0) {
+      console.log('[saveInitialRows] Remote runners exist. Skipping inserts.');
       await fetchInitialData(teamId);
-      console.log('[saveInitialRows] Refetch complete');
       return { ok: true };
     }
 
-    // Insert runners
-    console.log('[saveInitialRows] Inserting runners…');
-    const runnersToInsert = storeState.runners.map(r => ({
-      team_id: teamId,
-      name: r.name,
-      pace: r.pace,
-      van: r.van.toString(),
-    }));
-    const { data: insertedRunners, error: runnersError } = await supabase
-      .from('runners')
-      .insert(runnersToInsert)
-      .select();
-    if (runnersError) {
-      console.error('Error saving runners:', runnersError);
-      return { error: runnersError };
+    // Insert runners via Edge
+    console.log('[saveInitialRows] Inserting runners via Edge…');
+    const runnersPayload = storeState.runners.map(r => ({ id: undefined, name: r.name, pace: r.pace, van: r.van.toString() }));
+    const upsertR = await invokeEdge('runners-upsert', { teamId, deviceId, runners: runnersPayload, action: 'upsert' });
+    if ((upsertR as any).error) {
+      console.error('Error saving runners via Edge:', (upsertR as any).error);
+      return { error: (upsertR as any).error };
     }
-    console.log('[saveInitialRows] Runners inserted:', runnersToInsert.length);
 
-    // Build local->remote runner ID map (local IDs are 1-12 in store order)
+    // Build runnerId lookup by refetching
+    const afterR = await invokeEdge<{ runners: any[] }>('runners-list', { teamId, deviceId });
+    if ((afterR as any).error) {
+      console.error('Error listing runners after insert:', (afterR as any).error);
+      return { error: (afterR as any).error };
+    }
+    const remoteRunners = (afterR as any).data?.runners ?? [];
     const localToRemoteRunnerMap = new Map<number, string>();
-    insertedRunners?.forEach((remoteRunner: any, index: number) => {
+    remoteRunners.forEach((rr: any, index: number) => {
       const localRunnerId = index + 1;
-      localToRemoteRunnerMap.set(localRunnerId, remoteRunner.id);
+      if (!localToRemoteRunnerMap.has(localRunnerId)) {
+        localToRemoteRunnerMap.set(localRunnerId, rr.id);
+      }
     });
 
-    // Insert legs with proper runner_id linkage
-    console.log('[saveInitialRows] Inserting legs…');
-    const legsToInsert = storeState.legs.map(l => {
-      const remoteRunnerId = l.runnerId ? localToRemoteRunnerMap.get(l.runnerId) : null;
-      return {
-        team_id: teamId,
-        number: l.id,
-        distance: l.distance,
-        runner_id: remoteRunnerId,
-      };
-    });
-    const { error: legsError } = await supabase.from('legs').insert(legsToInsert);
-    if (legsError) {
-      console.error('Error saving legs:', legsError);
-      return { error: legsError };
+    // Insert legs via Edge
+    console.log('[saveInitialRows] Inserting legs via Edge…');
+    const legsPayload = storeState.legs.map(l => ({
+      id: undefined,
+      number: l.id,
+      distance: l.distance,
+      runner_id: l.runnerId ? localToRemoteRunnerMap.get(l.runnerId) : null,
+    }));
+    const upsertL = await invokeEdge('legs-upsert', { teamId, deviceId, legs: legsPayload, action: 'upsert' });
+    if ((upsertL as any).error) {
+      console.error('Error saving legs via Edge:', (upsertL as any).error);
+      return { error: (upsertL as any).error };
     }
-    console.log('[saveInitialRows] Legs inserted:', legsToInsert.length);
 
-    console.log('[saveInitialRows] Refetching to populate remoteIds/updated_at…');
     await fetchInitialData(teamId);
-    console.log('[saveInitialRows] Initial rows saved and fetched successfully');
+    console.log('[saveInitialRows] Initial rows saved via Edge and fetched successfully');
     return { ok: true };
   }, [fetchInitialData]);
 

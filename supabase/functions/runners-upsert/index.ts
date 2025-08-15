@@ -159,6 +159,24 @@ serve(async (req) => {
       payload: { count, runner_ids: effectiveIds }
     })
 
+    // Send broadcast message to team channel for realtime updates
+    try {
+      await supabase.channel(`team-${teamId}`).send({
+        type: 'broadcast',
+        event: 'data_updated',
+        payload: {
+          type: 'runners',
+          action: action,
+          count: count,
+          device_id: deviceId,
+          timestamp: new Date().toISOString()
+        }
+      })
+    } catch (broadcastError) {
+      console.warn('Failed to send broadcast message:', broadcastError)
+      // Don't fail the request if broadcast fails
+    }
+
     const response: RunnerUpsertResponse = {
       success: true,
       count: count

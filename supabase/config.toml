@@ -1,1 +1,19 @@
+# Supabase project configuration
+
 project_id = "whwsnpzwxagmlkrzrqsa"
+
+[api]
+port = 54321
+schemas = ["public", "storage", "graphql"]
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+port = 54323
+
+[functions]
+# The root of all Edge Functions.
+# All functions in this directory will be deployed.
+

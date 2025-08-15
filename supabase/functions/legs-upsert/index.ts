@@ -100,32 +100,78 @@ serve(async (req) => {
         effectiveIds = legIds
       }
     } else {
-      // Upsert legs - ensure all have team_id and id
-      const legsWithTeamId = legs.map(leg => ({
-        // Spread first so our fields below always take precedence
-        ...leg,
-        // Ensure id is set even if incoming leg.id is null/undefined
-        id: leg.id ?? crypto.randomUUID(),
-        team_id: teamId,
-        updated_at: new Date().toISOString()
-      }))
+      // Decide between bulk upsert (for full rows) vs per-row updates (for partial rows)
+      const isFullRow = (l: any) => (
+        // number and distance are NOT NULL on legs
+        typeof l?.number === 'number' && l?.distance !== undefined && l?.distance !== null
+      )
 
-      const { error: upsertError, count: upsertCount } = await supabase
-        .from('legs')
-        .upsert(legsWithTeamId, {
-          onConflict: 'id',
-          count: 'exact'
-        })
+      const fullRows = legs.filter(isFullRow)
+      const partialRows = legs.filter((l) => !isFullRow(l))
 
-      if (upsertError) {
-        console.error('Legs upsert error:', upsertError)
-        return new Response(
-          JSON.stringify({ error: 'Failed to upsert legs' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+      // 1) Handle bulk upsert for full rows
+      if (fullRows.length > 0) {
+        const legsWithTeamId = fullRows.map(leg => ({
+          // Spread first so our fields below always take precedence
+          ...leg,
+          // Ensure id is set even if incoming leg.id is null/undefined
+          id: leg.id ?? crypto.randomUUID(),
+          team_id: teamId,
+          updated_at: new Date().toISOString()
+        }))
+
+        const { error: upsertError, count: upsertCount } = await supabase
+          .from('legs')
+          .upsert(legsWithTeamId, {
+            onConflict: 'id',
+            count: 'exact'
+          })
+
+        if (upsertError) {
+          console.error('Legs upsert error (full rows):', upsertError)
+          return new Response(
+            JSON.stringify({ error: 'Failed to upsert legs' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        count += upsertCount || 0
+        effectiveIds.push(...legsWithTeamId.map(l => l.id).filter(Boolean))
       }
-      count = upsertCount || 0
-      effectiveIds = legsWithTeamId.map(l => l.id).filter(Boolean)
+
+      // 2) Handle partial updates per row (requires id)
+      for (const row of partialRows) {
+        if (!row?.id) {
+          console.error('Partial leg update missing id:', row)
+          return new Response(
+            JSON.stringify({ error: 'Partial leg update requires id' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        const updatePayload = {
+          ...row,
+          team_id: teamId, // reinforce team scoping
+          updated_at: new Date().toISOString()
+        }
+        // Avoid accidentally changing immutable fields if they are undefined in payload
+        // Keep only fields that are explicitly provided
+        // (Already satisfied since we spread row directly)
+
+        const { error: updateError } = await supabase
+          .from('legs')
+          .update(updatePayload)
+          .eq('team_id', teamId)
+          .eq('id', row.id)
+
+        if (updateError) {
+          console.error('Legs partial update error:', updateError)
+          return new Response(
+            JSON.stringify({ error: 'Failed to update leg' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        count += 1
+        effectiveIds.push(row.id)
+      }
     }
 
     // Log audit event (use effective IDs after mapping)
@@ -135,6 +181,24 @@ serve(async (req) => {
       action: `legs_${action}`,
       payload: { count, leg_ids: effectiveIds }
     })
+
+    // Send broadcast message to team channel for realtime updates
+    try {
+      await supabase.channel(`team-${teamId}`).send({
+        type: 'broadcast',
+        event: 'data_updated',
+        payload: {
+          type: 'legs',
+          action: action,
+          count: count,
+          device_id: deviceId,
+          timestamp: new Date().toISOString()
+        }
+      })
+    } catch (broadcastError) {
+      console.warn('Failed to send broadcast message:', broadcastError)
+      // Don't fail the request if broadcast fails
+    }
 
     const response: LegUpsertResponse = {
       success: true,

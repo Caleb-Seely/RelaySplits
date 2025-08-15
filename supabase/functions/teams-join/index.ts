@@ -60,13 +60,17 @@ serve(async (req) => {
       )
     }
 
-    // Find team by token or code
+    // Normalize inputs
+    const inviteToken = invite_token?.trim()
+    const joinCode = join_code?.trim()
+
+    // Find team by token or code (case-insensitive for join_code)
     let teamQuery = supabase.from('teams').select('*')
-    
-    if (invite_token) {
-      teamQuery = teamQuery.eq('invite_token', invite_token)
-    } else if (join_code) {
-      teamQuery = teamQuery.eq('join_code', join_code)
+    if (inviteToken) {
+      teamQuery = teamQuery.eq('invite_token', inviteToken)
+    } else if (joinCode) {
+      // Use ilike for case-insensitive exact match
+      teamQuery = teamQuery.ilike('join_code', joinCode)
       // Check if join code is expired (optional - implement expiration logic here)
     }
 

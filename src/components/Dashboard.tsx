@@ -52,6 +52,8 @@ import RunnerAssignmentModal from './RunnerAssignmentModal';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
+import TeamSettings from './TeamSettings';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const Dashboard = () => {
   const {
@@ -93,6 +95,7 @@ const Dashboard = () => {
     runnerName: string;
   } | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -647,6 +650,14 @@ const Dashboard = () => {
           <div className="container mx-auto px-3 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSettingsModalOpen(true)}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
                 <Button variant="outline" size="sm" onClick={signOut}>
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
@@ -705,6 +716,16 @@ const Dashboard = () => {
         initialLegId={initialLegId ?? undefined}
         onSave={handleRunnerAssignSave}
       />
+
+      {/* Team Settings Modal */}
+      <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Team Settings</DialogTitle>
+          </DialogHeader>
+          <TeamSettings />
+        </DialogContent>
+      </Dialog>
 
       {/* Real-time database sync integration */}
       <RunnerSyncIntegration />
