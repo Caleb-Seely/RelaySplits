@@ -49,6 +49,7 @@ const DemoLanding = () => {
   const [demoLegs, setDemoLegs] = useState(initializeDemoLegs(getDemoStartTime()));
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('view');
+  const [isFormVisible, setIsFormVisible] = useState(false);
   const [currentVan, setCurrentVan] = useState<1 | 2>(1);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   
@@ -64,6 +65,35 @@ const DemoLanding = () => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Handle click outside to close form
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isFormVisible) {
+        const target = event.target as Element;
+        
+        // Check if click is inside the actual card content (the Card component)
+        const cardContent = target.closest('.form-card .max-w-md');
+        
+        // Check if click is inside the tab buttons (to prevent closing when clicking tabs)
+        const tabButtons = target.closest('button[data-tab]');
+        
+        // If click is outside the card content and not on tab buttons, close the form
+        if (!cardContent && !tabButtons) {
+          setIsFormVisible(false);
+        }
+      }
+    };
+
+    // Use both mousedown and click events for better coverage
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [isFormVisible]);
 
   // Demo functions
   const handleDemoStartRunner = () => {
@@ -255,132 +285,198 @@ const DemoLanding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+          <div className="min-h-screen bg-gray-50">
       {/* Header with Auth Tabs */}
-      <div className="bg-card border-b border-border">
+      <div className="bg-card border-b border-border relative header-area">
         <div className="container mx-auto px-4 py-6">
           <div className="text-center mb-6">
             <h1 className="text-4xl font-bold text-foreground mb-2">TeamSplits</h1>
             <p className="text-xl text-muted-foreground">Real-time relay race tracking for your team</p>
           </div>
           
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="max-w-md mx-auto">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="view" className="flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                View Team
-              </TabsTrigger>
-              <TabsTrigger value="join" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Join Team
-              </TabsTrigger>
-              <TabsTrigger value="create" className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Create Team
-              </TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="view" className="space-y-4 mt-4">
-              <form onSubmit={handleViewTeam} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="viewerCode">Viewer Code</Label>
-                  <Input
-                    id="viewerCode"
-                    value={viewerCode}
-                    onChange={(e) => setViewerCode(e.target.value)}
-                    placeholder="Enter 6-character viewer code"
-                    maxLength={6}
-                    className="text-center font-mono text-lg tracking-wider"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full">
-                  View Team
-                </Button>
-              </form>
-            </TabsContent>
-            
-            <TabsContent value="join" className="space-y-4 mt-4">
-              <form onSubmit={handleJoinTeam} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="join-firstName">First Name</Label>
-                  <Input
-                    id="join-firstName"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Enter your first name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="join-lastName">Last Name</Label>
-                  <Input
-                    id="join-lastName"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Enter your last name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="inviteToken">Invite Token</Label>
-                  <Input
-                    id="inviteToken"
-                    value={inviteToken}
-                    onChange={(e) => setInviteToken(e.target.value)}
-                    placeholder="Paste invite link or enter token"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? 'Joining...' : 'Join Team'}
-                </Button>
-              </form>
-            </TabsContent>
-            
-            <TabsContent value="create" className="space-y-4 mt-4">
-              <form onSubmit={handleCreateTeam} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="create-firstName">First Name</Label>
-                  <Input
-                    id="create-firstName"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Enter your first name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-lastName">Last Name</Label>
-                  <Input
-                    id="create-lastName"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Enter your last name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="teamName">Team Name</Label>
-                  <Input
-                    id="teamName"
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value)}
-                    placeholder="Enter team name"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? 'Creating...' : 'Create Team'}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+          {/* Tab Headers - Primary Navigation */}
+          <div className="flex justify-center">
+            <div className="flex bg-gray-100 p-1 rounded-xl">
+              <Button
+                variant="ghost"
+                data-tab="view"
+                onClick={() => {
+                  setActiveTab('view');
+                  setIsFormVisible(true);
+                }}
+                                 className={`flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200 px-6 py-3 relative ${
+                   activeTab === 'view' && isFormVisible
+                     ? 'text-blue-600' 
+                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                 }`}
+                               >
+                   <Eye className="h-4 w-4" />
+                   View
+
+                 </Button>
+              <Button
+                variant="ghost"
+                data-tab="join"
+                onClick={() => {
+                  setActiveTab('join');
+                  setIsFormVisible(true);
+                }}
+                                 className={`flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200 px-6 py-3 relative ${
+                   activeTab === 'join' && isFormVisible
+                     ? 'text-blue-600' 
+                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                 }`}
+                               >
+                   <Users className="h-4 w-4" />
+                   Join 
+
+                 </Button>
+              <Button
+                variant="ghost"
+                data-tab="create"
+                onClick={() => {
+                  setActiveTab('create');
+                  setIsFormVisible(true);
+                }}
+                                 className={`flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200 px-6 py-3 relative ${
+                   activeTab === 'create' && isFormVisible
+                     ? 'text-blue-600' 
+                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                 }`}
+                               >
+                   <Plus className="h-4 w-4" />
+                   Create
+
+                 </Button>
+            </div>
+          </div>
         </div>
+
+        {/* Auth Form Card - Overlay on top of content */}
+        {isFormVisible && (
+          <div className="absolute top-full left-0 right-0 z-10 form-card">
+            <div className="container mx-auto px-2">
+              <div className="max-w-md mx-auto">
+                                 <Card className="bg-white rounded-b-2xl shadow-2xl border border-gray-200 overflow-hidden -mt-1 transition-all duration-500 ease-in-out">
+                  <CardContent className="p-8">
+                    {activeTab === 'view' && (
+                                             <form onSubmit={handleViewTeam} className="space-y-2">
+                        <div className="space-y-3">
+                          <Input
+                            id="viewerCode"
+                            value={viewerCode}
+                            onChange={(e) => setViewerCode(e.target.value)}
+                            placeholder="0 0 0 0 0 0"
+                            maxLength={6}
+                            className="text-center font-mono text-xl tracking-widest h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                            required
+                            autoFocus
+                          />
+                        </div>
+                                                                           <Button 
+                            type="submit" 
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-14 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700"
+                          >
+                            View Team
+                          </Button>
+                      </form>
+                    )}
+                    
+                    {activeTab === 'join' && (
+                      <form onSubmit={handleJoinTeam} className="space-y-2">
+                        <div className="space-y-3">
+                                                     <Input
+                             id="join-firstName"
+                             value={firstName}
+                             onChange={(e) => setFirstName(e.target.value)}
+                             placeholder="First name"
+                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             required
+                             autoFocus
+                           />
+                        </div>
+                        <div className="space-y-3">
+                                                     <Input
+                             id="join-lastName"
+                             value={lastName}
+                             onChange={(e) => setLastName(e.target.value)}
+                             placeholder="Last name"
+                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base"
+                             required
+                           />
+                        </div>
+                        <div className="space-y-3">
+                                                     <Input
+                             id="inviteToken"
+                             value={inviteToken}
+                             onChange={(e) => setInviteToken(e.target.value)}
+                             placeholder="Invite token"
+                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             required
+                           />
+                        </div>
+                                                                           <Button 
+                            type="submit" 
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-14 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
+                            disabled={loading}
+                          >
+                            {loading ? 'Joining...' : 'Join Team'}
+                          </Button>
+                      </form>
+                    )}
+                    
+                    {activeTab === 'create' && (
+                      <form onSubmit={handleCreateTeam} className="space-y-2">
+                        <div className="space-y-2">
+                                                     <Input
+                             id="create-firstName"
+                             value={firstName}
+                             onChange={(e) => setFirstName(e.target.value)}
+                             placeholder="First name"
+                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             required
+                             autoFocus
+                           />
+                        </div>
+                        <div className="space-y-2">
+                                                     <Input
+                             id="create-lastName"
+                             value={lastName}
+                             onChange={(e) => setLastName(e.target.value)}
+                             placeholder="Last name"
+                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             required
+                           />
+                        </div>
+                        <div className="space-y-2">
+                          <Input
+                            id="teamName"
+                            value={teamName}
+                            onChange={(e) => setTeamName(e.target.value)}
+                            placeholder="Team name"
+                            className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                            required
+                          />
+                        </div>
+                                                                           <Button 
+                            type="submit" 
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl h-14 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
+                            disabled={loading}
+                          >
+                            {loading ? 'Creating...' : 'Create Team'}
+                          </Button>
+                      </form>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Demo Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className={`container mx-auto px-4 py-8 ${isFormVisible ? 'blur-sm' : ''}`}>
         {/* Demo Badge */}
         <div className="text-center mb-6">
           <Badge className="bg-blue-100 text-blue-800 border-blue-200 px-4 py-2 text-sm font-medium">
@@ -928,14 +1024,20 @@ const DemoLanding = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
-              onClick={() => setActiveTab('create')}
+              onClick={() => {
+                setActiveTab('create');
+                setIsFormVisible(true);
+              }}
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 text-lg font-semibold"
             >
               <Plus className="h-5 w-5 mr-2" />
               Create Your Team
             </Button>
             <Button 
-              onClick={() => setActiveTab('join')}
+              onClick={() => {
+                setActiveTab('join');
+                setIsFormVisible(true);
+              }}
               variant="outline"
               className="px-8 py-3 text-lg font-semibold"
             >
