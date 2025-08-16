@@ -194,6 +194,10 @@ export const useTeamSync = () => {
       localStorage.setItem('relay_team_join_code', joinCode);
       localStorage.setItem('relay_team_invite_token', inviteToken);
       
+      // Set the new team flag immediately to prevent Index.tsx from treating this as an existing team
+      localStorage.setItem('relay_is_new_team', '1');
+      console.log('[createTeam] New team flag set immediately');
+      
       // Don't call setTeam() or setDeviceInfo() here - this will be done after admin secret dialog
       // This prevents Index.tsx from immediately thinking it's an existing team
       console.log('[createTeam] Team context will be updated after admin secret dialog is closed');

@@ -39,11 +39,15 @@ import {
 } from 'lucide-react';
 import { demoRunners, getDemoStartTime, initializeDemoLegs, demoTeam, updateDemoLeg } from '@/utils/demoData';
 import { useTeamSync } from '@/hooks/useTeamSync';
+import { useTeam } from '@/contexts/TeamContext';
 import { toast } from 'sonner';
+import { useRaceStore } from '@/store/raceStore';
+import AdminSecretDisplay from './AdminSecretDisplay';
 
 const DemoLanding = () => {
   const navigate = useNavigate();
-  const { createTeam, joinTeam, loading } = useTeamSync();
+  const { createTeam, joinTeam, loading, refetch } = useTeamSync();
+  const { setDeviceInfo } = useTeam();
   
   // Demo state
   const [demoLegs, setDemoLegs] = useState(initializeDemoLegs(getDemoStartTime()));
@@ -59,6 +63,9 @@ const DemoLanding = () => {
   const [teamName, setTeamName] = useState('');
   const [inviteToken, setInviteToken] = useState('');
   const [viewerCode, setViewerCode] = useState('');
+  const [showAdminSecret, setShowAdminSecret] = useState(false);
+  const [adminSecret, setAdminSecret] = useState('');
+  const [createdTeamName, setCreatedTeamName] = useState('');
 
   // Update current time every second for live demo
   useEffect(() => {
@@ -66,10 +73,12 @@ const DemoLanding = () => {
     return () => clearInterval(timer);
   }, []);
 
+
+
   // Handle click outside to close form
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isFormVisible) {
+      if (isFormVisible && !showAdminSecret) {
         const target = event.target as Element;
         
         // Check if click is inside the actual card content (the Card component)
@@ -78,8 +87,11 @@ const DemoLanding = () => {
         // Check if click is inside the tab buttons (to prevent closing when clicking tabs)
         const tabButtons = target.closest('button[data-tab]');
         
-        // If click is outside the card content and not on tab buttons, close the form
-        if (!cardContent && !tabButtons) {
+        // Check if click is inside the admin secret dialog
+        const adminDialog = target.closest('[data-admin-dialog]');
+        
+        // If click is outside the card content and not on tab buttons or admin dialog, close the form
+        if (!cardContent && !tabButtons && !adminDialog) {
           setIsFormVisible(false);
         }
       }
@@ -93,7 +105,7 @@ const DemoLanding = () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('click', handleClickOutside);
     };
-  }, [isFormVisible]);
+  }, [isFormVisible, showAdminSecret]);
 
   // Demo functions
   const handleDemoStartRunner = () => {
@@ -131,8 +143,12 @@ const DemoLanding = () => {
     );
 
     if (result.success) {
-      toast.success('Team created successfully!');
-      navigate('/');
+      // Show admin secret dialog
+      setAdminSecret(result.adminSecret);
+      setCreatedTeamName(teamName.trim());
+      setShowAdminSecret(true);
+      // Close the form so the dialog can show properly
+      setIsFormVisible(false);
     } else {
       toast.error(result.error || 'Failed to create team');
     }
@@ -154,6 +170,12 @@ const DemoLanding = () => {
 
     if (result.success) {
       toast.success('Joined team successfully!');
+      // After joining, go straight to Dashboard
+      try {
+        useRaceStore.getState().completeSetup();
+      } catch (_) {
+        // no-op if store shape changes
+      }
       navigate('/');
     } else {
       toast.error(result.error || 'Failed to join team');
@@ -168,6 +190,7 @@ const DemoLanding = () => {
       return;
     }
 
+    // Navigate to view-only dashboard
     navigate(`/view/${viewerCode.trim()}`);
   };
 
@@ -285,7 +308,40 @@ const DemoLanding = () => {
   };
 
   return (
-          <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
+      {/* Admin Secret Display Dialog */}
+      {showAdminSecret && (
+        <div data-admin-dialog>
+          <AdminSecretDisplay
+            adminSecret={adminSecret}
+            teamName={createdTeamName}
+            onClose={() => {
+              setShowAdminSecret(false);
+              
+              // Now set the team context since the admin secret dialog is closed
+              const teamId = localStorage.getItem('relay_team_id');
+              const teamName = localStorage.getItem('relay_team_name');
+              const teamStartTime = localStorage.getItem('relay_team_start_time');
+              const joinCode = localStorage.getItem('relay_team_join_code');
+              const deviceInfoStr = localStorage.getItem('relay_device_info');
+              
+              if (teamId && teamName && teamStartTime && joinCode && deviceInfoStr) {
+                const deviceInfo = JSON.parse(deviceInfoStr);
+                
+                // Update the device info in the team context
+                setDeviceInfo(deviceInfo);
+                
+                              // Trigger a refetch to update the team context
+              refetch();
+            }
+            
+            // Navigate to setup wizard (new team flag is already set)
+            navigate('/');
+            }}
+          />
+        </div>
+      )}
+      
       {/* Header with Auth Tabs */}
       <div className="bg-card border-b border-border relative header-area">
         <div className="container mx-auto px-4 py-6">
@@ -1045,7 +1101,7 @@ const DemoLanding = () => {
               Join Existing Team
             </Button>
           </div>
-        </div>
+                </div>
       </div>
     </div>
   );
