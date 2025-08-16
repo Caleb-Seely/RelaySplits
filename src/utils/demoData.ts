@@ -1,21 +1,62 @@
 import type { Runner, Leg } from '@/types/race';
 import { LEG_DISTANCES } from './legData';
 
-// Demo runners with realistic names and paces
-export const demoRunners: Runner[] = [
-  { id: 1, name: "Sarah Johnson", pace: 420, van: 1, updated_at: null }, // 7:00 pace
-  { id: 2, name: "Mike Chen", pace: 390, van: 1, updated_at: null },     // 6:30 pace
-  { id: 3, name: "Emma Rodriguez", pace: 450, van: 1, updated_at: null }, // 7:30 pace
-  { id: 4, name: "David Kim", pace: 360, van: 1, updated_at: null },     // 6:00 pace
-  { id: 5, name: "Lisa Thompson", pace: 480, van: 1, updated_at: null }, // 8:00 pace
-  { id: 6, name: "Alex Martinez", pace: 330, van: 1, updated_at: null }, // 5:30 pace
-  { id: 7, name: "Rachel Green", pace: 420, van: 2, updated_at: null },  // 7:00 pace
-  { id: 8, name: "Chris Wilson", pace: 390, van: 2, updated_at: null },  // 6:30 pace
-  { id: 9, name: "Maria Garcia", pace: 450, van: 2, updated_at: null },  // 7:30 pace
-  { id: 10, name: "James Brown", pace: 360, van: 2, updated_at: null },  // 6:00 pace
-  { id: 11, name: "Amanda Lee", pace: 480, van: 2, updated_at: null },   // 8:00 pace
-  { id: 12, name: "Tom Anderson", pace: 330, van: 2, updated_at: null }  // 5:30 pace
+// Helper function to convert pace from MM:SS format to seconds per mile
+const paceToSeconds = (pace: string): number => {
+  const [minutes, seconds] = pace.split(':').map(Number);
+  return minutes * 60 + seconds;
+};
+
+// Helper function to shuffle array and assign random IDs
+const shuffleAndAssignIds = <T extends { id: number }>(items: Omit<T, 'id'>[]): T[] => {
+  const shuffled = [...items].sort(() => Math.random() - 0.5);
+  return shuffled.map((item, index) => ({
+    ...item,
+    id: index + 1
+  })) as T[];
+};
+
+// Demo runners with the new names and paces
+const demoRunnersData = [
+  { name: "Michael McMelon", pace: "10:15", van: 1 as const },
+  { name: "Thor Thorson", pace: "5:20", van: 1 as const },
+  { name: "Mo M.", pace: "4:45", van: 1 as const },
+  { name: "Isaak Graff", pace: "6:50", van: 1 as const },
+  { name: "Charlotte Quinn", pace: "7:00", van: 1 as const },
+  { name: "Chris Runner", pace: "5:05", van: 1 as const },
+  { name: "Diego Grace", pace: "6:15", van: 2 as const },
+  { name: "George Murphy", pace: "8:30", van: 2 as const },
+  { name: "Gus Harquil", pace: "9:45", van: 2 as const },
+  { name: "Sam Howard", pace: "7:10", van: 2 as const },
+  { name: "Oliver Quinn", pace: "5:55", van: 2 as const },
+  { name: "Kian Lewis", pace: "6:30", van: 2 as const }
 ];
+
+// Singleton to store the generated runners for this session
+let demoRunnersInstance: Runner[] | null = null;
+
+// Convert pace strings to seconds and create runners with random IDs
+export const getDemoRunners = (): Runner[] => {
+  // If we already have runners generated for this session, return them
+  if (demoRunnersInstance) {
+    return demoRunnersInstance;
+  }
+
+  // Generate new runners with random IDs
+  const runnersWithPaces = demoRunnersData.map(runner => ({
+    ...runner,
+    pace: paceToSeconds(runner.pace),
+    updated_at: null
+  }));
+  
+  demoRunnersInstance = shuffleAndAssignIds(runnersWithPaces);
+  return demoRunnersInstance;
+};
+
+// Function to reset the demo runners (useful for testing or new sessions)
+export const resetDemoRunners = (): void => {
+  demoRunnersInstance = null;
+};
 
 // Demo team data
 export const demoTeam = {
@@ -42,8 +83,10 @@ const calculateProjectedFinish = (leg: Leg, runner: Runner): number => {
 
 // Recalculate projected times for all legs based on actual times
 const recalculateProjectedTimes = (legs: Leg[]): Leg[] => {
+  const runners = getDemoRunners();
+  
   return legs.map((leg, index) => {
-    const runner = demoRunners.find(r => r.id === leg.runnerId);
+    const runner = runners.find(r => r.id === leg.runnerId);
     if (!runner) return leg;
 
     // If this leg has an actual start time, recalculate its projected finish
@@ -54,7 +97,7 @@ const recalculateProjectedTimes = (legs: Leg[]): Leg[] => {
     // Update projected start time for next leg based on previous leg's finish
     if (index > 0) {
       const prevLeg = legs[index - 1];
-      const prevRunner = demoRunners.find(r => r.id === prevLeg.runnerId);
+      const prevRunner = runners.find(r => r.id === prevLeg.runnerId);
       
       if (prevRunner) {
         // Use actual finish time if available, otherwise use projected
@@ -72,12 +115,13 @@ const recalculateProjectedTimes = (legs: Leg[]): Leg[] => {
 
 // Initialize demo legs with proper timing
 export const initializeDemoLegs = (startTime: number): Leg[] => {
+  const runners = getDemoRunners(); // Get runners once for this initialization
   let currentTime = startTime;
   
   const initialLegs: Leg[] = LEG_DISTANCES.map((distance, index) => {
     const legNumber = index + 1;
     const runnerIndex = index % 12;
-    const runner = demoRunners[runnerIndex];
+    const runner = runners[runnerIndex];
     
     // Calculate projected finish time based on runner's pace
     const projectedFinish = currentTime + (runner.pace * distance * 1000); // Convert to milliseconds

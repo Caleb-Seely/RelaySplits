@@ -37,7 +37,7 @@ import {
   Grid3X3,
   List
 } from 'lucide-react';
-import { demoRunners, getDemoStartTime, initializeDemoLegs, demoTeam, updateDemoLeg } from '@/utils/demoData';
+import { getDemoRunners, getDemoStartTime, initializeDemoLegs, demoTeam, updateDemoLeg } from '@/utils/demoData';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useTeam } from '@/contexts/TeamContext';
 import { toast } from 'sonner';
@@ -197,8 +197,8 @@ const DemoLanding = () => {
   // Demo calculations
   const currentRunner = getCurrentRunner(demoLegs, currentTime);
   const nextRunner = getNextRunner(demoLegs, currentTime);
-  const currentRunnerInfo = currentRunner ? demoRunners.find(r => r.id === currentRunner.runnerId) : null;
-  const nextRunnerInfo = nextRunner ? demoRunners.find(r => r.id === nextRunner.runnerId) : null;
+  const currentRunnerInfo = currentRunner ? getDemoRunners().find(r => r.id === currentRunner.runnerId) : null;
+  const nextRunnerInfo = nextRunner ? getDemoRunners().find(r => r.id === nextRunner.runnerId) : null;
   
   const getRaceProgress = () => {
     const totalLegs = demoLegs.length;
@@ -218,7 +218,7 @@ const DemoLanding = () => {
   const majorExchanges = getMajorExchangeTimes(demoLegs);
 
   // Filter legs by current van
-  const vanRunners = demoRunners.filter(r => r.van === currentVan);
+  const vanRunners = getDemoRunners().filter(r => r.van === currentVan);
   const vanRunnerIds = new Set(vanRunners.map(r => r.id));
   const filteredLegs = demoLegs.filter(leg => vanRunnerIds.has(leg.runnerId));
 
@@ -902,7 +902,7 @@ const DemoLanding = () => {
             {viewMode === 'cards' ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4">
                 {filteredLegs.map((leg) => {
-                  const runner = demoRunners.find(r => r.id === leg.runnerId);
+                  const runner = getDemoRunners().find(r => r.id === leg.runnerId);
                   if (!runner) return null;
 
                   const status = getLegStatus(leg, currentTime);
@@ -1003,7 +1003,7 @@ const DemoLanding = () => {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredLegs.map((leg) => {
-                          const runner = demoRunners.find(r => r.id === leg.runnerId);
+                          const runner = getDemoRunners().find(r => r.id === leg.runnerId);
                           if (!runner) return null;
 
                           const status = getLegStatus(leg, currentTime);
