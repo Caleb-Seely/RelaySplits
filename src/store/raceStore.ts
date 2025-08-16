@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { RaceData, Runner, Leg } from '@/types/race';
 import { initializeRace, recalculateProjections } from '@/utils/raceUtils';
 
+
+
 interface RaceStore extends RaceData {
   runners: (Runner & { updated_at: string | null; remoteId?: string })[];
   legs: (Leg & { updated_at: string | null; remoteId?: string })[];
@@ -16,7 +18,7 @@ interface RaceStore extends RaceData {
   updateRunner: (id: number, updates: Partial<Runner>) => void;
   setRunners: (runners: Runner[]) => void;
   updateLegDistance: (id: number, distance: number) => void;
-  updateLegActualTime: (id: number, field: 'actualStart' | 'actualFinish', time: number) => void;
+  updateLegActualTime: (id: number, field: 'actualStart' | 'actualFinish', time: number | null) => void;
   setCurrentVan: (van: 1 | 2) => void;
   nextSetupStep: () => void;
   prevSetupStep: () => void;
@@ -39,6 +41,10 @@ interface RaceStore extends RaceData {
   deleteRunner: (runnerId: number) => void;
   upsertLeg: (leg: Leg) => void;
   deleteLeg: (legId: number) => void;
+  
+  // Undo functionality
+  undoLastStartRunner: () => void;
+  canUndo: () => boolean;
 }
 
 const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
@@ -122,7 +128,8 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     const updatedLegs = [...state.legs];
     updatedLegs[legIndex] = { ...updatedLegs[legIndex], [field]: time };
 
-    if (field === 'actualFinish' && legIndex < updatedLegs.length - 1) {
+    // Only auto-set next leg start if we're setting a finish time (not clearing it)
+    if (field === 'actualFinish' && time !== null && legIndex < updatedLegs.length - 1) {
       const nextLeg = updatedLegs[legIndex + 1];
       if (!nextLeg.actualStart) {
         updatedLegs[legIndex + 1] = { ...nextLeg, actualStart: time };
@@ -287,5 +294,43 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     const updatedLegs = state.legs.filter((l) => l.id !== legId);
     const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
     return { legs: finalLegs };
-  })
+  }),
+
+
+
+  undoLastStartRunner: () => {
+    const { legs } = get();
+    
+    // Find the most recent leg with an actual start time
+    const legsWithStartTimes = legs
+      .filter(leg => leg.actualStart !== undefined && leg.actualStart !== null)
+      .sort((a, b) => (b.actualStart || 0) - (a.actualStart || 0));
+    
+    if (legsWithStartTimes.length === 0) return;
+    
+    const mostRecentLeg = legsWithStartTimes[0];
+    
+    // Remove the start time from the most recent leg
+    get().updateLegActualTime(mostRecentLeg.id, 'actualStart', null);
+    
+    // If this leg also has a finish time, remove it too
+    if (mostRecentLeg.actualFinish !== undefined && mostRecentLeg.actualFinish !== null) {
+      get().updateLegActualTime(mostRecentLeg.id, 'actualFinish', null);
+    }
+    
+    // If this isn't the first leg, also remove the finish time from the previous leg
+    // to restore the previous runner to "running" state
+    if (mostRecentLeg.id > 1) {
+      const previousLeg = legs.find(leg => leg.id === mostRecentLeg.id - 1);
+      if (previousLeg && previousLeg.actualFinish !== undefined && previousLeg.actualFinish !== null) {
+        get().updateLegActualTime(previousLeg.id, 'actualFinish', null);
+      }
+    }
+  },
+
+  canUndo: () => {
+    const { legs } = get();
+    // Can undo if there's at least one leg with an actual start time
+    return legs.some(leg => leg.actualStart !== undefined && leg.actualStart !== null);
+  }
 }));

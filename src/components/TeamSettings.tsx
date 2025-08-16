@@ -24,8 +24,10 @@ import {
   CheckCircle,
   Share2,
   Info,
-  Eye
+  Eye,
+  Undo
 } from 'lucide-react';
+import { useRaceStore } from '@/store/raceStore';
 
 interface Device {
   device_id: string;
@@ -49,6 +51,7 @@ const TeamSettings: React.FC = () => {
     removeDevice 
   } = useTeamManagement();
   const { updateTeamInviteToken } = useTeamSync();
+  const { undoLastStartRunner, canUndo } = useRaceStore();
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [teamName, setTeamName] = useState(team?.name || '');
@@ -142,6 +145,16 @@ const TeamSettings: React.FC = () => {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
     return `${Math.floor(diffMins / 1440)}d ago`;
+  };
+
+  const handleUndoStartRunner = () => {
+    try {
+      undoLastStartRunner();
+      toast.success('Start runner action undone successfully!');
+    } catch (error) {
+      console.error('Failed to undo start runner:', error);
+      toast.error('Failed to undo start runner action');
+    }
   };
 
   if (!isAdmin) {
@@ -451,6 +464,33 @@ const TeamSettings: React.FC = () => {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Undo Start Runner Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Undo className="h-4 w-4" />
+            Undo Start Runner
+          </CardTitle>
+          <CardDescription>
+            {canUndo() 
+              ? "Reset the most recent runner start time and optionally the previous runner's finish time"
+              : "No runner start times to undo"
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button 
+            variant="outline" 
+            onClick={handleUndoStartRunner}
+            disabled={!canUndo()}
+            className="text-orange-600 border-orange-200 hover:bg-orange-50 disabled:text-gray-400 disabled:border-gray-200 disabled:hover:bg-transparent"
+          >
+            <Undo className="h-4 w-4 mr-2" />
+            {canUndo() ? "Undo Start Runner" : "No Action to Undo"}
+          </Button>
         </CardContent>
       </Card>
     </div>

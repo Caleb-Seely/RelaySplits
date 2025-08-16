@@ -29,7 +29,7 @@ export const useRunnerSync = () => {
   const syncLegActualTime = useCallback(async (
     legId: number, 
     field: 'actualStart' | 'actualFinish', 
-    time: number
+    time: number | null
   ) => {
     if (!teamId) {
       console.warn('[useRunnerSync] No teamId available for sync');
@@ -45,7 +45,7 @@ export const useRunnerSync = () => {
     }
 
     const payload = {
-      [field === 'actualStart' ? 'start_time' : 'finish_time']: new Date(time).toISOString()
+      [field === 'actualStart' ? 'start_time' : 'finish_time']: time ? new Date(time).toISOString() : null
     };
 
     try {

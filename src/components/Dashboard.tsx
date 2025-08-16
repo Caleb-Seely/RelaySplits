@@ -168,10 +168,32 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
     } else if (currentRunner) {
       currentLegId = currentRunner.id;
     } else {
-      currentLegId = completedLegs + 1;
+      currentLegId = 0;
     }
     
-    return { completed: completedLegs, total: totalLegs, current: currentLegId };
+    return {
+      completed: completedLegs,
+      total: totalLegs,
+      current: currentLegId,
+      percentage: totalLegs > 0 ? (completedLegs / totalLegs) * 100 : 0
+    };
+  };
+
+  const handleStartRunner = () => {
+    if (!canEdit) return;
+    
+    const now = Date.now();
+    
+    // Determine if this is leg 1
+    const isLeg1 = nextRunner?.id === 1;
+    
+    // Do the normal start runner logic
+    if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
+      updateLegActualTime(currentRunner.id, 'actualFinish', now);
+    }
+    if (nextRunner) {
+      updateLegActualTime(nextRunner.id, 'actualStart', now);
+    }
   };
 
   const isRaceComplete = () => {
@@ -549,16 +571,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
                         </span>
                         {nextRunner && (
                           <Button
-                            onClick={() => {
-                              if (!canEdit) return;
-                              const now = Date.now();
-                              // If there is a current runner active, end them first
-                              if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
-                                updateLegActualTime(currentRunner.id, 'actualFinish', now);
-                              }
-                              // Start the next runner
-                              updateLegActualTime(nextRunner.id, 'actualStart', now);
-                            }}
+                            onClick={handleStartRunner}
                             disabled={!canEdit}
                             size="sm"
                             className={`font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 ${

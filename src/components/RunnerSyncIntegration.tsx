@@ -35,15 +35,15 @@ export const RunnerSyncIntegration = () => {
       if (!prevLeg) return;
 
       // Check for actualStart changes
-      if (currentLeg.actualStart !== prevLeg.actualStart && currentLeg.actualStart) {
+      if (currentLeg.actualStart !== prevLeg.actualStart) {
         console.log(`[RunnerSyncIntegration] Detected actualStart change for leg ${currentLeg.id}`);
-        syncLegActualTime(currentLeg.id, 'actualStart', currentLeg.actualStart);
+        syncLegActualTime(currentLeg.id, 'actualStart', currentLeg.actualStart || null);
       }
 
       // Check for actualFinish changes
-      if (currentLeg.actualFinish !== prevLeg.actualFinish && currentLeg.actualFinish) {
+      if (currentLeg.actualFinish !== prevLeg.actualFinish) {
         console.log(`[RunnerSyncIntegration] Detected actualFinish change for leg ${currentLeg.id}`);
-        syncLegActualTime(currentLeg.id, 'actualFinish', currentLeg.actualFinish);
+        syncLegActualTime(currentLeg.id, 'actualFinish', currentLeg.actualFinish || null);
       }
 
       // Check for runner assignment changes
