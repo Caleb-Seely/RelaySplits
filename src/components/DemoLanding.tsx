@@ -347,7 +347,7 @@ const DemoLanding = () => {
         <div className="container mx-auto px-4 py-6">
           <div className="text-center mb-6">
             <h1 className="text-4xl font-bold text-foreground mb-2">TeamSplits</h1>
-            <p className="text-xl text-muted-foreground">Real-time relay race tracking for your team</p>
+            <p className="text-xl text-muted-foreground">Stay in sync, every leg of the race.</p>
           </div>
           
           {/* Tab Headers - Primary Navigation */}
@@ -533,13 +533,6 @@ const DemoLanding = () => {
 
       {/* Demo Content */}
       <div className={`container mx-auto px-4 py-8 ${isFormVisible ? 'blur-sm' : ''}`}>
-        {/* Demo Badge */}
-        <div className="text-center mb-6">
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200 px-4 py-2 text-sm font-medium">
-            <Zap className="h-4 w-4 mr-2" />
-            Interactive Demo - Try the features below!
-          </Badge>
-        </div>
 
         {/* Progress Bar - Updated to match real dashboard */}
         <div className="max-w-xl mx-auto bg-card backdrop-blur-sm rounded-lg p-3 shadow-md border border-border mb-8">
@@ -571,12 +564,7 @@ const DemoLanding = () => {
               </div>
             </div>
             <div className="justify-self-center text-center">
-              <div className="flex items-center justify-center">
-                <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-2 py-1">
-                  <Zap className="h-3 w-3 mr-1" />
-                  Demo
-                </Badge>
-              </div>
+
             </div>
             <div className="justify-self-end text-right">
               <div className="text-sm font-bold text-primary">

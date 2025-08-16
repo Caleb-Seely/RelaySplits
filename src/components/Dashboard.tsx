@@ -62,9 +62,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 interface DashboardProps {
   isViewOnly?: boolean;
+  viewOnlyTeamName?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
+const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamName }) => {
   const {
     runners,
     legs,
@@ -307,7 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
           <div className="text-center space-y-3">
             <div className="mb-2">
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                {team?.name || 'Team Name'}
+                {isViewOnly && viewOnlyTeamName ? viewOnlyTeamName : (team?.name || 'Team Name')}
               </h1>
             </div>
 
@@ -731,15 +732,18 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
                   </Button>
                 )}
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={manualRetry}
-                  title="Manual retry realtime connections"
-                >
-                  <Cloud className="h-4 w-4 mr-2" />
-                  Sync
-                </Button>
+                {/* Sync button - hidden in view-only mode */}
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={manualRetry}
+                    title="Manual retry realtime connections"
+                  >
+                    <Cloud className="h-4 w-4 mr-2" />
+                    Sync
+                  </Button>
+                )}
 
                 {/* Join Code Button */}
                 {team?.join_code && (
@@ -755,21 +759,23 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
                 )}
               </div>
               
-              {/* Right side - Fallback share button */}
-              <div className="flex items-center gap-2">
-                {!team?.join_code && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={copyJoinCode}
-                    className="h-9 px-4"
-                    aria-label="Copy team join code"
-                  >
-                    <Share2 className="h-4 w-4 mr-1" />
-                    Share w/ Teammates
-                  </Button>
-                )}
-              </div>
+              {/* Right side - Fallback share button - hidden in view-only mode */}
+              {canEdit && (
+                <div className="flex items-center gap-2">
+                  {!team?.join_code && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyJoinCode}
+                      className="h-9 px-4"
+                      aria-label="Copy team join code"
+                    >
+                      <Share2 className="h-4 w-4 mr-1" />
+                      Share w/ Teammates
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </footer>
@@ -827,3 +833,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false }) => {
 };
 
 export default Dashboard;
+
+
+

@@ -54,6 +54,7 @@ const ViewOnlyDashboard = () => {
       // Only reset hasFetchedData on actual unmount
       hasFetchedData.current = false;
       fetchInProgress.current = false;
+      // Clean up viewer-specific localStorage items
     };
   }, []);
 
@@ -113,6 +114,8 @@ const ViewOnlyDashboard = () => {
         // Don't persist viewer info to localStorage - viewers are stateless
         localStorage.removeItem('relay_team_id');
         localStorage.removeItem('relay_device_info');
+        
+
         
         // Debug: Check what's in localStorage after setting device info
         console.log('[ViewOnlyDashboard] Device info set:', deviceInfo);
@@ -213,21 +216,13 @@ const ViewOnlyDashboard = () => {
             <div className="flex items-center gap-2">
               <Eye className="h-5 w-5 text-blue-600" />
               <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                View Only Mode
+                View Only
               </Badge>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
                 {teamData.teamName}
               </span>
-              <Button 
-                variant="outline" 
-                onClick={() => navigate('/auth')}
-                className="flex items-center gap-2"
-              >
-                <Users className="h-4 w-4" />
-                Join Team
-              </Button>
             </div>
           </div>
         </div>
@@ -272,14 +267,7 @@ const ViewOnlyDashboard = () => {
             <span className="text-sm text-muted-foreground">
               {teamData.teamName}
             </span>
-            <Button 
-              variant="outline" 
-              onClick={() => navigate('/auth')}
-              className="flex items-center gap-2"
-            >
-              <Users className="h-4 w-4" />
-              Join Team
-            </Button>
+            
           </div>
         </div>
       </div>
@@ -295,9 +283,12 @@ const ViewOnlyDashboard = () => {
       )}
 
       {/* Dashboard with view-only mode */}
-      <Dashboard isViewOnly={true} />
+      <Dashboard isViewOnly={true} viewOnlyTeamName={teamData.teamName} />
     </div>
   );
 };
 
 export default ViewOnlyDashboard;
+
+
+
