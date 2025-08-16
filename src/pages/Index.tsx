@@ -13,6 +13,7 @@ import { runDiagnostics } from '@/utils/diagnostics';
 import Dashboard from '@/components/Dashboard';
 import SetupWizard from '@/components/SetupWizard';
 import TeamSetup from '@/components/TeamSetup';
+import DemoLanding from '@/components/DemoLanding';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
@@ -148,9 +149,9 @@ const Index = () => {
     );
   }
 
-  // Redirect to auth if no team is found
+  // Show demo landing page if no team is found (instead of redirecting to auth)
   if (!isInTeam && !hasStoredTeam) {
-    return <Navigate to="/auth" replace />;
+    return <DemoLanding />;
   }
 
   return (

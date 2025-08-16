@@ -41,7 +41,7 @@ export function parsePace(pace: string): number {
 }
 
 /**
- * Formats seconds into a pace string in MM:SS format.
+ * Formats pace in MM:SS format, rounding seconds to whole numbers.
  * @param seconds - Total seconds per mile
  * @returns Formatted pace string (e.g., "7:30")
  * @example
@@ -49,7 +49,7 @@ export function parsePace(pace: string): number {
  */
 export function formatPace(seconds: number): string {
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const secs = Math.round(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
