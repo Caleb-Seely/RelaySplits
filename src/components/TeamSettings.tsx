@@ -48,6 +48,7 @@ const TeamSettings: React.FC = () => {
     listDevices, 
     removeDevice 
   } = useTeamManagement();
+  const { updateTeamInviteToken } = useTeamSync();
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [teamName, setTeamName] = useState(team?.name || '');
@@ -102,6 +103,10 @@ const TeamSettings: React.FC = () => {
     try {
       const result = await rotateInviteToken();
       setInviteToken(result.invite_token);
+      
+      // Update the team context with the new invite token
+      updateTeamInviteToken(result.invite_token);
+      
       toast.success('Invite link rotated successfully!');
     } catch (err) {
       console.error('Failed to rotate invite:', err);
@@ -157,8 +162,8 @@ const TeamSettings: React.FC = () => {
           <CardContent>
             <AdminRecovery 
               teamId={team?.id || ''}
-              onSuccess={() => {
-                // Refresh the page to update the UI
+              onSuccess={async (deviceId) => {
+                // Refresh the page to update the UI since we're switching from non-admin to admin
                 window.location.reload();
               }}
             />
@@ -338,8 +343,15 @@ const TeamSettings: React.FC = () => {
             
             <AdminRecovery 
               teamId={team?.id || ''}
-              onSuccess={() => {
+              onSuccess={async (deviceId) => {
                 toast.success('Admin access recovered successfully!');
+                // Refresh device list and team data
+                await loadDevices();
+                // Force a re-render by updating team state
+                if (team) {
+                  setTeamName(team.name);
+                  setStartTime(team.start_time);
+                }
               }}
             />
           </div>

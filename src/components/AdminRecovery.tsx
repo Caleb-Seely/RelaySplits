@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useTeamManagement } from '@/hooks/useTeamManagement';
 import { useTeam } from '@/contexts/TeamContext';
+import { useTeamSync } from '@/hooks/useTeamSync';
 import { toast } from 'sonner';
 import { Shield, AlertTriangle, CheckCircle, Key } from 'lucide-react';
 
@@ -18,6 +19,7 @@ interface AdminRecoveryProps {
 const AdminRecovery: React.FC<AdminRecoveryProps> = ({ teamId, onSuccess }) => {
   const { adminRecovery, loading, error } = useTeamManagement();
   const { setDeviceInfo } = useTeam();
+  const { refreshTeamData } = useTeamSync();
   
   const [isOpen, setIsOpen] = useState(false);
   const [adminSecret, setAdminSecret] = useState('');
@@ -54,6 +56,11 @@ const AdminRecovery: React.FC<AdminRecoveryProps> = ({ teamId, onSuccess }) => {
         localStorage.setItem('relay_device_info', JSON.stringify(newDeviceInfo));
         localStorage.setItem('relay_device_id', result.deviceId);
         setDeviceInfo(newDeviceInfo);
+
+        // Wait a bit for the context to update, then refresh team data
+        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('[AdminRecovery] About to refresh team data');
+        await refreshTeamData();
 
         setSuccessMessage('Admin access recovered successfully!');
         toast.success('Admin access recovered successfully!');

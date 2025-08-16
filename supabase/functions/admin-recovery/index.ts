@@ -102,12 +102,25 @@ serve(async (req) => {
       )
     }
 
-    // If there are existing admins, this is not a recovery scenario
+    // If there are existing admins, remove them first (admin secret proves ownership)
+    // This allows recovery when cache is cleared and device IDs are lost
     if (existingAdmins && existingAdmins.length > 0) {
-      return new Response(
-        JSON.stringify({ error: 'Admin recovery not needed. Active admin devices exist' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      console.log(`Removing ${existingAdmins.length} existing admin devices for recovery`)
+      
+      // Remove all existing admin devices
+      const { error: removeError } = await supabase
+        .from('team_devices')
+        .delete()
+        .eq('team_id', teamId)
+        .eq('role', 'admin')
+
+      if (removeError) {
+        console.error('Failed to remove existing admin devices:', removeError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to remove existing admin devices for recovery' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // Generate new device ID

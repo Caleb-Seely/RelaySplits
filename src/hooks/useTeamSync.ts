@@ -84,12 +84,16 @@ export const useTeamSync = () => {
   const fetchTeamDetails = async (teamId: string) => {
     try {
       const deviceId = getDeviceId();
+      console.log('[fetchTeamDetails] Fetching team details for teamId:', teamId, 'deviceId:', deviceId);
       
       // Use teams-get to fetch team details including join_code and invite_token
       const result = await invokeEdge<{ team: { id: string; name: string; start_time: string; join_code: string; invite_token?: string } }>('teams-get', { teamId, deviceId });
       
+      console.log('[fetchTeamDetails] Result:', result);
+      
       if (!(result as any).error) {
         const teamData = (result as any).data.team;
+        console.log('[fetchTeamDetails] Team data received:', teamData);
         
         // Store team details in localStorage
         localStorage.setItem('relay_team_name', teamData.name);
@@ -97,6 +101,9 @@ export const useTeamSync = () => {
         localStorage.setItem('relay_team_join_code', teamData.join_code);
         if (teamData.invite_token) {
           localStorage.setItem('relay_team_invite_token', teamData.invite_token);
+          console.log('[fetchTeamDetails] Stored invite token:', teamData.invite_token);
+        } else {
+          console.log('[fetchTeamDetails] No invite token in team data');
         }
         
         // Set team in state
@@ -111,6 +118,8 @@ export const useTeamSync = () => {
         // Sync race store start time with team start time
         const race = useRaceStore.getState();
         race.setStartTime(new Date(teamData.start_time).getTime());
+      } else {
+        console.error('[fetchTeamDetails] Error in result:', (result as any).error);
       }
     } catch (error) {
       console.error('Error fetching team details:', error);
@@ -334,6 +343,16 @@ export const useTeamSync = () => {
     race.forceReset();
   };
 
+  const refreshTeamData = async () => {
+    const currentTeamId = deviceInfo?.teamId || localStorage.getItem('relay_team_id');
+    console.log('[refreshTeamData] Refreshing team data for teamId:', currentTeamId);
+    if (currentTeamId) {
+      await fetchTeamDetails(currentTeamId);
+    } else {
+      console.log('[refreshTeamData] No teamId available');
+    }
+  };
+
   const updateTeamStartTime = async (newStartTime: Date) => {
     if (!team || !deviceInfo) return { error: 'Not ready' };
     
@@ -377,6 +396,13 @@ export const useTeamSync = () => {
     }
   };
 
+  const updateTeamInviteToken = (newInviteToken: string) => {
+    if (team) {
+      setTeam({ ...team, invite_token: newInviteToken });
+      localStorage.setItem('relay_team_invite_token', newInviteToken);
+    }
+  };
+
   return {
     team,
     deviceInfo,
@@ -385,6 +411,8 @@ export const useTeamSync = () => {
     joinTeam,
     leaveTeam,
     refetch: loadStoredTeamInfo,
-    updateTeamStartTime
+    refreshTeamData,
+    updateTeamStartTime,
+    updateTeamInviteToken
   };
 };
