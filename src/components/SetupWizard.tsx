@@ -211,44 +211,47 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
 
   const renderStep1 = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="text-center">
         <p className="text-gray-600">Set your race start time and configure your runners</p>
-        <p className="text-gray-500 text-sm mt-1">You can edit this later from the Dashboard.</p>
+        <p className="text-gray-500 text-sm mt-1">You can edit this later from the Dashboard</p>
       </div>
 
       {/* Race Start Time Section */}
-      <div className="max-w-md mx-auto">
+      <div className="max-w-sm mx-auto">
         <Card>
-          <CardContent>
+          <CardContent className="px-4 py-6">
             <div className="space-y-3">
-              <div className="space-y-2">
+              <div className="text-center space-y-3">
                 <Label>When does your wave start?</Label>
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <DateTimePicker
-                    value={selectedDateTime}
-                    onChange={handleDateTimeChange}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        size: 'small',
-                        placeholder: 'Select race start date and time'
-                      }
-                    }}
-                  />
-                </LocalizationProvider>
+                <div className="flex justify-center">
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DateTimePicker
+                      value={selectedDateTime}
+                      onChange={handleDateTimeChange}
+                      slotProps={{
+                        textField: {
+                          fullWidth: false,
+                          size: 'small',
+                          placeholder: 'Select race start date and time',
+                          sx: { width: '280px' }
+                        }
+                      }}
+                    />
+                  </LocalizationProvider>
+                </div>
+                {startTime && (
+                  <div className="flex items-center justify-center gap-2 text-blue-700 text-sm">
+                    <Waves className="h-4 w-4" />
+                    <span className="font-medium">Fun starts at {formatRaceTime(startTime)}</span>
+                  </div>
+                )}
+                {startTime && (
+                  <div className="text-gray-500 text-xs">
+                    {formatDate(startTime)}
+                  </div>
+                )}
               </div>
-              {startTime && (
-                <div className="flex items-center justify-center gap-2 text-blue-700 text-sm">
-                  <Waves className="h-4 w-4" />
-                  <span className="font-medium">Fun starts at {formatRaceTime(startTime)}</span>
-                </div>
-              )}
-              {startTime && (
-                <div className="text-center text-gray-500 text-xs">
-                  {formatDate(startTime)}
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>

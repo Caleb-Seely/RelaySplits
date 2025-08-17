@@ -25,6 +25,7 @@ import {
   getEffectiveStartTime
 } from '@/utils/raceUtils';
 import { getLegDirectionsUrl } from '@/utils/legData';
+import { getRandomCelebrationMessage } from '@/utils/celebrationMessages';
 import {
   Clock,
   Users,
@@ -46,7 +47,11 @@ import {
   Eye,
   Cloud,
   Clipboard,
-  Copy as CopyIcon
+  Copy as CopyIcon,
+  Undo,
+  Download,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import LegScheduleTable from './LegScheduleTable';
 import MajorExchanges from './MajorExchanges';
@@ -59,6 +64,55 @@ import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
 import TeamSettings from './TeamSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+// Import confetti with proper ES module syntax and fallback
+let confetti: any = null;
+
+// Function to initialize confetti
+const initConfetti = async () => {
+  try {
+    // Check if canvas is supported
+    const canvas = document.createElement('canvas');
+    if (!canvas.getContext) {
+      console.error('Canvas not supported in this browser');
+      return;
+    }
+
+    // Try ES module import first
+    const confettiModule = await import('canvas-confetti');
+    confetti = confettiModule.default || confettiModule;
+    console.log('Confetti loaded successfully via ES module import');
+    
+    // Test if confetti is callable
+    if (typeof confetti === 'function') {
+      console.log('Confetti is a callable function');
+    } else {
+      console.error('Confetti is not a callable function:', typeof confetti);
+      confetti = null;
+    }
+  } catch (e) {
+    console.warn('ES module import failed, trying require...');
+    try {
+      // Fallback to require
+      confetti = require('canvas-confetti');
+      console.log('Confetti loaded successfully via require');
+      
+      // Test if confetti is callable
+      if (typeof confetti === 'function') {
+        console.log('Confetti is a callable function (require)');
+      } else {
+        console.error('Confetti is not a callable function (require):', typeof confetti);
+        confetti = null;
+      }
+    } catch (requireError) {
+      console.error('Failed to load confetti:', requireError);
+      confetti = null;
+    }
+  }
+};
+
+// Initialize confetti when component loads
+initConfetti();
 
 interface DashboardProps {
   isViewOnly?: boolean;
@@ -108,6 +162,59 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   } | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [isStartingRunner, setIsStartingRunner] = useState(false);
+
+  // Test confetti function for debugging
+  const testConfetti = () => {
+    console.log('Testing confetti, confetti object:', confetti);
+    triggerConfetti({ particleCount: 50, spread: 50 });
+  };
+
+  // Robust confetti trigger function
+  const triggerConfetti = (options = {}) => {
+    if (confetti) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        ...options
+      });
+      return true;
+    } else {
+      console.warn('Confetti not available, attempting to initialize...');
+      initConfetti().then(() => {
+        if (confetti) {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+            ...options
+          });
+        } else {
+          // Fallback: trigger a simple CSS animation
+          console.log('Using fallback animation');
+          const button = document.querySelector('.start-runner-button');
+          if (button) {
+            button.classList.add('animate-pulse', 'bg-green-400');
+            setTimeout(() => {
+              button.classList.remove('animate-pulse', 'bg-green-400');
+            }, 1000);
+          }
+        }
+      });
+      return false;
+    }
+  };
+
+  // Initialize confetti when component mounts
+  useEffect(() => {
+    initConfetti();
+  }, []);
+
+  // Debug confetti status
+  useEffect(() => {
+    console.log('Confetti status changed:', confetti ? 'Available' : 'Not available');
+  }, [confetti]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -179,20 +286,28 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     };
   };
 
-  const handleStartRunner = () => {
-    if (!canEdit) return;
+  const handleStartRunner = async () => {
+    if (!canEdit || !nextRunner || isStartingRunner) return;
     
-    const now = Date.now();
+    setIsStartingRunner(true);
     
-    // Determine if this is leg 1
-    const isLeg1 = nextRunner?.id === 1;
-    
-    // Do the normal start runner logic
-    if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
-      updateLegActualTime(currentRunner.id, 'actualFinish', now);
-    }
-    if (nextRunner) {
-      updateLegActualTime(nextRunner.id, 'actualStart', now);
+    try {
+      // Trigger confetti
+      console.log('Triggering confetti for start runner');
+      triggerConfetti({ particleCount: 100, spread: 70 });
+      
+      // First, finish the current runner if there is one running
+      if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
+        updateLegActualTime(currentRunner.id, 'actualFinish', Date.now());
+      }
+      
+      // Then start the next runner
+      updateLegActualTime(nextRunner.id, 'actualStart', Date.now());
+    } finally {
+      // Add a small delay to prevent rapid clicking
+      setTimeout(() => {
+        setIsStartingRunner(false);
+      }, 1000);
     }
   };
 
@@ -359,8 +474,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               <div className="absolute inset-0 bg-green-500 h-1"></div>
 
               <div className="p-2 sm:p-3 md:p-4 bg-green-500/10 rounded-b-none rounded-lg">
-                {currentRunner && currentRunnerInfo ? (
-                  <div className="space-y-4">
+                <div className="space-y-4">
+                  {currentRunner && currentRunnerInfo ? (
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-2xl font-bold text-foreground">
@@ -381,66 +496,111 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
-                      <Clock className="h-8 w-8 text-muted-foreground" />
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-2xl font-bold text-muted-foreground">
+                          No Active Runner
+                        </h3>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                          <Clock className="h-4 w-4" />
+                          <span>Waiting for next leg</span>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="w-12 h-8 rounded flex items-center justify-center mb-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                          <span>--</span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-muted-foreground font-medium">No runner currently active</p>
-                    <p className="text-sm text-muted-foreground mt-1">Waiting for next leg to begin</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               <CardContent className="pt-4">
-                {
-                  currentRunner && currentRunnerInfo ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-foreground mb-2">
-                          {currentRunner.distance} mi
+                <div className="space-y-4">
+                  {currentRunner && currentRunnerInfo ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-foreground mb-2">
+                            {currentRunner.distance} mi
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            Distance
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          Distance
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-green-500 mb-2">
+                            {(() => {
+                              if (!currentRunner || !currentRunnerInfo) return '--';
+                              const startTime = currentRunner.actualStart || currentRunner.projectedStart;
+                              return formatDuration(currentTime.getTime() - startTime);
+                            })()}
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                            <Timer className="h-4 w-4" />
+                            Running Time
+                          </div>
                         </div>
                       </div>
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-green-500 mb-2">
-                          {(() => {
-                            if (!currentRunner || !currentRunnerInfo) return '--';
-                            const startTime = currentRunner.actualStart || currentRunner.projectedStart;
-                            return formatDuration(currentTime.getTime() - startTime);
-                          })()}
-                        </div>
-                        <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-                          <Timer className="h-4 w-4" />
-                          Running Time
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <div className="w-full bg-muted rounded-full h-3">
-                        <div
-                          className="bg-green-500 h-3 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.max(0, ((currentRunner.distance - getRemainingDistance()) / currentRunner.distance) * 100)}%` }}
-                        ></div>
+                      <div className="space-y-2">
+                        <div className="w-full bg-muted rounded-full h-3 progress-shimmer">
+                          <div
+                            className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.max(0, ((currentRunner.distance - getRemainingDistance()) / currentRunner.distance) * 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-base font-bold text-foreground">
+                          <span>
+                            {formatTime(currentRunner.actualStart || currentRunner.projectedStart)}
+                          </span>
+                          <span className="text-green-500">
+                            ~{getRemainingDistance().toFixed(1)} miles left
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-baseline text-base font-bold text-foreground">
-                        <span>
-                          {formatTime(currentRunner.actualStart || currentRunner.projectedStart)}
-                        </span>
-                        <span className="text-green-500">
-                          ~{getRemainingDistance().toFixed(1)} miles left
-                        </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-muted-foreground mb-2">
+                            --
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            Distance
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-muted-foreground mb-2">
+                            --
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                            <Timer className="h-4 w-4" />
+                            Running Time
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ) : null
-                }
+
+                      <div className="space-y-2">
+                        <div className="w-full bg-muted rounded-full h-3">
+                          <div className="bg-muted h-3 rounded-full"></div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-base font-bold text-muted-foreground">
+                          <span>--</span>
+                          <span>--</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -449,90 +609,240 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               <div className="absolute inset-0 bg-blue-500 h-1"></div>
 
               <div className="p-2 sm:p-3 md:p-4 bg-blue-500/10 rounded-b-none rounded-lg">
-                {nextRunner && nextRunnerInfo ? (
+                {(() => {
+                  // Check if race is completed (leg 36 has actual finish time)
+                  const leg36 = legs.find(leg => leg.id === 36);
+                  const isRaceCompleted = leg36?.actualFinish;
+                  
+                  // Show race completed content only if leg 36 is finished
+                  if (isRaceCompleted) {
+                    return false; // This will trigger the else block with race completed content
+                  }
+                  
+                  // Show next runner content if there is a next runner OR if leg 36 is currently running
+                  return (nextRunner && nextRunnerInfo) || (leg36?.actualStart && !leg36?.actualFinish);
+                })() ? (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground">
-                          {nextRunnerInfo.name}
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                          <Users className="h-4 w-4" />
-                          <span>Van {nextRunnerInfo.van}</span>
+                    {(() => {
+                      const leg36 = legs.find(leg => leg.id === 36);
+                      const isLeg36Running = leg36?.actualStart && !leg36?.actualFinish;
+                      
+                      // If leg 36 is running and there's no next runner, show special content
+                      if (isLeg36Running && !nextRunner) {
+                        const leg36Runner = runners.find(r => r.id === leg36.runnerId);
+                        return (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="text-2xl font-bold text-foreground">
+                                {'Hood 2 Coast 2025!'}
+                              </h3>
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                                <Users className="h-4 w-4" />
+                                <span>PARTY BUS</span>
+                              </div>
+                            </div>
+                            <div className="text-center">
+                              <Badge className="bg-red-500 text-white text-sm px-3 py-1 font-semibold mb-2">
+                                <Trophy className="h-4 w-4 mr-0.5" />
+                                Finish
+                              </Badge>
+                              <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                                <Target className="h-4 w-4" />
+                                <span>20:25</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Otherwise show next runner content
+                      return (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-2xl font-bold text-foreground">
+                              {nextRunnerInfo.name}
+                            </h3>
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                              <Users className="h-4 w-4" />
+                              <span>Van {nextRunnerInfo.van}</span>
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <Badge 
+                              onClick={() => {
+                                const directionsUrl = getLegDirectionsUrl(nextRunner.id);
+                                window.open(directionsUrl, '_blank');
+                              }}
+                              className="bg-blue-500 text-white text-sm px-3 py-1 font-semibold mb-2 cursor-pointer hover:bg-blue-600 transition-colors duration-200"
+                            >
+                              <MapPin className="h-4 w-4 mr-0.5" />
+                              Leg {nextRunner.id}
+                            </Badge>
+                            <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                              <Target className="h-4 w-4" />
+                              <span>{formatPace((nextRunner as any).paceOverride ?? nextRunnerInfo.pace)}</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-center">
-                        <Badge 
-                          onClick={() => {
-                            const directionsUrl = getLegDirectionsUrl(nextRunner.id);
-                            window.open(directionsUrl, '_blank');
-                          }}
-                          className="bg-blue-500 text-white text-sm px-3 py-1 font-semibold mb-2 cursor-pointer hover:bg-blue-600 transition-colors duration-200"
-                        >
-                          <MapPin className="h-4 w-4 mr-0.5" />
-                          Leg {nextRunner.id}
-                        </Badge>
-                        <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
-                          <Target className="h-4 w-4" />
-                          <span>{formatPace((nextRunner as any).paceOverride ?? nextRunnerInfo.pace)}</span>
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-green-500/20 rounded-full flex items-center justify-center">
-                      <Trophy className="h-8 w-8 text-green-500" />
+
+                    <p className="text-3xl font-bold text-green-500 mb-2">Happy Hood 2 Coast 2025!</p>
+                    
+                    {/* Race Stats */}
+                    <div className="space-y-3 mt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-foreground">
+                            {(() => {
+                              const completedLegs = legs.filter(leg => leg.actualFinish);
+                              if (completedLegs.length === 0) return '--';
+                              
+                              const totalPace = completedLegs.reduce((sum, leg) => {
+                                const runTime = leg.actualFinish! - leg.actualStart!;
+                                const paceSeconds = runTime / (leg.distance * 1000); // Convert to seconds per mile
+                                return sum + paceSeconds;
+                              }, 0);
+                              
+                              const avgPaceSeconds = totalPace / completedLegs.length;
+                              return formatPace(avgPaceSeconds);
+                            })()}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Team Avg Pace</div>
+                        </div>
+                        
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-foreground">
+                            {(() => {
+                              const completedLegs = legs.filter(leg => leg.actualFinish);
+                              if (completedLegs.length === 0) return '--';
+                              
+                              let fastestPace = Infinity;
+                              let fastestLeg = null;
+                              
+                              completedLegs.forEach(leg => {
+                                const runTime = leg.actualFinish! - leg.actualStart!;
+                                const paceSeconds = runTime / (leg.distance * 1000);
+                                if (paceSeconds < fastestPace) {
+                                  fastestPace = paceSeconds;
+                                  fastestLeg = leg;
+                                }
+                              });
+                              
+                              return fastestPace !== Infinity ? formatPace(fastestPace) : '--';
+                            })()}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Fastest Leg</div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-center gap-2 mt-4">
+                        <Button
+                          onClick={() => {
+                            console.log('Triggering confetti for celebrate');
+                            triggerConfetti({ particleCount: 150, spread: 80 });
+                            toast(getRandomCelebrationMessage());
+                          }}
+                          size="sm"
+                          className="bg-green-500 hover:bg-green-600 text-white"
+                        >
+                          🎉 Celebrate
+                        </Button>
+                        
+                        <Button
+                          onClick={() => {
+                            // Export functionality would go here
+                            toast.success('Export feature coming soon!');
+                          }}
+                          size="sm"
+                          className="bg-blue-500 hover:bg-blue-600 text-white"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Export Results
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-xl font-bold text-green-500 mb-2">Race Completed!</p>
-                    <p className="text-sm text-muted-foreground">Congratulations on finishing</p>
                   </div>
                 )}
               </div>
 
               <CardContent className="pt-4">
-                {nextRunner && nextRunnerInfo ? (
+                {(() => {
+                  // Check if race is completed (leg 36 has actual finish time)
+                  const leg36 = legs.find(leg => leg.id === 36);
+                  const isRaceCompleted = leg36?.actualFinish;
+                  
+                  // Show race completed content only if leg 36 is finished
+                  if (isRaceCompleted) {
+                    return false; // This will trigger the else block with race completed content
+                  }
+                  
+                  // Show next runner content if there is a next runner OR if leg 36 is currently running
+                  return (nextRunner && nextRunnerInfo) || (leg36?.actualStart && !leg36?.actualFinish);
+                })() ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-foreground mb-2">
-                          {nextRunner.distance} mi
+                    {(() => {
+                      const leg36 = legs.find(leg => leg.id === 36);
+                      const isLeg36Running = leg36?.actualStart && !leg36?.actualFinish;
+                      
+                      // If leg 36 is running and there's no next runner, show special content
+                      if (isLeg36Running && !nextRunner) {
+                        return (
+                        <div className="text-center">
+                        <div className="text-4xl font-bold text-foreground">
+                           See ya at the next one!
                         </div>
-                        <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          Distance
                         </div>
-                      </div>
+                        );
+                      }
+                      
+                      // Otherwise show next runner content
+                      return (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center">
+                            <div className="text-3xl font-bold text-foreground mb-2">
+                              {nextRunner.distance} mi
+                            </div>
+                            <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                              <MapPin className="h-4 w-4" />
+                              Distance
+                            </div>
+                          </div>
 
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-foreground mb-2">
-                          {(() => {
-                            const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
-                            const isFirstLeg = nextRunner && nextRunner.id === 1;
-                            
-                            // Before race starts, show official start time for leg 1
-                            if (isFirstLeg && isBeforeRaceStart) {
-                              return formatRaceTime(actualRaceStartTime);
-                            }
-                            
-                            // For other legs or after race starts, use effective start time
-                            return formatRaceTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime));
-                          })()}
+                          <div className="text-center">
+                            <div className="text-3xl font-bold text-foreground mb-2">
+                              {(() => {
+                                const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
+                                const isFirstLeg = nextRunner && nextRunner.id === 1;
+                                
+                                // Before race starts, show official start time for leg 1
+                                if (isFirstLeg && isBeforeRaceStart) {
+                                  return formatRaceTime(actualRaceStartTime);
+                                }
+                                
+                                // For other legs or after race starts, use effective start time
+                                return formatRaceTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime));
+                              })()}
+                            </div>
+                            <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                              <Target className="h-4 w-4" />
+                              {(() => {
+                                const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
+                                const isFirstLeg = nextRunner && nextRunner.id === 1;
+                                
+                                if (isFirstLeg && isBeforeRaceStart) {
+                                  return 'Official Start';
+                                }
+                                return 'Projected Start';
+                              })()}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-                          <Target className="h-4 w-4" />
-                          {(() => {
-                            const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
-                            const isFirstLeg = nextRunner && nextRunner.id === 1;
-                            
-                            if (isFirstLeg && isBeforeRaceStart) {
-                              return 'Official Start';
-                            }
-                            return 'Projected Start';
-                          })()}
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
 
                     <div className="space-y-2">
                       <div className="w-full h-3 flex items-center">
@@ -541,6 +851,14 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                       <div className="flex justify-between items-baseline text-base font-bold text-foreground">
                         <span className="text-blue-500">
                           {(() => {
+                            const leg36 = legs.find(leg => leg.id === 36);
+                            const isLeg36Running = leg36?.actualStart && !leg36?.actualFinish;
+                            
+                            // If leg 36 is running and there's no next runner, show special message
+                            if (isLeg36Running && !nextRunner) {
+                              return 'Final leg in progress - almost there!';
+                            }
+                            
                             const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
                             const isFirstLeg = nextRunner && nextRunner.id === 1;
                             if (isFirstLeg && isBeforeRaceStart) {
@@ -549,21 +867,72 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                             return `${getNextRunnerPrefix()} ${getCountdownToNext()}`;
                           })()}
                         </span>
-                        {nextRunner && (
-                          <Button
-                            onClick={handleStartRunner}
-                            disabled={!canEdit}
-                            size="sm"
-                            className={`font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
-                              canEdit 
-                                ? 'bg-green-500 hover:bg-green-600 text-white' 
-                                : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                            }`}
-                          >
-                            <Play className="h-4 w-4" />
-                            Start Runner
-                          </Button>
-                        )}
+                        {(() => {
+                          const leg36 = legs.find(leg => leg.id === 36);
+                          const isLeg36Running = leg36?.actualStart && !leg36?.actualFinish;
+                          
+                          // If leg 36 is running and there's no next runner, only show Finish Race button
+                          if (isLeg36Running && !nextRunner) {
+                            return (
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={() => {
+                                    updateLegActualTime(36, 'actualFinish', Date.now());
+                                    console.log('Triggering confetti for finish race');
+                                    triggerConfetti({ particleCount: 200, spread: 100 });
+                                  }}
+                                  size="sm"
+                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white"
+                                >
+                                  <Trophy className="h-4 w-4" />
+                                  Finish Race
+                                </Button>
+                              </div>
+                            );
+                          }
+                          
+                          // Otherwise show next runner buttons
+                          return nextRunner && (
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handleStartRunner}
+                                disabled={!canEdit || isStartingRunner}
+                                size="sm"
+                                className={`start-runner-button font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                                  canEdit && !isStartingRunner
+                                    ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                    : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                }`}
+                              >
+                                {isStartingRunner ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Play className="h-4 w-4" />
+                                )}
+                                {isStartingRunner ? 'Starting...' : 'Start Runner'}
+                              </Button>
+                              
+                              {/* Finish Race Button - only show when leg 36 is currently running */}
+                              {(() => {
+                                const leg36 = legs.find(leg => leg.id === 36);
+                                return leg36?.actualStart && !leg36?.actualFinish && canEdit;
+                              })() && (
+                                <Button
+                                  onClick={() => {
+                                    updateLegActualTime(36, 'actualFinish', Date.now());
+                                    console.log('Triggering confetti for finish race');
+                                    triggerConfetti({ particleCount: 200, spread: 100 });
+                                  }}
+                                  size="sm"
+                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white"
+                                >
+                                  <Trophy className="h-4 w-4" />
+                                  Finish Race
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -658,7 +1027,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     className={`px-3 text-xs h-8 transition-all duration-200 ${
                       viewMode === 'cards'
                         ? 'bg-background text-foreground shadow-md'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                        : 'text-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <Grid3X3 className="h-3 w-3 mr-1.5" />
@@ -671,7 +1040,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     className={`px-3 text-xs h-8 transition-all duration-200 ${
                       viewMode === 'table'
                         ? 'bg-background text-foreground shadow-md'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                        : 'text-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <List className="h-3 w-3 mr-1.5" />
@@ -710,20 +1079,16 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     Settings
                   </Button>
                 )}
-                
-                {/* Sync button - hidden in view-only mode */}
-                {canEdit && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={manualRetry}
-                    title="Manual retry realtime connections"
-                  >
-                    <Cloud className="h-4 w-4 mr-2" />
-                    Sync
-                  </Button>
-                )}
 
+                {/* Temporary test confetti button for debugging */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={testConfetti}
+                >
+                  🎉 Test Confetti
+                </Button>
+                
                 {/* Join Code Button */}
                 {team?.join_code && (
                   <Button
@@ -732,8 +1097,35 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     onClick={copyJoinCode}
                     title={`Click to copy ${isViewOnly ? 'viewer code' : 'join code'}`}
                   >
-                    <CopyIcon className="h-4 w-4 mr-0.5" />
+                    <Eye className="h-4 w-4 mr-0.5" />
                     {team.join_code}
+                  </Button>
+                )}
+
+                {/* View Only Button - Eye Icon */}
+                {isViewOnly && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title="View Only Mode"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                )}
+
+                {/* Invite Token Copy Button */}
+                {team?.invite_token && canEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(team.invite_token);
+                      toast.success('Invite token copied to clipboard');
+                    }}
+                    title="Copy invite token"
+                  >
+                    <Users className="h-4 w-4 mr-1" />
+                    Invite
                   </Button>
                 )}
               </div>

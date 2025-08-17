@@ -111,6 +111,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_team_devices_updated_at ON public.team_devices;
 CREATE TRIGGER update_team_devices_updated_at 
   BEFORE UPDATE ON public.team_devices 
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

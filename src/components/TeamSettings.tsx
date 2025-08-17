@@ -210,7 +210,7 @@ const TeamSettings: React.FC = () => {
               className="h-12 text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 disabled:text-gray-400 disabled:bg-gray-50 disabled:border-gray-200 rounded-lg font-medium"
             >
               <Undo className="h-4 w-4 mr-2" />
-              {canUndo ? "Undo Last Action" : "No Actions to Undo"}
+              {canUndo ? "Undo Last Start/Finish" : "No Actions to Undo"}
             </Button>
             
             <Button 

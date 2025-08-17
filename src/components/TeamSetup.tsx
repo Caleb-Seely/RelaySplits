@@ -85,14 +85,16 @@ const TeamSetup: React.FC<TeamSetupProps> = ({ onTeamReady, createTeam, joinTeam
                     required
                   />
                   <div className="space-y-1">
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                      <DateTimePicker
-                        label="Race Start Time"
-                        value={startTime}
-                        onChange={(newValue) => setStartTime(newValue)}
-                        slotProps={{ textField: { fullWidth: true, size: 'small', required: true } }}
-                      />
-                    </LocalizationProvider>
+                    <div className="flex justify-center">
+                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <DateTimePicker
+                          label="Race Start Time"
+                          value={startTime}
+                          onChange={(newValue) => setStartTime(newValue)}
+                          slotProps={{ textField: { fullWidth: true, size: 'small', required: true } }}
+                        />
+                      </LocalizationProvider>
+                    </div>
                   </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>

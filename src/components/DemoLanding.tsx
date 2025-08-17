@@ -82,7 +82,7 @@ const DemoLanding = () => {
         const target = event.target as Element;
         
         // Check if click is inside the actual card content (the Card component)
-        const cardContent = target.closest('.form-card .max-w-md');
+        const cardContent = target.closest('.form-card .bg-gray-100');
         
         // Check if click is inside the tab buttons (to prevent closing when clicking tabs)
         const tabButtons = target.closest('button[data-tab]');
@@ -462,26 +462,27 @@ const DemoLanding = () => {
         {isFormVisible && (
           <div className="absolute top-full left-0 right-0 z-10 form-card">
             <div className="container mx-auto px-2">
-              <div className="max-w-md mx-auto">
-                                 <Card className="bg-white rounded-b-2xl shadow-2xl border border-gray-200 overflow-hidden -mt-1 transition-all duration-500 ease-in-out">
-                  <CardContent className="p-8">
+              <div className="flex justify-center">
+                <div className="flex bg-gray-100 rounded-xl">
+                                 <Card className="bg-white rounded-b-2xl border border-gray-200 overflow-hidden -mt-1 transition-all duration-500 ease-in-out w-80">
+                  <CardContent className="p-4">
                     {activeTab === 'view' && (
                                              <form onSubmit={handleViewTeam} className="space-y-2">
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           <Input
                             id="viewerCode"
                             value={viewerCode}
                             onChange={(e) => setViewerCode(e.target.value)}
                             placeholder="0 0 0 0 0 0"
                             maxLength={6}
-                            className="text-center font-mono text-xl tracking-widest h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                            className="text-center font-mono text-xl tracking-widest h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
                             required
                             autoFocus
                           />
                         </div>
                                                                            <Button 
                             type="submit" 
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-14 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700"
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-10 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700"
                           >
                             View Team
                           </Button>
@@ -490,24 +491,24 @@ const DemoLanding = () => {
                     
                     {activeTab === 'join' && (
                       <form onSubmit={handleJoinTeam} className="space-y-2">
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                                                      <Input
                              id="join-firstName"
                              value={firstName}
                              onChange={(e) => setFirstName(e.target.value)}
                              placeholder="First name"
-                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
                              required
                              autoFocus
                            />
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                                                      <Input
                              id="join-lastName"
                              value={lastName}
                              onChange={(e) => setLastName(e.target.value)}
                              placeholder="Last name"
-                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base"
+                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base"
                              required
                            />
                         </div>
@@ -517,13 +518,13 @@ const DemoLanding = () => {
                              value={inviteToken}
                              onChange={(e) => setInviteToken(e.target.value)}
                              placeholder="Invite token"
-                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
                              required
                            />
                         </div>
                                                                            <Button 
                             type="submit" 
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-14 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-10 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
                             disabled={loading}
                           >
                             {loading ? 'Joining...' : 'Join Team'}
@@ -539,7 +540,7 @@ const DemoLanding = () => {
                              value={firstName}
                              onChange={(e) => setFirstName(e.target.value)}
                              placeholder="First name"
-                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
                              required
                              autoFocus
                            />
@@ -550,7 +551,7 @@ const DemoLanding = () => {
                              value={lastName}
                              onChange={(e) => setLastName(e.target.value)}
                              placeholder="Last name"
-                             className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
                              required
                            />
                         </div>
@@ -560,13 +561,13 @@ const DemoLanding = () => {
                             value={teamName}
                             onChange={(e) => setTeamName(e.target.value)}
                             placeholder="Team name"
-                            className="h-14 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
                             required
                           />
                         </div>
                                                                            <Button 
                             type="submit" 
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl h-14 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
+                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl h-10 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
                             disabled={loading}
                           >
                             {loading ? 'Creating...' : 'Create Team'}
@@ -575,6 +576,7 @@ const DemoLanding = () => {
                     )}
                   </CardContent>
                 </Card>
+                </div>
               </div>
             </div>
           </div>

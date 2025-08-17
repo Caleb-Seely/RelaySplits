@@ -324,7 +324,7 @@ const RunnerAssignmentModal: React.FC<RunnerAssignmentModalProps> = ({ isOpen, o
           {/* Helper */}
           <div className="text-xs text-muted-foreground flex items-center gap-2">
             <Badge variant="outline">Tip</Badge>
-            Click legs to toggle selection. Van tabs filter the grid only; your selection is preserved across vans.
+            Click legs to toggle selection. 
           </div>
         </div>
       </DialogContent>

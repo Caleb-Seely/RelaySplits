@@ -38,6 +38,12 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
     }
   };
 
+  // Function to truncate the secret for display
+  const getTruncatedSecret = (secret: string) => {
+    if (secret.length <= 36) return secret;
+    return `${secret.substring(0, 8)}...${secret.substring(secret.length - 8)}`;
+  };
+
   return (
     <Dialog open={true} onOpenChange={handleClose}>
       <DialogContent className="max-w-sm mx-auto border-0 shadow-2xl bg-white rounded-3xl p-0 overflow-hidden">
@@ -59,10 +65,9 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
               <div className="flex items-start gap-3">
                 
                 <div className="flex-1 min-w-0">
-
-                  <p className="text-xs leading-relaxed">
-                  <AlertTriangle className="h-4 w-4 text-orange-600" />
-                    This secret will only be shown once and cannot be recovered!
+                  <p className="text-xs leading-relaxed flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                    This secret will only be shown once!
                   </p>
                 </div>
               </div>
@@ -75,8 +80,8 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
               {/* Secret Text */}
               <div className="mb-4">
                 <div className="bg-white/90 rounded-xl p-4 border border-gray-200/50 shadow-sm">
-                  <div className="font-mono text-xs text-gray-900 break-all leading-relaxed tracking-wide">
-                    {showSecret ? adminSecret : '•'.repeat(Math.min(adminSecret.length, 48))}
+                  <div className="font-mono text-xs text-gray-900 leading-relaxed tracking-wide whitespace-nowrap overflow-hidden">
+                    {showSecret ? getTruncatedSecret(adminSecret) : '•'.repeat(Math.min(adminSecret.length, 16))}
                   </div>
                 </div>
               </div>
@@ -129,43 +134,14 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
             >
               I've Saved My Secret
             </button>
-            <p className="text-center text-xs text-gray-500 mt-4 px-4">
-              Tap to close once you've securely stored your admin secret
-            </p>
           </div>
         </div>
 
-        {/* iOS-style close indicator */}
+        {/* Close indicator */}
         <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-10 h-1 bg-gray-300 rounded-full" />
       </DialogContent>
     </Dialog>
   );
 };
-
-// Demo wrapper to show the component
-function Demo() {
-  const [showDialog, setShowDialog] = useState(true);
-  
-  return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      {showDialog && (
-        <AdminSecretDisplay
-          adminSecret="sk_admin_abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
-          teamName="Acme Design Team"
-          onClose={() => setShowDialog(false)}
-        />
-      )}
-      
-      {!showDialog && (
-        <button 
-          onClick={() => setShowDialog(true)}
-          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-        >
-          Show Admin Secret Dialog
-        </button>
-      )}
-    </div>
-  );
-}
 
 export default AdminSecretDisplay;
