@@ -43,9 +43,17 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedTeamId = localStorage.getItem('relay_team_id');
       const storedDeviceInfo = localStorage.getItem('relay_device_info');
       
+      console.log('[TeamContext] Loading stored info:', {
+        storedTeamId,
+        storedDeviceInfo: storedDeviceInfo ? 'present' : 'null'
+      });
+      
       if (storedTeamId && storedDeviceInfo) {
         const deviceInfo = JSON.parse(storedDeviceInfo) as DeviceInfo;
+        console.log('[TeamContext] Setting device info from localStorage:', deviceInfo);
         setDeviceInfoState(deviceInfo);
+      } else {
+        console.log('[TeamContext] No stored team info found');
       }
     } catch (error) {
       console.error('Error loading stored team info:', error);
@@ -55,14 +63,17 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setDeviceInfo = (info: DeviceInfo | null) => {
+    console.log('[TeamContext] setDeviceInfo called with:', info);
     setDeviceInfoState(info);
     
     if (info) {
       localStorage.setItem('relay_team_id', info.teamId);
       localStorage.setItem('relay_device_info', JSON.stringify(info));
+      console.log('[TeamContext] Updated localStorage with team info');
     } else {
       localStorage.removeItem('relay_team_id');
       localStorage.removeItem('relay_device_info');
+      console.log('[TeamContext] Cleared localStorage team info');
     }
   };
 

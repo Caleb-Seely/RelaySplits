@@ -163,7 +163,7 @@ serve(async (req) => {
     const response: AdminRecoveryResponse = {
       success: true,
       deviceId: deviceId,
-      message: 'Recovery admin device created successfully'
+      message: 'Recovery admin device created successfully',
     }
 
     return new Response(

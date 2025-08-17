@@ -136,7 +136,10 @@ export const useTeamManagement = () => {
     first_name?: string;
     last_name?: string;
     display_name?: string;
-  }) => {
+  }): Promise<{
+    success: boolean;
+    deviceId: string;
+  }> => {
     if (!deviceInfo?.teamId) {
       throw new Error('No team found');
     }

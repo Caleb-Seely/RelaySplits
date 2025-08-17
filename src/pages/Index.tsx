@@ -39,6 +39,19 @@ const Index = () => {
   // Initialize Supabase sync
   const { fetchInitialData } = useSyncManager();
 
+  console.log('[Index] Component render - current state:', {
+    teamId,
+    deviceInfo,
+    teamSyncDeviceInfo,
+    isNewTeam,
+    isInTeam,
+    teamContextLoading,
+    teamLoading,
+    isAdmin,
+    isSetupComplete,
+    isSetupLocked
+  });
+
   useEffect(() => {
     console.log('[Index] Team context updated - team?.id:', team?.id, 'isNewTeam:', isNewTeam);
     // Ensure store knows current teamId so sync hooks can run
@@ -48,6 +61,14 @@ const Index = () => {
         console.log('[Index] Setting teamId in store from', current, 'to', team.id);
         useRaceStore.getState().setTeamId(team.id);
       }
+      
+      // If this is a new team and we now have the team context loaded, remove the flag
+      if (isNewTeam) {
+        console.log('[Index] Team context loaded for new team, removing flag');
+        console.log('[Index] Flag before removal:', localStorage.getItem('relay_is_new_team'));
+        localStorage.removeItem('relay_is_new_team');
+        console.log('[Index] Flag after removal:', localStorage.getItem('relay_is_new_team'));
+      }
     }
   }, [team?.id, isNewTeam]);
 
@@ -55,16 +76,17 @@ const Index = () => {
   useEffect(() => {
     const flag = localStorage.getItem('relay_is_new_team');
     console.log('[Index] Checking for new team flag:', flag);
+    console.log('[Index] Current team context state - teamId:', teamId, 'deviceInfo:', deviceInfo);
     if (flag) {
       console.log('[Index] Setting isNewTeam to true');
       setIsNewTeam(true);
-      localStorage.removeItem('relay_is_new_team');
+      // Don't remove the flag yet - wait until team context is loaded
     } else {
       // If no flag is found, explicitly set to false to indicate this is not a new team
       console.log('[Index] No new team flag found, setting isNewTeam to false');
       setIsNewTeam(false);
     }
-  }, []);
+  }, []); // Revert back to empty array
 
   useEffect(() => {
     // Only fetch initial data if we have a teamId, user is not a viewer, and we've determined it's not a new team
@@ -172,15 +194,16 @@ const Index = () => {
 
       {/* Main content */}
       <main className="container mx-auto px-2 sm:px-4 py-2">
-        {isSetupComplete || isSetupLocked || !isAdmin ? (
-          <>
-            <Dashboard />
-          </>
-        ) : (
-          <>
-            <SetupWizard isNewTeam={isNewTeam} />
-          </>
-        )}
+        {(() => {
+          console.log('[Index] Rendering decision - isSetupComplete:', isSetupComplete, 'isSetupLocked:', isSetupLocked, 'isAdmin:', isAdmin, 'isNewTeam:', isNewTeam);
+          if (isSetupComplete || isSetupLocked || !isAdmin) {
+            console.log('[Index] Showing Dashboard');
+            return <Dashboard />;
+          } else {
+            console.log('[Index] Showing SetupWizard with isNewTeam:', isNewTeam);
+            return <SetupWizard isNewTeam={isNewTeam} />;
+          }
+        })()}
       </main>
     </div>
   );

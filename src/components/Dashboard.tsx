@@ -97,7 +97,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
   const [distanceValue, setDistanceValue] = useState('');
   const [timePickerOpen, setTimePickerOpen] = useState(false);
-  const [startTimePickerOpen, setStartTimePickerOpen] = useState(false);
   const [runnerEditModalOpen, setRunnerEditModalOpen] = useState(false);
   const [selectedRunner, setSelectedRunner] = useState<number | null>(null);
   const [initialLegId, setInitialLegId] = useState<number | null>(null);
@@ -272,24 +271,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     }
   };
 
-  const handleTimeSubmit = (timestamp: number) => {
-    if (!canEdit) return;
-    if (timePickerConfig) {
-      updateLegActualTime(timePickerConfig.legId, timePickerConfig.field, timestamp);
-    }
+  const handleTimeSubmit = async (timestamp: number) => {
+    if (!timePickerConfig) return;
+    
+    updateLegActualTime(timePickerConfig.legId, timePickerConfig.field, timestamp);
     setTimePickerOpen(false);
     setTimePickerConfig(null);
-  };
-
-  const handleStartTimeSubmit = async (timestamp: number) => {
-    // Update local projections/store first
-    useRaceStore.getState().setStartTime(timestamp);
-    // Persist to team if available
-    if (updateTeamStartTime) {
-      await updateTeamStartTime(new Date(timestamp));
-    }
-    toast.success('Official team start time updated');
-    setStartTimePickerOpen(false);
   };
 
   const progress = getRaceProgress();
@@ -338,23 +325,15 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                 </div>
               </div>
               <div className="grid grid-cols-3 items-center mt-2">
-                <button
-                  type="button"
-                  onClick={() => setStartTimePickerOpen(true)}
-                  disabled={!canEdit}
-                  className={`justify-self-start text-left group focus:outline-none ${
-                    !canEdit ? 'cursor-not-allowed opacity-50' : ''
-                  }`}
-                  aria-label={canEdit ? "Edit official team start time" : "View only - cannot edit"}
-                >
-                  <div className="text-sm font-bold text-foreground underline decoration-dotted underline-offset-2 group-hover:text-primary">
+                <div className="justify-self-start text-left">
+                  <div className="text-sm font-bold text-foreground">
                     {formatTime(actualRaceStartTime)}
                   </div>
                   <div className="flex items-center justify-start gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
                     <span>Start</span>
                   </div>
-                </button>
+                </div>
                 <div className="justify-self-center text-center">
                   <div className="flex items-center justify-center">
                     <SyncStatusIndicator />
@@ -780,15 +759,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
           </div>
         </footer>
       </div>
-
-      {/* Team Start Time Picker */}
-      <TimePicker
-        isOpen={startTimePickerOpen}
-        onClose={() => setStartTimePickerOpen(false)}
-        onTimeSelect={handleStartTimeSubmit}
-        title="Set Official Team Start Time"
-        initialTime={startTime}
-      />
 
       {/* Existing Leg Time Picker */}
       {timePickerConfig && (

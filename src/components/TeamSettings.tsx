@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { useTeam } from '@/contexts/TeamContext';
 import { useTeamManagement } from '@/hooks/useTeamManagement';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import AdminRecovery from './AdminRecovery';
+import TimePicker from './TimePicker';
 import { toast } from 'sonner';
 import { 
   Settings, 
@@ -25,7 +26,9 @@ import {
   Share2,
   Info,
   Eye,
-  Undo
+  Undo,
+  Plus,
+  MoreVertical
 } from 'lucide-react';
 import { useRaceStore } from '@/store/raceStore';
 
@@ -39,9 +42,28 @@ interface Device {
   created_at: string;
 }
 
+const formatLastSeen = (lastSeen: string) => {
+  const now = new Date();
+  const lastSeenDate = new Date(lastSeen);
+  const diffMs = now.getTime() - lastSeenDate.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  
+  if (diffMins < 5) return 'Active now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+  return `${Math.floor(diffMins / 1440)}d ago`;
+};
+
+const shortenInviteToken = (token: string, maxLength: number = 12) => {
+  if (!token || token.length <= maxLength) return token;
+  const start = Math.floor(maxLength / 2);
+  const end = token.length - Math.floor(maxLength / 2);
+  return `${token.substring(0, start)}...${token.substring(end)}`;
+};
+
 const TeamSettings: React.FC = () => {
   const { deviceInfo } = useTeam();
-  const { team } = useTeamSync();
+  const { team, refreshTeamData } = useTeamSync();
   const { 
     loading, 
     error, 
@@ -59,6 +81,7 @@ const TeamSettings: React.FC = () => {
   const [inviteToken, setInviteToken] = useState<string>('');
   const [showRemoveDialog, setShowRemoveDialog] = useState<Device | null>(null);
   const [showStoredAdminSecret, setShowStoredAdminSecret] = useState(false);
+  const [startTimePickerOpen, setStartTimePickerOpen] = useState(false);
 
   // Check if current device is admin
   const isAdmin = deviceInfo?.role === 'admin';
@@ -74,7 +97,7 @@ const TeamSettings: React.FC = () => {
       setTeamName(team.name);
       setStartTime(team.start_time);
     }
-  }, [team]);
+  }, [team?.name, team?.start_time]);
 
   const loadDevices = async () => {
     try {
@@ -87,15 +110,18 @@ const TeamSettings: React.FC = () => {
 
   const handleUpdateTeam = async () => {
     try {
-      const updates: any = {};
+      const updates: { name?: string } = {};
       if (teamName !== team?.name) updates.name = teamName;
-      if (startTime !== team?.start_time) updates.start_time = startTime;
       
       if (Object.keys(updates).length === 0) {
         return;
       }
 
       await updateTeam(updates);
+      
+      // Refresh team data to update local state
+      await refreshTeamData();
+      
       toast.success('Team updated successfully!');
     } catch (err) {
       console.error('Failed to update team:', err);
@@ -128,23 +154,11 @@ const TeamSettings: React.FC = () => {
   };
 
   const copyInviteLink = () => {
-    if (inviteToken) {
-      const inviteUrl = `${window.location.origin}/join?token=${inviteToken}`;
+    if (team?.invite_token) {
+      const inviteUrl = `${team.invite_token}`;
       navigator.clipboard.writeText(inviteUrl);
-      toast.success('Invite link copied to clipboard!');
+      toast.success('Invite token copied to clipboard!');
     }
-  };
-
-  const formatLastSeen = (lastSeen: string) => {
-    const date = new Date(lastSeen);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    return `${Math.floor(diffMins / 1440)}d ago`;
   };
 
   const handleUndoStartRunner = () => {
@@ -157,202 +171,280 @@ const TeamSettings: React.FC = () => {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="space-y-6">
-
-        {/* Admin Recovery for Non-Admin Users */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Admin Recovery
-            </CardTitle>
-            <CardDescription>
-              If you've lost access to your admin device, you can recover admin access using your admin secret.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AdminRecovery 
-              teamId={team?.id || ''}
-              onSuccess={async (deviceId) => {
-                // Refresh the page to update the UI since we're switching from non-admin to admin
-                window.location.reload();
-              }}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Team Information (Read-only for non-admins) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Info className="h-5 w-5" />
-              Team Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Team Name</Label>
-              <div className="p-3 bg-muted rounded-md">
-                {team?.name || 'Loading...'}
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Race Start Time</Label>
-              <div className="p-3 bg-muted rounded-md">
-                {team?.start_time ? new Date(team.start_time).toLocaleString() : 'Loading...'}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-
-      </div>
-    );
-  }
+  const handleStartTimeSubmit = async (timestamp: number) => {
+    try {
+      const newStartTime = new Date(timestamp).toISOString();
+      setStartTime(newStartTime);
+      
+      // Update the team with the new start time
+      await updateTeam({ start_time: newStartTime });
+      
+      // Refresh team data to update local state
+      await refreshTeamData();
+      
+      toast.success('Race start time updated successfully!');
+      setStartTimePickerOpen(false);
+    } catch (err) {
+      console.error('Failed to update start time:', err);
+      toast.error('Failed to update start time');
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Error Message */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+    <div className="min-h-screen bg-gray-50 pb-8">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-6">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Team Settings</h1>
+        </div>
+      </div>
 
-      {/* Team Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Team Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="team-name">Team Name</Label>
-            <Input
-              id="team-name"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              placeholder="Enter team name"
-            />
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* Quick Actions */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Button 
+              variant="outline" 
+              onClick={handleUndoStartRunner}
+              disabled={!canUndo}
+              className="h-12 text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 disabled:text-gray-400 disabled:bg-gray-50 disabled:border-gray-200 rounded-lg font-medium"
+            >
+              <Undo className="h-4 w-4 mr-2" />
+              {canUndo ? "Undo Last Action" : "No Actions to Undo"}
+            </Button>
+            
+            <Button 
+              onClick={copyInviteLink}
+              className="h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share Invite Link
+            </Button>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="start-time">Race Start Time</Label>
-            <Input
-              id="start-time"
-              type="datetime-local"
-              value={startTime ? new Date(startTime).toISOString().slice(0, 16) : ''}
-              onChange={(e) => setStartTime(new Date(e.target.value).toISOString())}
-            />
-          </div>
+        </div>
 
-          <Button 
-            onClick={handleUpdateTeam} 
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? 'Updating...' : 'Update Team'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Invite Management */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Share2 className="h-5 w-5" />
-            Invite Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Share this invite link with people who want to join your team. Only admins can generate new invite links.
-          </p>
-          
-          {/* Current Invite Token - Show for everyone */}
-          {team?.invite_token && (
-            <div className="space-y-3">
-              <div 
-                className="bg-primary/10 border border-primary/20 rounded-lg px-3 sm:px-4 py-3 font-mono font-bold text-primary text-sm sm:text-lg tracking-wider cursor-pointer hover:bg-primary/20 transition-colors relative"
-                onClick={() => {
-                  const inviteUrl = `${window.location.origin}/join?token=${team.invite_token}`;
-                  navigator.clipboard.writeText(inviteUrl);
-                  toast.success('Invite link copied to clipboard!');
-                }}
-                title="Click to copy invite link"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="break-all">{team.invite_token}</span>
-                  <Copy className="h-4 w-4 text-primary/70 hover:text-primary transition-colors ml-2 sm:ml-3 flex-shrink-0" />
-                </div>
+        {/* Invite Link Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                <Share2 className="h-4 w-4 text-orange-600" />
               </div>
-              
+              <h2 className="text-lg font-semibold text-gray-900">Invite Token</h2>
             </div>
-          )}
+          </div>
+          <div className="p-6 space-y-4">
+            <div 
+              className="group bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-all duration-200"
+              onClick={copyInviteLink}
+            >
+              <div className="flex items-center justify-between">
+                <div className="font-mono text-lg font-bold text-blue-700 tracking-wider truncate flex-1 mr-3">
+                  {team?.invite_token ? shortenInviteToken(team.invite_token) : 'Loading...'}
+                </div>
+                <Copy className="h-5 w-5 text-blue-600 group-hover:text-blue-700 transition-colors flex-shrink-0" />
+              </div>
+              <p className="text-xs text-blue-600 mt-1">Tap to copy full token</p>
+            </div>
+            
+            <Button 
+              onClick={handleRotateInvite}
+              disabled={loading}
+              variant="outline" 
+              className="w-full rounded-lg border-gray-200 text-gray-600 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              {loading ? 'Generating...' : 'Generate New Token'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Team Configuration */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Settings className="h-4 w-4 text-blue-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900">Team Configuration</h2>
+            </div>
+          </div>
           
-          {/* Rotate button - Only for admins */}
-          {isAdmin && (
-            <div className="pt-2 border-t">
-              <Button 
-                onClick={handleRotateInvite} 
-                disabled={loading}
+          <div className="p-6 space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="team-name" className="text-sm font-medium text-gray-700">Team Name</Label>
+              <Input
+                id="team-name"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="Enter team name"
+                disabled={!isAdmin}
+                className={`h-12 px-4 rounded-lg ${
+                  isAdmin 
+                    ? 'border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-gray-900' 
+                    : 'border-gray-200 bg-gray-50 text-gray-900 cursor-not-allowed'
+                }`}
+              />
+              {!isAdmin && (
+                <p className="text-xs text-gray-500">Only admins can edit team name</p>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="start-time" className="text-sm font-medium text-gray-700">Race Start Time</Label>
+              <p className="text-xs text-gray-500">
+                {isAdmin ? 'Click to set start time (saves immediately)' : 'Only admins can edit start time'}
+              </p>
+              <Button
                 variant="outline"
-                className="w-full"
+                onClick={() => setStartTimePickerOpen(true)}
+                disabled={!isAdmin}
+                className={`h-12 px-4 rounded-lg w-full justify-start text-left ${
+                  isAdmin 
+                    ? 'border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-gray-900' 
+                    : 'border-gray-200 bg-gray-50 text-gray-900 cursor-not-allowed'
+                }`}
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Generate New Invite Link
+                <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                {startTime ? new Date(startTime).toLocaleString() : 'Set race start time'}
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
+            <Button 
+              onClick={handleUpdateTeam}
+              disabled={loading || !isAdmin}
+              className={`w-full h-12 rounded-lg font-medium ${
+                isAdmin 
+                  ? 'bg-gray-900 hover:bg-gray-800 text-white' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {loading ? 'Updating...' : isAdmin ? 'Save Changes' : 'Only admins can save changes'}
+            </Button>
+          </div>
+        </div>
 
+        {/* Team Members */}
+        {isAdmin && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Users className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Team Members</h2>
+                    <p className="text-sm text-gray-600">{devices.length} active members</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" className="rounded-lg" onClick={loadDevices} disabled={loading}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-1">
+                {devices.map((device, index) => (
+                  <div key={device.device_id} className="group">
+                    <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-all duration-200">
+                      {/* Avatar */}
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                        {device.first_name?.[0] || 'U'}{device.last_name?.[0] || ''}
+                      </div>
+                      
+                      {/* Member Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h3 className="font-semibold text-gray-900">{device.display_name}</h3>
+                          <Badge 
+                            variant={device.role === 'admin' ? 'default' : 'secondary'} 
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              device.role === 'admin' 
+                                ? 'bg-purple-100 text-purple-700 border-0' 
+                                : 'bg-gray-100 text-gray-600 border-0'
+                            }`}
+                          >
+                            {device.role === 'admin' ? (
+                              <>
+                                <Shield className="h-3 w-3 mr-1" />
+                                Admin
+                              </>
+                            ) : (
+                              ''
+                            )}
+                          </Badge>
+                          {device.device_id === deviceInfo?.deviceId && (
+                            <Badge className="bg-blue-100 text-blue-700 border-0 px-2 py-1 rounded-full text-xs">
+                              You
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <div className={`w-2 h-2 rounded-full ${formatLastSeen(device.last_seen) === 'Active now' ? 'bg-green-400' : 'bg-gray-300'}`} />
+                          <span>{formatLastSeen(device.last_seen)}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Actions */}
+                      {device.device_id !== deviceInfo?.deviceId && isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowRemoveDialog(device)}
+                          className="opacity-70 group-hover:opacity-100 transition-opacity duration-200 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg p-2"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    {index < devices.length - 1 && <div className="h-px bg-gray-100 mx-3" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
-      {/* Admin Recovery */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Admin Recovery
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              If you lose access to your admin device, you can recover access using your admin secret.
-              Keep this secret safe - it's your backup way to regain admin access.
+        {/* Admin Recovery */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                <Shield className="h-4 w-4 text-red-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900">Admin Recovery</h2>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Keep your admin secret safe as a backup way to regain access if you lose your device.
             </p>
             
-            {/* Show stored admin secret if available */}
-            {(() => {
-              const storedSecret = localStorage.getItem('relay_admin_secret');
-              return storedSecret ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Your Admin Secret</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowStoredAdminSecret(!showStoredAdminSecret)}
-                    >
-                      {showStoredAdminSecret ? 'Hide' : 'Show'}
-                    </Button>
-                  </div>
-                  {showStoredAdminSecret && (
-                    <div className="p-3 bg-gray-100 rounded-md font-mono text-sm">
-                      {storedSecret}
-                    </div>
-                  )}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Admin Secret</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowStoredAdminSecret(!showStoredAdminSecret)}
+                  className="text-xs rounded-lg"
+                >
+                  <Eye className="h-3 w-3 mr-1" />
+                  {showStoredAdminSecret ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+              
+              {showStoredAdminSecret && (
+                <div className="p-3 bg-gray-100 rounded-lg font-mono text-sm text-gray-700 break-all">
+                  {(() => {
+                    const storedSecret = localStorage.getItem('relay_admin_secret');
+                    return storedSecret || 'No secret stored';
+                  })()}
                 </div>
-              ) : null;
-            })()}
+              )}
+            </div>
             
             <AdminRecovery 
               teamId={team?.id || ''}
@@ -368,131 +460,54 @@ const TeamSettings: React.FC = () => {
               }}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Team Members */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Team Members ({devices.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {devices.map((device) => (
-              <div key={device.device_id} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium truncate">{device.display_name}</span>
-                    <Badge variant={device.role === 'admin' ? 'default' : 'secondary'} className="flex-shrink-0">
-                      {device.role === 'admin' ? (
-                        <>
-                          <Shield className="h-3 w-3 mr-1" />
-                          Admin
-                        </>
-                      ) : (
-                        'Member'
-                      )}
-                    </Badge>
-                    {device.device_id === deviceInfo?.deviceId && (
-                      <Badge variant="outline" className="flex-shrink-0">You</Badge>
-                    )}
-                  </div>
-                  <div className="text-sm text-gray-500 mt-1 truncate">
-                    {device.first_name} {device.last_name}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-                    <Clock className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">Last seen: {formatLastSeen(device.last_seen)}</span>
-                  </div>
-                </div>
-                
-                {device.device_id !== deviceInfo?.deviceId && (
-                  <Dialog open={showRemoveDialog?.device_id === device.device_id} onOpenChange={(open) => !open && setShowRemoveDialog(null)}>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowRemoveDialog(device)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-2xl rounded-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Remove Team Member</DialogTitle>
-                        <DialogDescription>
-                          Are you sure you want to remove <strong>{device.display_name}</strong> from the team? 
-                          This action cannot be undone and they will lose access to all team data.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <DialogFooter className="flex-col sm:flex-row gap-2">
-                        <Button variant="outline" onClick={() => setShowRemoveDialog(null)} className="w-full sm:w-auto">
-                          Cancel
-                        </Button>
-                        <Button 
-                          variant="destructive" 
-                          onClick={() => handleRemoveDevice(device)}
-                          disabled={loading}
-                          className="w-full sm:w-auto"
-                        >
-                          {loading ? 'Removing...' : 'Remove Member'}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                )}
-              </div>
-            ))}
-            
-            {devices.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No team members found</p>
-                <Button 
-                  onClick={loadDevices} 
-                  variant="outline" 
-                  className="mt-2"
-                  disabled={loading}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Remove Dialog */}
+      <Dialog open={!!showRemoveDialog} onOpenChange={(open) => !open && setShowRemoveDialog(null)}>
+        <DialogContent className="max-w-sm mx-4 rounded-xl">
+          <DialogHeader className="space-y-3">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+            </div>
+            <DialogTitle className="text-xl font-semibold text-center">Remove Team Member</DialogTitle>
+            <DialogDescription className="text-center text-gray-600 leading-relaxed">
+              Are you sure you want to remove <strong className="text-gray-900">{showRemoveDialog?.display_name}</strong> from the team? 
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-3 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowRemoveDialog(null)} 
+              className="flex-1 rounded-lg border-gray-200"
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                if (showRemoveDialog) {
+                  handleRemoveDevice(showRemoveDialog);
+                }
+              }}
+              disabled={loading}
+              className="flex-1 rounded-lg bg-red-600 hover:bg-red-700"
+            >
+              {loading ? 'Removing...' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Undo Start Runner Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Undo className="h-4 w-4" />
-            Undo Start Runner
-          </CardTitle>
-          <CardDescription>
-            {canUndo() 
-              ? "Reset the most recent runner start time and optionally the previous runner's finish time"
-              : "No runner start times to undo"
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button 
-            variant="outline" 
-            onClick={handleUndoStartRunner}
-            disabled={!canUndo()}
-            className="text-orange-600 border-orange-200 hover:bg-orange-50 disabled:text-gray-400 disabled:border-gray-200 disabled:hover:bg-transparent"
-          >
-            <Undo className="h-4 w-4 mr-2" />
-            {canUndo() ? "Undo Start Runner" : "No Action to Undo"}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Time Picker Modal */}
+      <TimePicker
+        isOpen={startTimePickerOpen}
+        onClose={() => setStartTimePickerOpen(false)}
+        onTimeSelect={handleStartTimeSubmit}
+        title="Set Race Start Time"
+        initialTime={startTime ? new Date(startTime).getTime() : undefined}
+      />
     </div>
   );
 };

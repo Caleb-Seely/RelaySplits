@@ -13,6 +13,8 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
   const [showSecret, setShowSecret] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
 
+  console.log('[AdminSecretDisplay] Component rendered with onClose:', !!onClose);
+
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(adminSecret);
@@ -23,10 +25,23 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
     }
   };
 
+  const handleClose = () => {
+    console.log('[AdminSecretDisplay] handleClose called');
+    console.log('[AdminSecretDisplay] onClose prop:', onClose);
+    console.log('[AdminSecretDisplay] typeof onClose:', typeof onClose);
+    if (onClose) {
+      console.log('[AdminSecretDisplay] Calling onClose function');
+      onClose();
+      console.log('[AdminSecretDisplay] onClose function called');
+    } else {
+      console.log('[AdminSecretDisplay] onClose is not a function');
+    }
+  };
+
   return (
-    <Dialog open={true} onOpenChange={() => onClose?.()}>
-      <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-md mx-auto border-0 shadow-2xl bg-white rounded-3xl p-0 overflow-hidden">
-        {/* Background blur overlay for iOS-style backdrop */}
+    <Dialog open={true} onOpenChange={handleClose}>
+      <DialogContent className="max-w-sm mx-auto border-0 shadow-2xl bg-white rounded-3xl p-0 overflow-hidden">
+        {/* Background blur overlay for backdrop */}
         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl" />
         
         {/* Content Container */}
@@ -34,21 +49,22 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
           {/* Header Section with iOS-style spacing */}
           <div className="pt-8 pb-6 px-6 text-center">
             <p className="text-sm text-gray-600 leading-relaxed px-2">
-              Save this secret to maintain admin access.
-            </p>
-            <p className="text-sm text-gray-600 leading-relaxed px-2">
-             Use it if your device is lost or storage is cleared.
+              Save this secret to maintain admin access if your device is lost or storage is cleared.
             </p>
           </div>
 
           {/* Warning Card with Apple-style design */}
           <div className="mx-6 mb-6">
             <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/80 backdrop-blur-sm border border-amber-200/50 rounded-2xl p-4">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
-                <p className="text-xs leading-relaxed">
-                  This secret will only be shown once and cannot be recovered!
-                </p>
+              <div className="flex items-start gap-3">
+                
+                <div className="flex-1 min-w-0">
+
+                  <p className="text-xs leading-relaxed">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                    This secret will only be shown once and cannot be recovered!
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -108,7 +124,7 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
           {/* Footer */}
           <div className="px-6 pb-8">
             <button 
-              onClick={() => onClose?.()}
+              onClick={handleClose}
               className="w-full h-12 bg-gray-900 hover:bg-gray-800 active:bg-black text-white font-medium rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-lg"
             >
               I've Saved My Secret
@@ -127,7 +143,7 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
 };
 
 // Demo wrapper to show the component
-export default function Demo() {
+function Demo() {
   const [showDialog, setShowDialog] = useState(true);
   
   return (
@@ -151,3 +167,5 @@ export default function Demo() {
     </div>
   );
 }
+
+export default AdminSecretDisplay;

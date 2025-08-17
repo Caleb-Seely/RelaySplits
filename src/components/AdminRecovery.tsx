@@ -55,6 +55,8 @@ const AdminRecovery: React.FC<AdminRecoveryProps> = ({ teamId, onSuccess }) => {
 
         localStorage.setItem('relay_device_info', JSON.stringify(newDeviceInfo));
         localStorage.setItem('relay_device_id', result.deviceId);
+        // Store the admin secret for future recovery (use the validated user input)
+        localStorage.setItem('relay_admin_secret', adminSecret.trim());
         setDeviceInfo(newDeviceInfo);
 
         // Wait a bit for the context to update, then refresh team data
