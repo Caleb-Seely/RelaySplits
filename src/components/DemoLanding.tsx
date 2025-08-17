@@ -1116,7 +1116,7 @@ const DemoLanding = () => {
             Ready to track your own relay race?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Create a team or join an existing one to start tracking your relay race in real-time with your teammates.
+            Create a team or join an existing one to start tracking in real-time with your teammates!
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 

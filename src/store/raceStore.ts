@@ -45,6 +45,7 @@ interface RaceStore extends RaceData {
   // Undo functionality
   undoLastStartRunner: () => void;
   canUndo: () => boolean;
+  getUndoDescription: () => string | null;
 }
 
 const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
@@ -309,8 +310,19 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     if (legsWithStartTimes.length === 0) return;
     
     const mostRecentLeg = legsWithStartTimes[0];
+    const isFinalLeg = mostRecentLeg.id === 36; // Check if this is the final leg
+    const hasBothStartAndFinish = mostRecentLeg.actualStart !== null && mostRecentLeg.actualFinish !== null;
     
-    // Remove the start time from the most recent leg
+    // EDGE CASE: When the race is over (leg 36 has both start and finish times),
+    // we want to "unfinish" the race by only removing the finish time.
+    // This preserves the actual start time of the final runner while allowing
+    // the race to continue from where it was "unfinished".
+    if (isFinalLeg && hasBothStartAndFinish) {
+      get().updateLegActualTime(mostRecentLeg.id, 'actualFinish', null);
+      return;
+    }
+    
+    // Standard case: Remove the start time from the most recent leg
     get().updateLegActualTime(mostRecentLeg.id, 'actualStart', null);
     
     // If this leg also has a finish time, remove it too
@@ -330,7 +342,43 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
 
   canUndo: () => {
     const { legs } = get();
-    // Can undo if there's at least one leg with an actual start time
-    return legs.some(leg => leg.actualStart !== undefined && leg.actualStart !== null);
+    
+    // Find legs with actual start times
+    const legsWithStartTimes = legs.filter(leg => leg.actualStart !== undefined && leg.actualStart !== null);
+    
+    // Check if there are currently running runners (legs with start but no finish)
+    const currentlyRunning = legs.some(leg => 
+      leg.actualStart !== undefined && 
+      leg.actualStart !== null && 
+      (leg.actualFinish === undefined || leg.actualFinish === null)
+    );
+    
+    // Can undo if there are legs with start times AND there are currently running runners
+    // This prevents undo when no one is currently running
+    return legsWithStartTimes.length > 0 && currentlyRunning;
+  },
+
+  // Helper function to get what the undo action will do
+  getUndoDescription: () => {
+    const { legs } = get();
+    
+    // Find the most recent leg with an actual start time
+    const legsWithStartTimes = legs
+      .filter(leg => leg.actualStart !== undefined && leg.actualStart !== null)
+      .sort((a, b) => (b.actualStart || 0) - (a.actualStart || 0));
+    
+    if (legsWithStartTimes.length === 0) return null;
+    
+    const mostRecentLeg = legsWithStartTimes[0];
+    const isFinalLeg = mostRecentLeg.id === 36;
+    const hasBothStartAndFinish = mostRecentLeg.actualStart !== null && mostRecentLeg.actualFinish !== null;
+    
+    if (isFinalLeg && hasBothStartAndFinish) {
+      return "Undo Race Finish";
+    } else if (mostRecentLeg.actualFinish !== null) {
+      return "Undo Last Start/Finish";
+    } else {
+      return "Undo Last Start";
+    }
   }
 }));

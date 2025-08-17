@@ -431,9 +431,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                   
                 </span>
               </div>
-              <div className="w-full bg-muted rounded-full h-2">
+              <div className="w-full bg-muted rounded-full h-2 progress-shimmer">
                 <div
-                  className="h-2 rounded-full transition-all duration-500 relative overflow-hidden bg-gradient-to-r from-orange-500 via-amber-500 to-blue-500"
+                  className="h-2 rounded-full transition-all duration-500 relative overflow-hidden bg-gradient-to-r from-green-500 to-blue-500"
                   style={{ width: `${(progress.completed / progress.total) * 100}%` }}
                 >
                   <div className="absolute inset-0 bg-white/20 animate-pulse" />
@@ -442,7 +442,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               <div className="grid grid-cols-3 items-center mt-2">
                 <div className="justify-self-start text-left">
                   <div className="text-sm font-bold text-foreground">
-                    {formatTime(actualRaceStartTime)}
+                    {formatRaceTime(actualRaceStartTime)}
                   </div>
                   <div className="flex items-center justify-start gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
@@ -558,7 +558,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                         </div>
                         <div className="flex justify-between items-baseline text-base font-bold text-foreground">
                           <span>
-                            {formatTime(currentRunner.actualStart || currentRunner.projectedStart)}
+                            {formatRaceTime(currentRunner.actualStart || currentRunner.projectedStart)}
                           </span>
                           <span className="text-green-500">
                             ~{getRemainingDistance().toFixed(1)} miles left
@@ -1182,8 +1182,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       {/* Team Settings Modal */}
       <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
         <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-2xl rounded-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-          <div className="space-y-6 overflow-y-auto">
-            <TeamSettings />
+          <div className="space-y-6">
+            <TeamSettings onClose={() => setSettingsModalOpen(false)} />
           </div>
         </DialogContent>
       </Dialog>
