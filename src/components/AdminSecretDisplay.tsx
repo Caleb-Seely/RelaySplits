@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { toast } from 'sonner';
-import { Shield, Copy, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Copy, Eye, EyeOff, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
 
 interface AdminSecretDisplayProps {
   adminSecret: string;
@@ -20,86 +17,137 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
     try {
       await navigator.clipboard.writeText(adminSecret);
       setHasCopied(true);
-      toast.success('Admin secret copied to clipboard!');
       setTimeout(() => setHasCopied(false), 2000);
     } catch (err) {
-      toast.error('Failed to copy to clipboard');
+      console.error('Failed to copy to clipboard');
     }
   };
 
   return (
     <Dialog open={true} onOpenChange={() => onClose?.()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-green-600" />
-            Admin Secret Generated
-          </DialogTitle>
-          <DialogDescription>
-            Your team "{teamName}" has been created successfully! 
-            Please save your admin secret - you'll need it to recover admin access if you lose your device.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <Alert className="border-orange-200 bg-orange-50">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-            <AlertDescription className="text-orange-800">
-              <strong>Important:</strong> Save this admin secret in a secure location. 
-              You won't be able to see it again after closing this dialog.
-            </AlertDescription>
-          </Alert>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Admin Secret</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 p-3 bg-gray-100 rounded-md font-mono text-sm">
-                {showSecret ? adminSecret : '••••••••••••••••••••••••••••••••'}
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSecret(!showSecret)}
-              >
-                {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={copyToClipboard}
-                disabled={hasCopied}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {hasCopied ? 'Copied!' : 'Click the copy button to copy to clipboard'}
+      <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-md mx-auto border-0 shadow-2xl bg-white rounded-3xl p-0 overflow-hidden">
+        {/* Background blur overlay for iOS-style backdrop */}
+        <div className="absolute inset-0 bg-white/95 backdrop-blur-xl" />
+        
+        {/* Content Container */}
+        <div className="relative z-10">
+          {/* Header Section with iOS-style spacing */}
+          <div className="pt-8 pb-6 px-6 text-center">
+            <p className="text-sm text-gray-600 leading-relaxed px-2">
+              Save this secret to maintain admin access.
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed px-2">
+             Use it if your device is lost or storage is cleared.
             </p>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-            <h4 className="font-medium text-blue-900 mb-2">What is this for?</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Recover admin access if you lose your device</li>
-              <li>• Regain control of your team settings</li>
-              <li>• Manage team members and permissions</li>
-            </ul>
+          {/* Warning Card with Apple-style design */}
+          <div className="mx-6 mb-6">
+            <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/80 backdrop-blur-sm border border-amber-200/50 rounded-2xl p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                <p className="text-xs leading-relaxed">
+                  This secret will only be shown once and cannot be recovered!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Secret Display Section */}
+          <div className="px-6 mb-8">
+            <div className="bg-gray-50/80 backdrop-blur-sm rounded-2xl p-4 border border-gray-100">
+              {/* Secret Text */}
+              <div className="mb-4">
+                <div className="bg-white/90 rounded-xl p-4 border border-gray-200/50 shadow-sm">
+                  <div className="font-mono text-xs text-gray-900 break-all leading-relaxed tracking-wide">
+                    {showSecret ? adminSecret : '•'.repeat(Math.min(adminSecret.length, 48))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowSecret(!showSecret)}
+                  className="flex-1 flex items-center justify-center gap-2 h-11 bg-white/80 hover:bg-white/90 active:bg-gray-50 border border-gray-200/80 rounded-xl font-medium text-sm text-gray-700 transition-all duration-200 active:scale-[0.98]"
+                >
+                  {showSecret ? (
+                    <>
+                      <EyeOff className="w-4 h-4" strokeWidth={1.5} />
+                      <span>Hide</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-4 h-4" strokeWidth={1.5} />
+                      <span>Show</span>
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  onClick={copyToClipboard}
+                  disabled={hasCopied}
+                  className="flex-1 flex items-center justify-center gap-2 h-11 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-600 text-white font-medium text-sm rounded-xl transition-all duration-200 active:scale-[0.98] shadow-sm"
+                >
+                  {hasCopied ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" strokeWidth={1.5} />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" strokeWidth={1.5} />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 pb-8">
+            <button 
+              onClick={() => onClose?.()}
+              className="w-full h-12 bg-gray-900 hover:bg-gray-800 active:bg-black text-white font-medium rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-lg"
+            >
+              I've Saved My Secret
+            </button>
+            <p className="text-center text-xs text-gray-500 mt-4 px-4">
+              Tap to close once you've securely stored your admin secret
+            </p>
           </div>
         </div>
 
-        <DialogFooter>
-          <Button onClick={() => {
-            console.log('[AdminSecretDisplay] Button clicked, calling onClose');
-            onClose?.();
-          }}>
-            I've Saved My Admin Secret
-          </Button>
-        </DialogFooter>
+        {/* iOS-style close indicator */}
+        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-10 h-1 bg-gray-300 rounded-full" />
       </DialogContent>
     </Dialog>
   );
 };
 
-export default AdminSecretDisplay;
+// Demo wrapper to show the component
+export default function Demo() {
+  const [showDialog, setShowDialog] = useState(true);
+  
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      {showDialog && (
+        <AdminSecretDisplay
+          adminSecret="sk_admin_abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+          teamName="Acme Design Team"
+          onClose={() => setShowDialog(false)}
+        />
+      )}
+      
+      {!showDialog && (
+        <button 
+          onClick={() => setShowDialog(true)}
+          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+        >
+          Show Admin Secret Dialog
+        </button>
+      )}
+    </div>
+  );
+}
