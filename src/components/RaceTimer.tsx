@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRaceStore } from '@/store/raceStore';
+import { useTeamSync } from '@/hooks/useTeamSync';
 import { formatTime, formatDuration } from '@/utils/raceUtils';
 import { Timer, Flag } from 'lucide-react';
 
 const RaceTimer = () => {
   const { startTime, legs } = useRaceStore();
+  const { team } = useTeamSync();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -14,10 +16,10 @@ const RaceTimer = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Get the actual race start time from leg 1's actual start, or fall back to race start time
-  const actualRaceStartTime = legs.length > 0 && legs[0].actualStart 
-    ? legs[0].actualStart 
-    : startTime;
+  // Get the actual race start time from leg 1's actual start, or fall back to team start time or local start time
+  const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
+    ? legs[0].actualStart
+    : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
 
   const raceElapsedMs = currentTime.getTime() - actualRaceStartTime;
   const isRaceStarted = raceElapsedMs > 0;

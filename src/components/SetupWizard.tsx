@@ -38,7 +38,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   } = useRaceStore();
 
   const { saveInitialRows, fetchInitialData } = useSyncManager();
-  const { team } = useTeamSync();
+  const { team, refreshTeamData } = useTeamSync();
 
   const [isSaving, setIsSaving] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -158,11 +158,27 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
       if (isNewTeam && team?.id) {
         console.log('[SetupWizard] Updating team start time');
         const deviceId = getDeviceId();
-        await invokeEdge('teams-update', {
+        const result = await invokeEdge('teams-update', {
           teamId: team.id,
           deviceId,
           start_time: new Date(startTime).toISOString()
         });
+        
+        // Update local storage with the new start time
+        if (result && !('error' in result)) {
+          const updatedTeam = (result as any).data?.team;
+          if (updatedTeam?.start_time) {
+            console.log('[SetupWizard] Updating local storage with new start time:', updatedTeam.start_time);
+            localStorage.setItem('relay_team_start_time', updatedTeam.start_time);
+            
+            // Also update the race store's start time to match
+            const race = useRaceStore.getState();
+            race.setStartTime(new Date(updatedTeam.start_time).getTime());
+            
+            // Refresh team data to update the team context
+            await refreshTeamData();
+          }
+        }
       }
 
       // Ensure legs exist before any save

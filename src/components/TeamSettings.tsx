@@ -191,6 +191,11 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
       // Refresh team data to update local state
       await refreshTeamData();
       
+      // Update the race store's start time to match the team's start time
+      // Do this after refreshTeamData to ensure it's not overwritten
+      const race = useRaceStore.getState();
+      race.setStartTime(timestamp);
+      
       toast.success('Race start time updated successfully!');
       setStartTimePickerOpen(false);
     } catch (err) {

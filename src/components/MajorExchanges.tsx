@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
-import { getMajorExchangeTimes, formatTime } from '@/utils/raceUtils';
+import { getMajorExchangeTimes, formatRaceTime } from '@/utils/raceUtils';
 import { getLegDirectionsUrl } from '@/utils/legData';
 import { MapPin } from 'lucide-react';
 
@@ -44,7 +44,7 @@ const MajorExchanges = () => {
                 {exchangeNames[legId as keyof typeof exchangeNames]}
               </div>
               <div className={`relative inline-flex items-center justify-center text-sm font-bold ${actualFinish ? 'text-green-600' : 'text-orange-600'}`}>
-                <span>{formatTime(actualFinish || projectedFinish)}</span>
+                <span>{formatRaceTime(actualFinish || projectedFinish)}</span>
                 {actualFinish && (
                   <Badge className="absolute left-full ml-2 bg-green-100 text-green-800 border border-green-200 text-[10px] px-1 py-0.5 leading-none">✓</Badge>
                 )}
