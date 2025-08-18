@@ -92,8 +92,11 @@ export class PWAManager {
   }
 
   init(): void {
+    console.log('[PWA] Initializing PWA manager...');
+    
     // Listen for beforeinstallprompt event
     window.addEventListener('beforeinstallprompt', (e) => {
+      console.log('[PWA] beforeinstallprompt event received');
       e.preventDefault();
       this.deferredPrompt = e;
       this.notifyInstallListeners(true);
@@ -105,6 +108,8 @@ export class PWAManager {
       this.deferredPrompt = null;
       this.notifyInstallListeners(false);
     });
+    
+    console.log('[PWA] PWA manager initialized, waiting for beforeinstallprompt event...');
   }
 
   async install(): Promise<boolean> {

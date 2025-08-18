@@ -31,6 +31,25 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
     });
   }, []);
 
+  // Check PWA installability manually
+  useEffect(() => {
+    const checkPWAInstallability = () => {
+      // Check if the app meets PWA install criteria
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      const hasServiceWorker = 'serviceWorker' in navigator;
+      const hasManifest = document.querySelector('link[rel="manifest"]') !== null;
+      
+      console.log('[DashboardPrompts] PWA Installability Check:', {
+        isStandalone,
+        hasServiceWorker,
+        hasManifest,
+        userAgent: navigator.userAgent
+      });
+    };
+
+    checkPWAInstallability();
+  }, []);
+
   useEffect(() => {
     // Add a small delay to ensure user has seen the dashboard first
     const timer = setTimeout(() => {
@@ -49,17 +68,25 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
       return;
     }
 
+    // Debug PWA state
+    console.log('[DashboardPrompts] PWA Debug - canInstall:', canInstall, 'isInstalling:', isInstalling);
+
     // Check PWA install status
     if (canInstall) {
       const pwaDismissed = sessionStorage.getItem('pwa-install-dismissed');
+      console.log('[DashboardPrompts] PWA can install, dismissed:', pwaDismissed);
       if (!pwaDismissed) {
+        console.log('[DashboardPrompts] Setting showPWA to true');
         setShowPWA(true);
       }
+    } else {
+      console.log('[DashboardPrompts] PWA cannot install - criteria not met');
     }
 
     // Check notification permission status and initialize if needed
     if (notificationsSupported) {
       const permission = getPermission();
+      console.log('[DashboardPrompts] Notification permission:', permission);
       if (permission === 'default') {
         const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
         if (!notificationDismissed) {
@@ -67,7 +94,7 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
         }
       }
     }
-  }, [canInstall, notificationsSupported, getPermission, hasShownPrompts]);
+  }, [canInstall, notificationsSupported, getPermission, hasShownPrompts, isInstalling]);
 
   const handlePWAInstall = async () => {
     const success = await install();
@@ -115,6 +142,8 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
   if (isDismissed || (!showPWA && !showNotifications) || !hasShownPrompts) {
     return null;
   }
+
+
 
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:w-80 space-y-4">
@@ -264,6 +293,8 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
           </Button>
         </div>
       )}
+
+
     </div>
   );
 };

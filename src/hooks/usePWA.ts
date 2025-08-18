@@ -6,11 +6,16 @@ export const usePWA = () => {
   const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
+    console.log('[usePWA] Hook initialized');
+    
     // Check initial state
-    setCanInstall(pwaManager.canInstall());
+    const initialCanInstall = pwaManager.canInstall();
+    console.log('[usePWA] Initial canInstall state:', initialCanInstall);
+    setCanInstall(initialCanInstall);
 
     // Listen for changes
     const handleInstallStateChange = (canInstall: boolean) => {
+      console.log('[usePWA] Install state changed to:', canInstall);
       setCanInstall(canInstall);
     };
 

@@ -64,7 +64,6 @@ import TimePicker from './TimePicker';
 import PaceInputModal from './PaceInputModal';
 import RunnerAssignmentModal from './RunnerAssignmentModal';
 import SyncStatusIndicator from './SyncStatusIndicator';
-import NotificationStatusIndicator from './NotificationStatusIndicator';
 import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
 import TeamSettings from './TeamSettings';
@@ -391,7 +390,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                 <div className="justify-self-center text-center">
                   <div className="flex items-center justify-center gap-2">
                     <SyncStatusIndicator />
-                    <NotificationStatusIndicator />
                   </div>
                 </div>
                 <div className="justify-self-end text-right">

@@ -114,17 +114,17 @@ const QuickHelpPopup: React.FC<QuickHelpPopupProps> = ({ isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md border-0 shadow-2xl bg-white/95 backdrop-blur-xl p-0 overflow-hidden rounded-xl">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md border-0 shadow-2xl bg-white/95 backdrop-blur-xl p-0 overflow-hidden rounded-xl max-h-[90vh] sm:max-h-[80vh] flex flex-col">
         {/* Header with gradient */}
-        <div className="relative px-4 sm:px-6 pt-6 sm:pt-8 ">
+        <div className="relative px-4 sm:px-6 pt-6 sm:pt-8 flex-shrink-0">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-t-xl"></div>
           <div className="relative text-center">
             <h3 className="text-lg sm:text-xl font-bold text-gray-900">Quick Start</h3>
           </div>
         </div>
 
-        {/* Tips section */}
-        <div className="px-4 sm:px-6 pb-4">
+        {/* Tips section - scrollable */}
+        <div className="px-4 sm:px-6 pb-4 flex-1 overflow-y-auto">
           <div className="space-y-3 sm:space-y-4">
             {tips.map((tip, index) => (
               <div 
@@ -169,7 +169,7 @@ const QuickHelpPopup: React.FC<QuickHelpPopupProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Action button */}
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+        <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex-shrink-0">
           <Button 
             onClick={handleGotIt} 
             className="w-full h-10 sm:h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] text-sm sm:text-base"
