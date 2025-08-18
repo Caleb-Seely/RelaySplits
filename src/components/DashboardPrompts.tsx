@@ -69,7 +69,6 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
         setPwaBlocked(true);
       }
     };
-    };
 
     checkPWAInstallability();
   }, []);
