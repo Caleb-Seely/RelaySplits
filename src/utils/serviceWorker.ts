@@ -18,6 +18,12 @@ export class ServiceWorkerManager {
     }
 
     try {
+      // Check if we're in a context where service workers can be registered
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        console.log('[SW] Service Worker requires HTTPS (except localhost)');
+        return false;
+      }
+
       this.registration = await navigator.serviceWorker.register('/sw.js', {
         scope: '/'
       });
@@ -47,6 +53,16 @@ export class ServiceWorkerManager {
       return true;
     } catch (error) {
       console.error('[SW] Service Worker registration failed:', error);
+      
+      // Log specific error details for debugging
+      if (error instanceof Error) {
+        console.error('[SW] Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
+      
       return false;
     }
   }

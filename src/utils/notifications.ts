@@ -209,8 +209,8 @@ export function generateFinishNotification(
 ): NotificationMessage {
   if (isFinalLeg) {
     return {
-      title: "Race Complete! 🎉",
-      body: `${finishedRunnerName} is heading to the sand!`,
+      title: "Last leg! 🏃‍♂️",
+      body: `${finishedRunnerName} hands off to ${nextRunnerName} and they are headed to the sand!`,
       data: { type: 'runner_finish', legNumber: finishedLegNumber, runnerName: finishedRunnerName, isFinalLeg, timestamp: Date.now() }
     };
   }
@@ -218,7 +218,7 @@ export function generateFinishNotification(
   if (nextRunnerName && nextLegNumber) {
     return {
       title: "Handoff Complete! 🤝",
-      body: `${finishedRunnerName} has finished Leg ${finishedLegNumber}. ${nextRunnerName} is running now!`,
+      body: `${finishedRunnerName} hands off to ${nextRunnerName} running Leg ${nextLegNumber}!`,
       data: { 
         type: 'runner_finish', 
         finishedLegNumber, 
@@ -235,6 +235,27 @@ export function generateFinishNotification(
     title: "Runner Finished! ✅",
     body: `${finishedRunnerName} has finished Leg ${finishedLegNumber}`,
     data: { type: 'runner_finish', legNumber: finishedLegNumber, runnerName: finishedRunnerName, isFinalLeg, timestamp: Date.now() }
+  };
+}
+
+// New function for handoff notifications (combines finish + start)
+export function generateHandoffNotification(
+  finishedRunnerName: string,
+  finishedLegNumber: number,
+  nextRunnerName: string,
+  nextLegNumber: number
+): NotificationMessage {
+  return {
+    title: "Handoff Complete! 🤝",
+    body: `${finishedRunnerName} hands off to ${nextRunnerName} running Leg ${nextLegNumber}!`,
+    data: { 
+      type: 'handoff', 
+      finishedLegNumber, 
+      finishedRunnerName, 
+      nextLegNumber, 
+      nextRunnerName,
+      timestamp: Date.now()
+    }
   };
 }
 

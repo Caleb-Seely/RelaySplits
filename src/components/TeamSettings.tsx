@@ -166,7 +166,7 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
   const copyInviteLink = () => {
     if (team?.invite_token) {
       const teamName = team?.name || 'Team';
-      const copyText = `Join ${teamName}\nJoin Token: ${team.invite_token}`;
+      const copyText = `Join ${teamName} using this token:\n ${team.invite_token}`;
       navigator.clipboard.writeText(copyText);
       toast.success('Team invite copied to clipboard!');
     }
