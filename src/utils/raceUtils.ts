@@ -334,8 +334,12 @@ export function initializeRace(startTime: number, runners: Runner[]): Leg[] {
   
   DEFAULT_LEG_DISTANCES.forEach((distance, index) => {
     const legNumber = index + 1;
-    const runnerIndex = index % 12;
+    const runnerIndex = index % runners.length; // Use runners.length instead of hardcoded 12
     const runner = runners[runnerIndex];
+    
+    if (!runner) {
+      throw new Error(`No runner found for leg ${legNumber}`);
+    }
     
     const projectedFinish = calculateProjectedFinish(currentStartTime, runner.pace, distance);
     

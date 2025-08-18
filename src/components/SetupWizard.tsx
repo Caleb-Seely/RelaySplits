@@ -184,11 +184,24 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
       // Ensure legs exist before any save
       console.log('[SetupWizard] Ensuring legs are initialized');
       initializeLegs();
+      
+      // Verify legs were created
+      const storeStateAfterInit = useRaceStore.getState();
+      console.log('[SetupWizard] After initializeLegs - runners:', storeStateAfterInit.runners.length, 'legs:', storeStateAfterInit.legs.length);
+      if (storeStateAfterInit.legs.length === 0) {
+        console.error('[SetupWizard] Legs were not initialized properly!');
+        toast.error('Failed to initialize race legs', { id: toastId });
+        return;
+      }
 
-      // For new teams, insert initial rows for the team created in TeamSetup
+      // For new teams, insert initial rows for the team created in DemoLanding
       if (isNewTeam && team?.id) {
         console.log('[SetupWizard] About to call saveInitialRows for team', team.id);
-        console.log('[SetupWizard] Current store state - runners:', useRaceStore.getState().runners.length, 'legs:', useRaceStore.getState().legs.length);
+        const storeState = useRaceStore.getState();
+        console.log('[SetupWizard] Current store state - runners:', storeState.runners.length, 'legs:', storeState.legs.length);
+        console.log('[SetupWizard] Start time:', storeState.startTime, 'ISO:', new Date(storeState.startTime).toISOString());
+        console.log('[SetupWizard] Sample runner:', storeState.runners[0]);
+        console.log('[SetupWizard] Sample leg:', storeState.legs[0]);
         
         try {
           const { error } = await saveInitialRows(team.id);
@@ -210,10 +223,11 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
         }
       }
 
-      // Complete local setup
-      completeSetup();
-      console.log('[SetupWizard] Finish flow complete');
-      toast.success('Your team is ready!', { id: toastId });
+             // Complete local setup
+       completeSetup();
+       
+       console.log('[SetupWizard] Finish flow complete');
+       toast.success('Your team is ready!', { id: toastId });
     } catch (e: unknown) {
       console.error('[SetupWizard] Unexpected error during finish flow:', e);
       toast.error((e as Error)?.message || 'Failed to complete setup', { id: toastId });

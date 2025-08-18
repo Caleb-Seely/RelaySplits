@@ -43,7 +43,8 @@ export const useTeamSync = () => {
       
       if (storedTeamId && storedDeviceInfo) {
         const deviceInfoData = JSON.parse(storedDeviceInfo) as DeviceInfo;
-        if (!deviceInfo) {
+        // Only set device info if it's not already set to avoid triggering unnecessary updates
+        if (!deviceInfo || deviceInfo.teamId !== deviceInfoData.teamId) {
           setDeviceInfo(deviceInfoData);
         }
         

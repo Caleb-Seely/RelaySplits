@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => ({
           ],
           'chart-vendor': ['recharts'],
           'file-vendor': ['papaparse', 'xlsx'],
+          'security-vendor': ['dompurify'],
         },
         // Optimize chunk naming
         chunkFileNames: 'js/[name]-[hash].js',
@@ -83,6 +84,8 @@ export default defineConfig(({ mode }) => ({
       '@tanstack/react-query',
       'date-fns',
       'zod',
+      'dompurify',
+      'canvas-confetti',
     ],
     // Exclude problematic dependencies
     exclude: ['@sentry/react'], // Exclude Sentry from pre-bundling
@@ -91,5 +94,12 @@ export default defineConfig(({ mode }) => ({
   esbuild: {
     // Remove console.log in production
     drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
+  // Test configuration
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/__tests__/setup.ts'],
+    css: true,
   },
 }));

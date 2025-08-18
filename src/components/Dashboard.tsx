@@ -68,54 +68,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import QuickHelpPopup from './QuickHelpPopup';
 import { useQuickHelp } from '@/hooks/useQuickHelp';
 
-// Import confetti with proper ES module syntax and fallback
-let confetti: any = null;
-
-// Function to initialize confetti
-const initConfetti = async () => {
-  try {
-    // Check if canvas is supported
-    const canvas = document.createElement('canvas');
-    if (!canvas.getContext) {
-      console.error('Canvas not supported in this browser');
-      return;
-    }
-
-    // Try ES module import first
-    const confettiModule = await import('canvas-confetti');
-    confetti = confettiModule.default || confettiModule;
-    console.log('Confetti loaded successfully via ES module import');
-    
-    // Test if confetti is callable
-    if (typeof confetti === 'function') {
-      console.log('Confetti is a callable function');
-    } else {
-      console.error('Confetti is not a callable function:', typeof confetti);
-      confetti = null;
-    }
-  } catch (e) {
-    console.warn('ES module import failed, trying require...');
-    try {
-      // Fallback to require
-      confetti = require('canvas-confetti');
-      console.log('Confetti loaded successfully via require');
-      
-      // Test if confetti is callable
-      if (typeof confetti === 'function') {
-        console.log('Confetti is a callable function (require)');
-      } else {
-        console.error('Confetti is not a callable function (require):', typeof confetti);
-        confetti = null;
-      }
-    } catch (requireError) {
-      console.error('Failed to load confetti:', requireError);
-      confetti = null;
-    }
-  }
-};
-
-// Initialize confetti when component loads
-initConfetti();
+import { triggerConfetti, getConfetti } from '@/utils/confetti';
 
 interface DashboardProps {
   isViewOnly?: boolean;
@@ -152,9 +105,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
   // Quick help popup for new team members
   const { shouldShowHelp, dismissHelp } = useQuickHelp();
-  
-  // Debug help popup
-  console.log('[Dashboard] Help popup state:', { shouldShowHelp, isViewOnly, canEdit });
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
@@ -175,55 +125,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
   // Test confetti function for debugging
   const testConfetti = () => {
-    console.log('Testing confetti, confetti object:', confetti);
+    console.log('Testing confetti');
     triggerConfetti({ particleCount: 50, spread: 50 });
   };
-
-  // Robust confetti trigger function
-  const triggerConfetti = (options = {}) => {
-    if (confetti) {
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-        ...options
-      });
-      return true;
-    } else {
-      console.warn('Confetti not available, attempting to initialize...');
-      initConfetti().then(() => {
-        if (confetti) {
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-            ...options
-          });
-        } else {
-          // Fallback: trigger a simple CSS animation
-          console.log('Using fallback animation');
-          const button = document.querySelector('.start-runner-button');
-          if (button) {
-            button.classList.add('animate-pulse', 'bg-green-400');
-            setTimeout(() => {
-              button.classList.remove('animate-pulse', 'bg-green-400');
-            }, 1000);
-          }
-        }
-      });
-      return false;
-    }
-  };
-
-  // Initialize confetti when component mounts
-  useEffect(() => {
-    initConfetti();
-  }, []);
-
-  // Debug confetti status
-  useEffect(() => {
-    console.log('Confetti status changed:', confetti ? 'Available' : 'Not available');
-  }, [confetti]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);

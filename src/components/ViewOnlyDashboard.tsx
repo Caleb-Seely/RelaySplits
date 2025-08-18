@@ -189,7 +189,7 @@ const ViewOnlyDashboard = () => {
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Team Not Found</h2>
           <p className="text-muted-foreground mb-6">{error}</p>
-          <Button onClick={() => navigate('/auth')}>
+          <Button onClick={() => navigate('/demo')}>
             Join a Team
           </Button>
         </div>

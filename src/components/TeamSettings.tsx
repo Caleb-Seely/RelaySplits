@@ -35,54 +35,7 @@ import {
 } from 'lucide-react';
 import { useRaceStore } from '@/store/raceStore';
 
-// Import confetti with proper ES module syntax and fallback
-let confetti: any = null;
-
-// Function to initialize confetti
-const initConfetti = async () => {
-  try {
-    // Check if canvas is supported
-    const canvas = document.createElement('canvas');
-    if (!canvas.getContext) {
-      console.error('Canvas not supported in this browser');
-      return;
-    }
-
-    // Try ES module import first
-    const confettiModule = await import('canvas-confetti');
-    confetti = confettiModule.default || confettiModule;
-    console.log('Confetti loaded successfully via ES module import');
-    
-    // Test if confetti is callable
-    if (typeof confetti === 'function') {
-      console.log('Confetti is a callable function');
-    } else {
-      console.error('Confetti is not a callable function:', typeof confetti);
-      confetti = null;
-    }
-  } catch (e) {
-    console.warn('ES module import failed, trying require...');
-    try {
-      // Fallback to require
-      confetti = require('canvas-confetti');
-      console.log('Confetti loaded successfully via require');
-      
-      // Test if confetti is callable
-      if (typeof confetti === 'function') {
-        console.log('Confetti is a callable function (require)');
-      } else {
-        console.error('Confetti is not a callable function (require):', typeof confetti);
-        confetti = null;
-      }
-    } catch (requireError) {
-      console.error('Failed to load confetti:', requireError);
-      confetti = null;
-    }
-  }
-};
-
-// Initialize confetti when component loads
-initConfetti();
+import { triggerConfetti } from '@/utils/confetti';
 
 interface Device {
   device_id: string;
@@ -263,16 +216,8 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
 
   // Test confetti function for debugging
   const testConfetti = () => {
-    console.log('Testing confetti, confetti object:', confetti);
-    if (confetti) {
-      confetti({
-        particleCount: 50,
-        spread: 50,
-        origin: { y: 0.6 }
-      });
-    } else {
-      console.warn('Confetti not available');
-    }
+    console.log('Testing confetti');
+    triggerConfetti({ particleCount: 50, spread: 50 });
   };
 
   return (

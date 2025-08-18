@@ -9,7 +9,7 @@ import { TeamProvider } from "@/contexts/TeamContext";
 
 // Route-level code splitting
 const Index = lazy(() => import("./pages/Index"));
-const Auth = lazy(() => import("./pages/Auth"));
+
 const DemoLanding = lazy(() => import("./components/DemoLanding"));
 const ViewOnlyDashboard = lazy(() => import("./components/ViewOnlyDashboard"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -27,7 +27,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/demo" element={<DemoLanding />} />
-              <Route path="/auth" element={<Auth />} />
+
               <Route path="/view/:viewerCode" element={<ViewOnlyDashboard />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

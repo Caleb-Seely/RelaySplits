@@ -370,11 +370,7 @@ const DemoLanding = () => {
                 
                 // Update the device info in the team context
                 setDeviceInfo(deviceInfo);
-                console.log('[DemoLanding] Device info updated, triggering refetch');
-                
-                // Trigger a refetch to update the team context
-                refetch();
-                console.log('[DemoLanding] Refetch triggered');
+                console.log('[DemoLanding] Device info updated');
               } else {
                 console.log('[DemoLanding] Missing required localStorage data:', {
                   teamId: !!teamId,

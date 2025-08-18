@@ -12,7 +12,7 @@ import { useOfflineData } from '@/hooks/useOfflineData';
 import { runDiagnostics } from '@/utils/diagnostics';
 import Dashboard from '@/components/Dashboard';
 import SetupWizard from '@/components/SetupWizard';
-import TeamSetup from '@/components/TeamSetup';
+
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
@@ -62,38 +62,87 @@ const Index = () => {
         useRaceStore.getState().setTeamId(team.id);
       }
       
-      // If this is a new team and we now have the team context loaded, remove the flag
-      if (isNewTeam) {
-        console.log('[Index] Team context loaded for new team, removing flag');
+      // If this is a new team and setup is complete, remove the flag
+      if (isNewTeam && useRaceStore.getState().isSetupComplete) {
+        console.log('[Index] Team context loaded and setup complete, removing new team flag');
         console.log('[Index] Flag before removal:', localStorage.getItem('relay_is_new_team'));
         localStorage.removeItem('relay_is_new_team');
         console.log('[Index] Flag after removal:', localStorage.getItem('relay_is_new_team'));
+        // Set isNewTeam to false after removing the flag to prevent further loops
+        setIsNewTeam(false);
       }
     }
   }, [team?.id, isNewTeam]);
 
   // Detect freshly-created team and show Setup Wizard as new team once
+  const hasProcessedFlagRef = useRef(false);
   useEffect(() => {
+    if (hasProcessedFlagRef.current) return; // Prevent re-processing
+    
     const flag = localStorage.getItem('relay_is_new_team');
     console.log('[Index] Checking for new team flag:', flag);
     console.log('[Index] Current team context state - teamId:', teamId, 'deviceInfo:', deviceInfo);
     if (flag) {
       console.log('[Index] Setting isNewTeam to true');
       setIsNewTeam(true);
-      // Don't remove the flag yet - wait until team context is loaded
+      hasProcessedFlagRef.current = true;
+      // Don't remove the flag yet - wait until SetupWizard completes the save
     } else {
       // If no flag is found, explicitly set to false to indicate this is not a new team
       console.log('[Index] No new team flag found, setting isNewTeam to false');
       setIsNewTeam(false);
+      hasProcessedFlagRef.current = true;
     }
   }, []); // Revert back to empty array
 
+
+
+  // Restore setup completion state from localStorage on mount
+  const hasRestoredSetupStateRef = useRef(false);
+  useEffect(() => {
+    if (hasRestoredSetupStateRef.current) return;
+    if (!teamId) return;
+    
+    try {
+      // Check for setup lock first
+      const setupLocked = localStorage.getItem(`relay_setup_locked_${teamId}`) === '1';
+      if (setupLocked) {
+        console.log('[Index] Setup is locked, marking as complete');
+        useRaceStore.getState().markSetupComplete();
+        hasRestoredSetupStateRef.current = true;
+        return;
+      }
+      
+      // Check for offline setup state
+      const offlineSetup = localStorage.getItem(`relay_tracker_${teamId}_setup`);
+      if (offlineSetup) {
+        const setupData = JSON.parse(offlineSetup);
+        if (setupData.isSetupComplete) {
+          console.log('[Index] Restoring setup completion state from offline storage');
+          useRaceStore.getState().markSetupComplete();
+          hasRestoredSetupStateRef.current = true;
+        }
+      }
+    } catch (error) {
+      console.warn('[Index] Error restoring setup state:', error);
+    }
+  }, [teamId]);
+
+  const hasFetchedInitialDataRef = useRef(false);
   useEffect(() => {
     // Only fetch initial data if we have a teamId, user is not a viewer, and we've determined it's not a new team
     console.log('[Index] fetchInitialData useEffect - teamId:', teamId, 'isNewTeam:', isNewTeam, 'deviceInfo?.role:', deviceInfo?.role);
+    
+    // Prevent multiple fetches for the same team
+    if (hasFetchedInitialDataRef.current && teamId === useRaceStore.getState().teamId) {
+      console.log('[Index] Skipping fetchInitialData - already fetched for this team');
+      return;
+    }
+    
     if (teamId && deviceInfo?.role !== 'viewer' && isNewTeam === false) {
       console.log('[Index] Calling fetchInitialData for team:', teamId);
       fetchInitialData(teamId);
+      hasFetchedInitialDataRef.current = true;
     } else if (teamId && deviceInfo?.role !== 'viewer' && isNewTeam === undefined) {
       // If isNewTeam is undefined, we haven't determined yet - skip for now
       console.log('[Index] Skipping fetchInitialData - isNewTeam is undefined');
@@ -121,8 +170,7 @@ const Index = () => {
 
   // Initialize offline data if available and no current data
   useEffect(() => {
-    // Do NOT restore offline state during setup wizard to avoid resetting form inputs
-    if (!isSetupComplete) return;
+    // Don't restore if team is still loading or if we've already restored
     if (!team || teamLoading) return;
     if (hasRestoredOfflineRef.current) return;
     if (teamId !== team.id) return;
@@ -138,7 +186,7 @@ const Index = () => {
     }
     // Ensure we only attempt restore once per mount/team session
     hasRestoredOfflineRef.current = true;
-  }, [isSetupComplete, team, teamLoading, teamId, loadOfflineState, isDataConsistent, restoreFromOffline]);
+  }, [team, teamLoading, teamId, loadOfflineState, isDataConsistent, restoreFromOffline]);
 
   // Run comprehensive diagnostics when team is loaded - MUST BE AT TOP LEVEL
 //   useEffect(() => {
@@ -170,7 +218,7 @@ const Index = () => {
     );
   }
 
-  // Show demo landing page if no team is found (instead of redirecting to auth)
+  // Show demo landing page if no team is found
   if (!isInTeam && !hasStoredTeam) {
     return <Navigate to="/demo" replace />;
   }

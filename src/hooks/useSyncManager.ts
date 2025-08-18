@@ -307,7 +307,18 @@ export const useSyncManager = () => {
       } else {
         edgeName = 'legs-upsert';
         // payload may contain runner_id, start_time, finish_time, distance
-        const leg = { id: remoteId, ...(payload as any) };
+        // For legs, we need to map the frontend id to the database number field
+        const store = useRaceStore.getState();
+        const localLeg = store.legs.find(l => l.remoteId === remoteId);
+        if (!localLeg) {
+          console.error('[safeUpdate] Local leg not found for remoteId:', remoteId, 'Available legs:', store.legs.map(l => ({ id: l.id, remoteId: l.remoteId })));
+          return { error: new Error('Local leg not found for sync.') };
+        }
+        const leg = { 
+          id: remoteId, 
+          number: localLeg.id, // Map frontend id to database number field
+          ...(payload as any) 
+        };
         body = { teamId, deviceId, legs: [leg], action: 'upsert' };
       }
 
@@ -850,6 +861,36 @@ export const useSyncManager = () => {
     console.log('[saveInitialRows] Device ID:', deviceId);
     console.log('[saveInitialRows] Store state runners count:', storeState.runners.length);
     console.log('[saveInitialRows] Store state legs count:', storeState.legs.length);
+    console.log('[saveInitialRows] Start time:', storeState.startTime, 'ISO:', new Date(storeState.startTime).toISOString());
+
+    // Validate data before proceeding
+    if (storeState.runners.length === 0) {
+      console.error('[saveInitialRows] No runners in store state');
+      return { error: new Error('No runners found in store state') };
+    }
+    
+    if (storeState.legs.length === 0) {
+      console.error('[saveInitialRows] No legs in store state');
+      return { error: new Error('No legs found in store state') };
+    }
+
+    // Verify device is registered with the team
+    console.log('[saveInitialRows] Verifying device registration...');
+    try {
+      const deviceCheck = await invokeEdge('devices-list', { teamId, deviceId });
+      console.log('[saveInitialRows] Device check response:', deviceCheck);
+      
+      if ((deviceCheck as any).error || !(deviceCheck as any).data?.devices?.length) {
+        console.error('[saveInitialRows] Device not registered with team');
+        return { error: new Error('Device not registered with team. Please refresh the page and try again.') };
+      }
+      
+      const device = (deviceCheck as any).data.devices[0];
+      console.log('[saveInitialRows] Device verified:', device);
+    } catch (e) {
+      console.error('[saveInitialRows] Error checking device registration:', e);
+      return { error: new Error('Failed to verify device registration') };
+    }
 
     // If remote data exists, just fetch it
     console.log('[saveInitialRows] Checking if remote data exists...');
@@ -865,11 +906,26 @@ export const useSyncManager = () => {
     console.log('[saveInitialRows] Inserting runners via Edge…');
     const runnersPayload = storeState.runners.map(r => ({ id: undefined, name: r.name, pace: r.pace, van: r.van.toString() }));
     console.log('[saveInitialRows] Runners payload:', runnersPayload);
-    const upsertR = await invokeEdge('runners-upsert', { teamId, deviceId, runners: runnersPayload, action: 'upsert' });
-    console.log('[saveInitialRows] Runners upsert response:', upsertR);
-    if ((upsertR as any).error) {
-      console.error('Error saving runners via Edge:', (upsertR as any).error);
-      return { error: (upsertR as any).error };
+    console.log('[saveInitialRows] Runners payload sample:', runnersPayload[0]);
+    console.log('[saveInitialRows] Calling runners-upsert with:', { teamId, deviceId, runnersCount: runnersPayload.length, action: 'upsert' });
+    
+    try {
+      const upsertR = await invokeEdge('runners-upsert', { teamId, deviceId, runners: runnersPayload, action: 'upsert' });
+      console.log('[saveInitialRows] Runners upsert response:', upsertR);
+      
+      if ((upsertR as any).error) {
+        console.error('[saveInitialRows] Error saving runners via Edge:', (upsertR as any).error);
+        console.error('[saveInitialRows] Failed payload:', runnersPayload);
+        console.error('[saveInitialRows] Device ID:', deviceId);
+        console.error('[saveInitialRows] Team ID:', teamId);
+        return { error: (upsertR as any).error };
+      }
+    } catch (e) {
+      console.error('[saveInitialRows] Exception during runners upsert:', e);
+      console.error('[saveInitialRows] Failed payload:', runnersPayload);
+      console.error('[saveInitialRows] Device ID:', deviceId);
+      console.error('[saveInitialRows] Team ID:', teamId);
+      return { error: { message: `Network error: ${(e as Error)?.message || 'Unknown error'}` } };
     }
 
     // Build runnerId lookup by refetching
@@ -896,11 +952,26 @@ export const useSyncManager = () => {
       runner_id: l.runnerId ? localToRemoteRunnerMap.get(l.runnerId) : null,
     }));
     console.log('[saveInitialRows] Legs payload:', legsPayload);
-    const upsertL = await invokeEdge('legs-upsert', { teamId, deviceId, legs: legsPayload, action: 'upsert' });
-    console.log('[saveInitialRows] Legs upsert response:', upsertL);
-    if ((upsertL as any).error) {
-      console.error('Error saving legs via Edge:', (upsertL as any).error);
-      return { error: (upsertL as any).error };
+    console.log('[saveInitialRows] Legs payload sample:', legsPayload[0]);
+    console.log('[saveInitialRows] Calling legs-upsert with:', { teamId, deviceId, legsCount: legsPayload.length, action: 'upsert' });
+    
+    try {
+      const upsertL = await invokeEdge('legs-upsert', { teamId, deviceId, legs: legsPayload, action: 'upsert' });
+      console.log('[saveInitialRows] Legs upsert response:', upsertL);
+      
+      if ((upsertL as any).error) {
+        console.error('[saveInitialRows] Error saving legs via Edge:', (upsertL as any).error);
+        console.error('[saveInitialRows] Failed legs payload:', legsPayload);
+        console.error('[saveInitialRows] Device ID:', deviceId);
+        console.error('[saveInitialRows] Team ID:', teamId);
+        return { error: (upsertL as any).error };
+      }
+    } catch (e) {
+      console.error('[saveInitialRows] Exception during legs upsert:', e);
+      console.error('[saveInitialRows] Failed legs payload:', legsPayload);
+      console.error('[saveInitialRows] Device ID:', deviceId);
+      console.error('[saveInitialRows] Team ID:', teamId);
+      return { error: { message: `Network error: ${(e as Error)?.message || 'Unknown error'}` } };
     }
 
     await fetchInitialData(teamId);
