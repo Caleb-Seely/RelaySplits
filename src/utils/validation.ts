@@ -162,4 +162,4 @@ export const validateDataIntegrity = (data: any): { valid: boolean; errors: stri
 };
 
 // Export schemas for use in components
-export { RunnerSchema, LegSchema, TeamSchema };
+// Note: Individual schemas are already exported above

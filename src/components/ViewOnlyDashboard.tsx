@@ -4,6 +4,7 @@ import { useOfflineData } from '@/hooks/useOfflineData';
 import { useRaceStore } from '@/store/raceStore';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
+import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import Dashboard from './Dashboard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,8 @@ const ViewOnlyDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [teamNotSetUp, setTeamNotSetUp] = useState(false);
-  const { fetchInitialData } = useSyncManager();
+  const { onConflictDetected } = useConflictResolution();
+  const { fetchInitialData } = useSyncManager(onConflictDetected);
   const setTeamId = useRaceStore((s) => s.setTeamId);
   const { setDeviceInfo } = useTeam();
   const hasFetchedData = useRef(false);

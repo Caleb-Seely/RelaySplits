@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { useTeamSync } from '@/hooks/useTeamSync';
+import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { Clock, Users, Play, Waves } from 'lucide-react';
 import { formatTime, formatDate, formatRaceTime } from '@/utils/raceUtils';
@@ -37,7 +38,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     initializeLegs
   } = useRaceStore();
 
-  const { saveInitialRows, fetchInitialData } = useSyncManager();
+  const { onConflictDetected } = useConflictResolution();
+  const { saveInitialRows, fetchInitialData } = useSyncManager(onConflictDetected);
   const { team, refreshTeamData } = useTeamSync();
 
   const [isSaving, setIsSaving] = useState(false);

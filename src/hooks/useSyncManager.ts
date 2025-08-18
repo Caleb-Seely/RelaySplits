@@ -12,7 +12,7 @@ interface Syncable {
   updated_at: string | null;
 }
 
-export const useSyncManager = () => {
+export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => {
   const store = useRaceStore();
 
   // Reset mounted state on mount
@@ -52,27 +52,50 @@ export const useSyncManager = () => {
       const key = 'relay-splits-offline-queue';
       const raw = localStorage.getItem(key);
       const arr = raw ? JSON.parse(raw) : [];
-      arr.push({ ...change, timestamp: Date.now() });
+      const queueItem = { ...change, timestamp: Date.now() };
+      arr.push(queueItem);
       localStorage.setItem(key, JSON.stringify(arr));
+      console.log(`[useSyncManager] Successfully enqueued offline change:`, queueItem);
+      console.log(`[useSyncManager] Total queued changes: ${arr.length}`);
     } catch (e) {
       console.error('[useSyncManager] Failed to enqueue offline change', e);
     }
   };
 
   /**
-   * Merges an array of incoming items (from Supabase) into the local Zustand store.
-   * It only updates a local item if the incoming item has a newer `updated_at` timestamp.
+   * Smart merge function that considers offline changes when merging data.
+   * It checks for pending offline changes and preserves local modifications.
    *
    * @param incomingItems The array of items from Supabase (e.g., runners or legs).
    * @param localItems The corresponding array of items from the Zustand store.
    * @param updateAction The Zustand action to update the items (e.g., `store.setRunners`).
+   * @param table The table name for checking offline queue.
    */
   const merge = useCallback(
     <T extends Syncable>( 
       incomingItems: T[],
       localItems: T[],
-      updateAction: (items: T[]) => void
+      updateAction: (items: T[]) => void,
+      table?: 'runners' | 'legs'
     ) => {
+      // Get pending offline changes for this table
+      const pendingChanges = new Map<string, any>();
+      if (table) {
+        try {
+          const queue = localStorage.getItem('relay-splits-offline-queue');
+          if (queue) {
+            const queueData = JSON.parse(queue);
+            queueData.forEach((change: any) => {
+              if (change.table === table && change.remoteId) {
+                pendingChanges.set(change.remoteId, change.payload);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('[merge] Error reading offline queue:', e);
+        }
+      }
+
       const localItemsMap = new Map(localItems.map((item) => [item.id, item]));
       let hasChanges = false;
 
@@ -80,6 +103,46 @@ export const useSyncManager = () => {
 
       for (const incomingItem of incomingItems) {
         const localItem = localItemsMap.get(incomingItem.id);
+        const remoteId = (incomingItem as any).remoteId;
+        const pendingChange = remoteId ? pendingChanges.get(remoteId) : null;
+
+        // If there's a pending offline change for this item, preserve local changes
+        if (pendingChange) {
+          console.log(`[merge] Preserving local changes for ${table}:${remoteId} due to pending offline change`);
+          continue; // Skip this item, keep local version
+        }
+
+        // Check for timing conflicts if this is a leg with timing data
+        if (table === 'legs' && localItem && onConflictDetected) {
+          const localLeg = localItem as any;
+          const serverLeg = incomingItem as any;
+          
+          // Check for start time conflicts
+          if (localLeg.actualStart && serverLeg.actualStart && 
+              Math.abs(localLeg.actualStart - serverLeg.actualStart) > 60000) { // 1 minute difference
+            console.log(`[merge] Timing conflict detected for leg ${localLeg.id} start time`);
+            onConflictDetected({
+              type: 'timing',
+              localLeg,
+              serverLeg,
+              field: 'start'
+            });
+            continue; // Skip this item, let UI handle the conflict
+          }
+          
+          // Check for finish time conflicts
+          if (localLeg.actualFinish && serverLeg.actualFinish && 
+              Math.abs(localLeg.actualFinish - serverLeg.actualFinish) > 60000) { // 1 minute difference
+            console.log(`[merge] Timing conflict detected for leg ${localLeg.id} finish time`);
+            onConflictDetected({
+              type: 'timing',
+              localLeg,
+              serverLeg,
+              field: 'finish'
+            });
+            continue; // Skip this item, let UI handle the conflict
+          }
+        }
 
         // If the item doesn't exist locally, or if the incoming item is newer, we update it.
         if (!localItem || !localItem.updated_at || new Date(incomingItem.updated_at!) > new Date(localItem.updated_at)) {
@@ -97,7 +160,7 @@ export const useSyncManager = () => {
         updateAction(mergedItems);
       }
     },
-    []
+    [onConflictDetected]
   );
 
   // Fetch helpers with in-flight guards
@@ -134,7 +197,7 @@ export const useSyncManager = () => {
         remoteId: r.id,
         updated_at: r.updated_at,
       }));
-      merge(runners, useRaceStore.getState().runners, store.setRunners);
+      merge(runners, useRaceStore.getState().runners, store.setRunners, 'runners');
       return remoteRunners.length;
     } finally {
       isFetchingRunners.current = false;
@@ -188,7 +251,7 @@ export const useSyncManager = () => {
           const recalculatedLegs = recalculateProjections(items, 0, storeState.runners);
           useRaceStore.getState().setRaceData({ legs: recalculatedLegs });
         }
-      });
+      }, 'legs');
       return remoteLegs.length;
     } catch (error) {
       console.error('[fetchAndMergeLegs] Error fetching legs:', error);
@@ -271,7 +334,19 @@ export const useSyncManager = () => {
 
       if (!navigator.onLine) {
         console.log(`[safeUpdate] App is offline. Queuing update for ${table}:${remoteId}`);
-        enqueueChange({ table, remoteId, payload });
+        console.log(`[safeUpdate] Payload:`, payload);
+        
+        // For legs, include the number field in the queued payload
+        let queuedPayload = payload;
+        if (table === 'legs' && localItem) {
+          queuedPayload = {
+            ...payload,
+            number: (localItem as any).id, // Include the leg number
+            distance: (localItem as any).distance // Include the distance
+          };
+        }
+        
+        enqueueChange({ table, remoteId, payload: queuedPayload });
         // Perform optimistic update locally, assuming it will succeed.
         // The merge function handles this.
         const optimisticItem = { ...localItem, ...payload, remoteId } as unknown as Syncable;
@@ -317,6 +392,7 @@ export const useSyncManager = () => {
         const leg = { 
           id: remoteId, 
           number: localLeg.id, // Map frontend id to database number field
+          distance: localLeg.distance, // Always include distance for validation
           ...(payload as any) 
         };
         body = { teamId, deviceId, legs: [leg], action: 'upsert' };
@@ -475,8 +551,8 @@ export const useSyncManager = () => {
               // Remove from active channels
               activeChannels.delete(channelName);
               
-              // Only retry if we haven't exceeded max attempts and we're not in the middle of a manual retry
-              if (!backoff.isMaxAttemptsReached() && !backoff.getIsRetrying() && !isManualRetryInProgress.current) {
+              // Only retry if we haven't exceeded max attempts and we're not already retrying
+              if (!backoff.isMaxAttemptsReached() && !backoff.getIsRetrying()) {
                 const delay = backoff.nextDelay();
                 if (delay > 0) {
                   backoff.setRetrying(true);
@@ -484,8 +560,15 @@ export const useSyncManager = () => {
                   
                   setTimeout(() => {
                     // Check if we're still mounted and not in manual retry mode
-                    if (!isMountedRef.current || backoff.getIsRetrying() || isManualRetryInProgress.current) {
-                      console.log(`[realtime] Skipping retry for ${table} - component unmounted or manual retry in progress`);
+                    if (!isMountedRef.current || backoff.getIsRetrying()) {
+                      console.log(`[realtime] Skipping retry for ${table} - component unmounted or already retrying`);
+                      return;
+                    }
+                    
+                    // If manual retry is in progress, let it handle the reconnection
+                    if (isManualRetryInProgress.current) {
+                      console.log(`[realtime] Skipping automatic retry for ${table} - manual retry in progress`);
+                      backoff.setRetrying(false);
                       return;
                     }
                     
@@ -503,8 +586,8 @@ export const useSyncManager = () => {
                   console.error(`[realtime] ${table} channel max retry attempts reached, stopping retries`);
                 }
               } else {
-                if (backoff.getIsRetrying() || isManualRetryInProgress.current) {
-                  console.log(`[realtime] ${table} channel ${status} - skipping retry due to manual retry in progress`);
+                if (backoff.getIsRetrying()) {
+                  console.log(`[realtime] ${table} channel ${status} - already retrying`);
                 } else {
                   console.error(`[realtime] ${table} channel max retry attempts reached, giving up`);
                 }

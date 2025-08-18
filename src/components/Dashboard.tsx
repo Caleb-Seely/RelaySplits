@@ -7,6 +7,7 @@ import { useRaceStore } from '@/store/raceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
+import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 
 import {
   getCurrentRunner,
@@ -88,7 +89,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     teamId,
     assignRunnerToLegs
   } = useRaceStore();
-  const { setupRealtimeSubscriptions, manualRetry } = useSyncManager();
+  const { onConflictDetected } = useConflictResolution();
+  const { setupRealtimeSubscriptions, manualRetry } = useSyncManager(onConflictDetected);
 
   // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
   useEffect(() => {

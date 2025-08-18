@@ -3,12 +3,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { useTeam } from '@/contexts/TeamContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useSyncManager } from '@/hooks/useSyncManager';
+import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { useRaceStore } from '@/store/raceStore';
 import { useOfflineData } from '@/hooks/useOfflineData';
+import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { runDiagnostics } from '@/utils/diagnostics';
 import Dashboard from '@/components/Dashboard';
 import SetupWizard from '@/components/SetupWizard';
@@ -16,28 +18,31 @@ import SetupWizard from '@/components/SetupWizard';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
-  const { deviceInfo, isInTeam, loading: teamContextLoading } = useTeam();
-  const { team, deviceInfo: teamSyncDeviceInfo, loading: teamLoading, createTeam, joinTeam } = useTeamSync();
-  const [isNewTeam, setIsNewTeam] = useState(false);
-  const isAdmin = teamSyncDeviceInfo?.role === 'admin';
-  // Select only the pieces we need from the store to avoid effect thrash
-  const teamId = useRaceStore((s) => s.teamId);
-  const isSetupComplete = useRaceStore((s) => s.isSetupComplete);
-  // If the lock flag is present for this team, treat setup as complete locally to avoid any wizard flash
-  const isSetupLocked = (() => {
-    try {
-      return teamId ? localStorage.getItem(`relay_setup_locked_${teamId}`) === '1' : false;
-    } catch {
-      return false;
-    }
-  })();
-  const restoreFromOffline = useRaceStore((s) => s.restoreFromOffline);
-  const isDataConsistent = useRaceStore((s) => s.isDataConsistent);
-  const { isOnline, offlineChangesCount, loadOfflineState } = useOfflineData();
-  const hasRestoredOfflineRef = useRef(false);
-  
-  // Initialize Supabase sync
-  const { fetchInitialData } = useSyncManager();
+  try {
+    const { deviceInfo, isInTeam, loading: teamContextLoading } = useTeam();
+    const { team, deviceInfo: teamSyncDeviceInfo, loading: teamLoading, createTeam, joinTeam } = useTeamSync();
+    const [isNewTeam, setIsNewTeam] = useState(false);
+    const isAdmin = teamSyncDeviceInfo?.role === 'admin';
+    // Select only the pieces we need from the store to avoid effect thrash
+    const teamId = useRaceStore((s) => s.teamId);
+    const isSetupComplete = useRaceStore((s) => s.isSetupComplete);
+    // If the lock flag is present for this team, treat setup as complete locally to avoid any wizard flash
+    const isSetupLocked = (() => {
+      try {
+        return teamId ? localStorage.getItem(`relay_setup_locked_${teamId}`) === '1' : false;
+      } catch {
+        return false;
+      }
+    })();
+    const restoreFromOffline = useRaceStore((s) => s.restoreFromOffline);
+    const isDataConsistent = useRaceStore((s) => s.isDataConsistent);
+    const { isOnline, offlineChangesCount, loadOfflineState } = useOfflineData();
+    const hasRestoredOfflineRef = useRef(false);
+    
+    // Initialize Supabase sync and offline queue
+    const { onConflictDetected } = useConflictResolution();
+    const { fetchInitialData } = useSyncManager(onConflictDetected);
+    const { processQueue, getQueueStatus, isProcessing: isQueueProcessing } = useOfflineQueue();
 
   console.log('[Index] Component render - current state:', {
     teamId,
@@ -188,6 +193,32 @@ const Index = () => {
     hasRestoredOfflineRef.current = true;
   }, [team, teamLoading, teamId, loadOfflineState, isDataConsistent, restoreFromOffline]);
 
+  // Process offline queue when coming back online or when team changes
+  useEffect(() => {
+    if (!teamId || !isOnline) return;
+    
+    const queueStatus = getQueueStatus();
+    if (queueStatus.pendingCount > 0) {
+      console.log(`[Index] Processing offline queue with ${queueStatus.pendingCount} pending changes`);
+      processQueue(teamId);
+    }
+  }, [isOnline, teamId, processQueue, getQueueStatus]);
+  
+  // Also process queue periodically when online to catch any missed changes
+  useEffect(() => {
+    if (!teamId || !isOnline) return;
+    
+    const interval = setInterval(() => {
+      const queueStatus = getQueueStatus();
+      if (queueStatus.pendingCount > 0 && !queueStatus.isProcessing) {
+        console.log(`[Index] Periodic queue check - processing ${queueStatus.pendingCount} pending changes`);
+        processQueue(teamId);
+      }
+    }, 10000); // Check every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [teamId, isOnline, processQueue, getQueueStatus]);
+
   // Run comprehensive diagnostics when team is loaded - MUST BE AT TOP LEVEL
 //   useEffect(() => {
 //     if (team && user && !teamLoading) {
@@ -240,6 +271,16 @@ const Index = () => {
         </Alert>
       )}
 
+      {/* Queue status indicator */}
+      {isQueueProcessing && (
+        <Alert className="m-2 sm:m-4 border-blue-200 bg-blue-50">
+          <AlertCircle className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            Syncing offline changes...
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Main content */}
       <main className="container mx-auto px-2 sm:px-4 py-2">
         {(() => {
@@ -255,6 +296,24 @@ const Index = () => {
       </main>
     </div>
   );
+  } catch (error) {
+    console.error('[Index] Error in component:', error);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <AlertTriangle className="h-32 w-32 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-semibold text-foreground mb-2">Something went wrong</h1>
+          <p className="text-muted-foreground">An error occurred while loading the application.</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="mt-4"
+          >
+            Reload Page
+          </Button>
+        </div>
+      </div>
+    );
+  }
 };
 
 export default Index;
