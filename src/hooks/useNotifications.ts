@@ -8,7 +8,7 @@ export const useNotifications = () => {
   const isInitialized = useRef(false);
   const sentNotificationsRef = useRef<Set<string>>(new Set()); // Track sent notifications to prevent duplicates
 
-  // Initialize notification manager
+  // Initialize notification manager (but don't request permission automatically)
   useEffect(() => {
     if (!isInitialized.current) {
       notificationManager.initialize().then((success) => {

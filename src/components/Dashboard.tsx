@@ -73,6 +73,7 @@ import QuickHelpPopup from './QuickHelpPopup';
 import { useQuickHelp } from '@/hooks/useQuickHelp';
 import { usePWA } from '@/hooks/usePWA';
 import { useNotifications } from '@/hooks/useNotifications';
+import DashboardPrompts from './DashboardPrompts';
 
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
 
@@ -1223,6 +1224,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         isOpen={shouldShowHelp && !isViewOnly} 
         onClose={dismissHelp} 
       />
+
+      {/* Dashboard Prompts - PWA Install and Notification Permission */}
+      <DashboardPrompts />
     </>
   );
 };

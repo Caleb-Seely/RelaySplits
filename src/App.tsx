@@ -8,7 +8,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TeamProvider } from "@/contexts/TeamContext";
 import { ConflictResolutionProvider } from "@/contexts/ConflictResolutionContext";
 import ConflictResolutionModal from "@/components/ConflictResolutionModal";
-import InstallPrompt from "@/components/InstallPrompt";
 import { notificationManager } from "@/utils/notifications";
 
 // Route-level code splitting
@@ -21,7 +20,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Initialize notification system on app start
+  // Initialize notification system on app start (but don't request permission automatically)
   useEffect(() => {
     notificationManager.initialize().then((success) => {
       if (success) {
@@ -52,7 +51,6 @@ const App = () => {
             </Suspense>
           </BrowserRouter>
           <ConflictResolutionModal />
-          <InstallPrompt />
         </ConflictResolutionProvider>
       </TeamProvider>
     </TooltipProvider>

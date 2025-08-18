@@ -36,10 +36,11 @@ export class NotificationManager {
       // Check notification permission
       this.permission = Notification.permission;
       
-      if (this.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        this.permission = permission;
-      }
+      // Don't automatically request permission - let the dashboard prompts handle this
+      // if (this.permission === 'default') {
+      //   const permission = await Notification.requestPermission();
+      //   this.permission = permission;
+      // }
 
       // If permission is granted, automatically enable notifications by default
       if (this.permission === 'granted') {
@@ -47,7 +48,7 @@ export class NotificationManager {
       }
 
       console.log('[Notifications] Initialized with permission:', this.permission);
-      return this.permission === 'granted';
+      return true; // Return true if initialization succeeded, regardless of permission status
     } catch (error) {
       console.error('[Notifications] Initialization failed:', error);
       return false;
@@ -115,6 +116,7 @@ export class NotificationManager {
       this.saveNotificationPreference(true);
     }
     
+    console.log('[Notifications] Permission requested, result:', permission);
     return permission;
   }
 
