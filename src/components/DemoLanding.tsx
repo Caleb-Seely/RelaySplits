@@ -915,7 +915,7 @@ const DemoLanding = () => {
                   onClick={() => setViewMode('cards')}
                   className={`px-3 text-xs h-8 transition-all duration-200 ${
                     viewMode === 'cards'
-                      ? 'bg-background text-foreground shadow-md'
+                      ? 'bg-primary text-primary-foreground shadow-md font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                   }`}
                 >
@@ -928,7 +928,7 @@ const DemoLanding = () => {
                   onClick={() => setViewMode('table')}
                   className={`px-3 text-xs h-8 transition-all duration-200 ${
                     viewMode === 'table'
-                      ? 'bg-background text-foreground shadow-md'
+                      ? 'bg-primary text-primary-foreground shadow-md font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                   }`}
                 >

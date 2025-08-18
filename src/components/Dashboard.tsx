@@ -1026,8 +1026,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     onClick={() => setViewMode('cards')}
                     className={`px-3 text-xs h-8 transition-all duration-200 ${
                       viewMode === 'cards'
-                        ? 'bg-background text-foreground shadow-md'
-                        : 'text-foreground hover:text-foreground hover:bg-background/50'
+                        ? 'bg-primary text-primary-foreground shadow-md font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <Grid3X3 className="h-3 w-3 mr-1.5" />
@@ -1039,8 +1039,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     onClick={() => setViewMode('table')}
                     className={`px-3 text-xs h-8 transition-all duration-200 ${
                       viewMode === 'table'
-                        ? 'bg-background text-foreground shadow-md'
-                        : 'text-foreground hover:text-foreground hover:bg-background/50'
+                        ? 'bg-primary text-primary-foreground shadow-md font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <List className="h-3 w-3 mr-1.5" />

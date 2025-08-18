@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Cloud, CloudOff, Loader2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { CloudUpload, CloudOff, Loader2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useOfflineData } from '@/hooks/useOfflineData';
 import { useRaceStore } from '@/store/raceStore';
@@ -63,41 +63,51 @@ const SyncStatusIndicator = () => {
   }, [lastSyncedAt]);
 
   const getStatusConfig = () => {
+    // Helper function to format the sync time display
+    const formatSyncTime = () => {
+      if (!lastSyncTime) return '';
+      return lastSyncTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    };
+
+    // Helper function to format the sync time with parentheses for non-synced states
+    const formatSyncTimeWithParentheses = () => {
+      if (!lastSyncTime) return '';
+      return ` (${lastSyncTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})`;
+    };
+
     switch (syncStatus) {
       case 'synced':
         return {
-          icon: Cloud,
-          text: lastSyncTime
-            ? lastSyncTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-            : 'Synced',
+          icon: CloudUpload,
+          text: formatSyncTime() || 'Synced',
           variant: 'default' as const,
           className: 'bg-green-500/10 text-green-600 border-green-200'
         };
       case 'syncing':
         return {
           icon: Loader2,
-          text: 'Syncing...',
+          text: `Syncing...${formatSyncTimeWithParentheses()}`,
           variant: 'secondary' as const,
           className: 'bg-blue-500/10 text-blue-600 border-blue-200 animate-pulse'
         };
       case 'offline':
         return {
           icon: CloudOff,
-          text: 'Offline',
+          text: `Offline${formatSyncTimeWithParentheses()}`,
           variant: 'destructive' as const,
           className: 'bg-red-500/10 text-red-600 border-red-200'
         };
       case 'offline-changes':
         return {
           icon: Clock,
-          text: `${offlineChangesCount} pending`,
+          text: `${offlineChangesCount} pending${formatSyncTimeWithParentheses()}`,
           variant: 'destructive' as const,
           className: 'bg-orange-500/10 text-orange-600 border-orange-200'
         };
       case 'error':
         return {
           icon: AlertCircle,
-          text: 'Sync Error',
+          text: `Sync Error${formatSyncTimeWithParentheses()}`,
           variant: 'destructive' as const,
           className: 'bg-orange-500/10 text-orange-600 border-orange-200'
         };
