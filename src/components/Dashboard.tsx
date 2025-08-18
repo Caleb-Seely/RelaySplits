@@ -53,7 +53,9 @@ import {
   Download,
   Loader2,
   AlertTriangle,
-  HelpCircle
+  HelpCircle,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import LegScheduleTable from './LegScheduleTable';
 import MajorExchanges from './MajorExchanges';
@@ -62,12 +64,15 @@ import TimePicker from './TimePicker';
 import PaceInputModal from './PaceInputModal';
 import RunnerAssignmentModal from './RunnerAssignmentModal';
 import SyncStatusIndicator from './SyncStatusIndicator';
+import NotificationStatusIndicator from './NotificationStatusIndicator';
 import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
 import TeamSettings from './TeamSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import QuickHelpPopup from './QuickHelpPopup';
 import { useQuickHelp } from '@/hooks/useQuickHelp';
+import { usePWA } from '@/hooks/usePWA';
+import { useNotifications } from '@/hooks/useNotifications';
 
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
 
@@ -89,8 +94,17 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     teamId,
     assignRunnerToLegs
   } = useRaceStore();
+  const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
   const { setupRealtimeSubscriptions, manualRetry } = useSyncManager(onConflictDetected);
+  const { 
+    isSupported: notificationsSupported, 
+    getPermission: notificationPermission, 
+    notificationManager,
+    isNotificationPreferenceEnabled,
+    clearNotificationPreference,
+    setNotificationPreference
+  } = useNotifications();
 
   // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
   useEffect(() => {
@@ -374,8 +388,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                   </div>
                 </div>
                 <div className="justify-self-center text-center">
-                  <div className="flex items-center justify-center">
+                  <div className="flex items-center justify-center gap-2">
                     <SyncStatusIndicator />
+                    <NotificationStatusIndicator />
                   </div>
                 </div>
                 <div className="justify-self-end text-right">
@@ -1047,7 +1062,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                 )}
               </div>
               
-              {/* Right side - Fallback share button - hidden in view-only mode */}
+              {/* Right side - Fallback share button and PWA install - hidden in view-only mode */}
               {canEdit && (
                 <div className="flex items-center gap-2">
                   {!team?.join_code && (
@@ -1060,6 +1075,101 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     >
                       <Share2 className="h-4 w-4 mr-1" />
                       Share w/ Teammates
+                    </Button>
+                  )}
+                  
+                  {/* Notification Toggle Button */}
+                  {notificationsSupported && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const permission = notificationPermission();
+                        
+                        if (permission === 'granted') {
+                          // Toggle notification preference
+                          const isCurrentlyEnabled = isNotificationPreferenceEnabled();
+                          if (isCurrentlyEnabled) {
+                            clearNotificationPreference();
+                            toast.success('Notifications disabled');
+                          } else {
+                            setNotificationPreference(true);
+                            toast.success('Notifications enabled! You\'ll get alerts when runners start and finish.');
+                          }
+                        } else {
+                          // Request permission first
+                          try {
+                            const newPermission = await notificationManager.requestPermission();
+                            if (newPermission === 'granted') {
+                              toast.success('Notifications enabled! You\'ll get alerts when runners start and finish.');
+                            } else {
+                              toast.error('Notification permission denied');
+                            }
+                          } catch (error) {
+                            console.error('Notification permission request failed:', error);
+                            toast.error('Failed to request notification permission');
+                          }
+                        }
+                      }}
+                      title={notificationPermission() === 'granted' 
+                        ? (isNotificationPreferenceEnabled() ? 'Disable notifications' : 'Enable notifications')
+                        : 'Enable push notifications for runner updates'
+                      }
+                    >
+                      {notificationPermission() === 'granted' && isNotificationPreferenceEnabled() ? (
+                        <Bell className="h-4 w-4" />
+                      ) : (
+                        <BellOff className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+
+                  {/* Test Notification Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && notificationPermission() === 'granted' && isNotificationPreferenceEnabled() && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await notificationManager.showTestNotification();
+                          toast.success('Test notification sent!');
+                          
+                          // Also show a browser alert as a fallback for testing
+                          setTimeout(() => {
+                            alert('Test notification should have appeared! Check your browser notifications.');
+                          }, 1000);
+                        } catch (error) {
+                          console.error('Test notification failed:', error);
+                          toast.error('Test notification failed');
+                        }
+                      }}
+                      title="Send test notification"
+                    >
+                      <Bell className="h-4 w-4 mr-1" />
+                      Test
+                    </Button>
+                  )}
+
+                  {/* PWA Install Button */}
+                  {canInstall && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const success = await install();
+                          if (success) {
+                            toast.success('App installed successfully!');
+                          }
+                        } catch (error) {
+                          console.error('Install failed:', error);
+                          toast.error('Installation failed');
+                        }
+                      }}
+                      title="Install RelaySplits app"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Install App
                     </Button>
                   )}
                 </div>

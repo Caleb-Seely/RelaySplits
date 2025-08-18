@@ -41,6 +41,13 @@ RelayTracker is a comprehensive web application designed to help relay race team
 - **Real-Time Updates**: Second-by-second updates for live race conditions
 - **Professional UI**: Modern, clean interface built with shadcn/ui components
 
+### 🔔 Push Notifications
+- **Runner Start Alerts**: Get notified when runners start their legs with custom messages
+- **Handoff Notifications**: Receive alerts when runners finish and hand off to the next runner
+- **Race Completion**: Special notification when the final runner heads to the finish
+- **Permission Management**: Easy notification permission request with status indicators
+- **PWA Support**: Works as a Progressive Web App with native notification support
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -88,6 +95,12 @@ The application will be available at `http://localhost:8080`
    - Monitor major exchange points and arrival times
    - Edit runner information and leg distances if needed
    - Export race data for post-race analysis
+
+5. **Enable Notifications** (Optional)
+   - Click "Enable Notifications" in the footer to request permission
+   - Receive push notifications when runners start and finish legs
+   - Get special alerts for race start ("And they're off!") and race completion
+   - Monitor notification status with the notification indicator badge
 
 ## 🏗️ Technical Architecture
 

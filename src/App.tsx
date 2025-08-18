@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +8,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TeamProvider } from "@/contexts/TeamContext";
 import { ConflictResolutionProvider } from "@/contexts/ConflictResolutionContext";
 import ConflictResolutionModal from "@/components/ConflictResolutionModal";
+import InstallPrompt from "@/components/InstallPrompt";
+import { notificationManager } from "@/utils/notifications";
 
 // Route-level code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -18,7 +20,19 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  // Initialize notification system on app start
+  useEffect(() => {
+    notificationManager.initialize().then((success) => {
+      if (success) {
+        console.log('[App] Notification system initialized successfully');
+      } else {
+        console.log('[App] Notification system initialization failed');
+      }
+    });
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <TeamProvider>
@@ -38,10 +52,12 @@ const App = () => (
             </Suspense>
           </BrowserRouter>
           <ConflictResolutionModal />
+          <InstallPrompt />
         </ConflictResolutionProvider>
       </TeamProvider>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

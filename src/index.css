@@ -96,6 +96,20 @@
   body {
     @apply bg-background text-foreground font-sans;
   }
+
+  /* Notification styles */
+  .notification-badge {
+    animation: notification-pulse 2s infinite;
+  }
+
+  @keyframes notification-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
 }
 
 @layer utilities {

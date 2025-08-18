@@ -196,7 +196,22 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   
+  // Get notification data to potentially handle different actions
+  const notificationData = event.notification.data;
+  
   event.waitUntil(
-    clients.openWindow('/')
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // If app is already open, focus it
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      
+      // If app is not open, open it
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
   );
 });

@@ -1,7 +1,7 @@
 {
-  "name": "RelaySplits",
+  "name": "RelaySplits - Race Tracker",
   "short_name": "RelaySplits",
-  "description": "Real-time relay race tracking with offline support",
+  "description": "Professional relay race tracking with real-time updates, offline support, and team collaboration",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -9,7 +9,8 @@
   "orientation": "portrait-primary",
   "scope": "/",
   "lang": "en",
-  "categories": ["sports", "productivity"],
+  "categories": ["sports", "productivity", "utilities"],
+  "permissions": ["notifications"],
   "icons": [
     {
       "src": "/favicon.ico",
