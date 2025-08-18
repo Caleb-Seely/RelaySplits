@@ -209,13 +209,29 @@ export function generateFinishNotification(
 ): NotificationMessage {
   if (isFinalLeg) {
     return {
-      title: "Last leg! 🏃‍♂️",
-      body: `${finishedRunnerName} hands off to ${nextRunnerName} and they are headed to the sand!`,
+      title: "Race Complete! 🎉",
+      body: `${finishedRunnerName} finished Leg ${finishedLegNumber}. Amazing job, team!`,
       data: { type: 'runner_finish', legNumber: finishedLegNumber, runnerName: finishedRunnerName, isFinalLeg, timestamp: Date.now() }
     };
   }
 
   if (nextRunnerName && nextLegNumber) {
+    // Special phrasing for the final handoff into Leg 36
+    if (nextLegNumber === 36) {
+      return {
+        title: "Last leg! 🏃‍♂️",
+        body: `${finishedRunnerName} hands off to ${nextRunnerName} and they are headed to the sand!`,
+        data: { 
+          type: 'runner_finish', 
+          finishedLegNumber, 
+          finishedRunnerName, 
+          nextLegNumber, 
+          nextRunnerName, 
+          isFinalLeg,
+          timestamp: Date.now()
+        }
+      };
+    }
     return {
       title: "Handoff Complete! 🤝",
       body: `${finishedRunnerName} hands off to ${nextRunnerName} running Leg ${nextLegNumber}!`,

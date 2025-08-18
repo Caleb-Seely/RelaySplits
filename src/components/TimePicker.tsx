@@ -33,13 +33,13 @@ const TimePicker: React.FC<TimePickerProps> = ({
 
   useEffect(() => {
     const now = new Date(initialTime || Date.now());
-    setSelectedTime(format(now, 'HH:mm:ss'));
+    setSelectedTime(format(now, 'HH:mm'));
     setSelectedDate(now);
   }, [initialTime, isOpen]);
 
   const handleUseNow = () => {
     const now = new Date();
-    setSelectedTime(format(now, 'HH:mm:ss'));
+    setSelectedTime(format(now, 'HH:mm'));
     setSelectedDate(now);
   };
 
@@ -50,9 +50,9 @@ const TimePicker: React.FC<TimePickerProps> = ({
         return;
       }
 
-      const [hours, minutes, seconds] = selectedTime.split(':').map(Number);
+      const [hours, minutes] = selectedTime.split(':').map(Number);
       const combinedDateTime = new Date(selectedDate);
-      combinedDateTime.setHours(hours, minutes, seconds);
+      combinedDateTime.setHours(hours, minutes, 0); // Set seconds to 0
       
       const timestamp = combinedDateTime.getTime();
       
@@ -69,10 +69,6 @@ const TimePicker: React.FC<TimePickerProps> = ({
   };
 
   const handleTimeChange = (value: string) => {
-    // Ensure seconds are included
-    if (value.length === 5) {
-      value += ':00';
-    }
     setSelectedTime(value);
   };
 
@@ -125,7 +121,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
               <Input
                 id="time"
                 type="time"
-                step="1"
+                step="60"
                 value={selectedTime}
                 onChange={(e) => handleTimeChange(e.target.value)}
                 className="border-blue-200 focus:border-blue-400"
@@ -137,10 +133,10 @@ const TimePicker: React.FC<TimePickerProps> = ({
             <div className="text-sm text-blue-600 mb-2">Selected Time:</div>
             <div className="text-lg font-bold text-blue-900">
               {selectedDate && selectedTime ? (() => {
-                const [hours, minutes, seconds] = selectedTime.split(':').map(Number);
+                const [hours, minutes] = selectedTime.split(':').map(Number);
                 const combinedDateTime = new Date(selectedDate);
-                combinedDateTime.setHours(hours, minutes, seconds);
-                return format(combinedDateTime, 'MMM d, yyyy h:mm:ss a');
+                combinedDateTime.setHours(hours, minutes, 0);
+                return format(combinedDateTime, 'MMM d, yyyy h:mm a');
               })() : 'Please select date and time'}
             </div>
           </div>

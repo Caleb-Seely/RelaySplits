@@ -31,7 +31,7 @@ const ConflictResolutionModal: React.FC = () => {
 
   return (
     <Dialog open={isConflictModalOpen} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-lg mx-4 p-0 bg-white/95 backdrop-blur-xl border-0 rounded-3xl shadow-2xl">
+      <DialogContent className="sm:max-w-lg p-0 bg-white/95 backdrop-blur-xl border-0 rounded-3xl shadow-2xl">
         <div className="p-8">
                      <DialogHeader className="text-center space-y-3 mb-8">
 

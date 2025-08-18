@@ -106,17 +106,8 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
       console.log('[DashboardPrompts] PWA cannot install - criteria not met');
     }
 
-    // Check notification permission status and initialize if needed
-    if (notificationsSupported) {
-      const permission = getPermission();
-      console.log('[DashboardPrompts] Notification permission:', permission);
-      if (permission === 'default') {
-        const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
-        if (!notificationDismissed) {
-          setShowNotifications(true);
-        }
-      }
-    }
+    // Don't show notification prompt immediately - only after PWA prompt is handled
+    // Notification prompt will be shown in handlePWAInstall and handlePWAInstallDismiss
   }, [canInstall, notificationsSupported, getPermission, hasShownPrompts, isInstalling]);
 
   const handlePWAInstall = async () => {
@@ -125,6 +116,16 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
       console.log('PWA installation successful');
       setShowPWA(false);
       sessionStorage.setItem('pwa-install-dismissed', 'true');
+      // Show notification prompt after successful PWA install
+      if (notificationsSupported) {
+        const permission = getPermission();
+        if (permission === 'default') {
+          const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
+          if (!notificationDismissed) {
+            setShowNotifications(true);
+          }
+        }
+      }
     } else {
       console.log('PWA installation declined or failed');
     }
@@ -133,6 +134,16 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
   const handlePWAInstallDismiss = () => {
     setShowPWA(false);
     sessionStorage.setItem('pwa-install-dismissed', 'true');
+    // Show notification prompt after PWA prompt is dismissed
+    if (notificationsSupported) {
+      const permission = getPermission();
+      if (permission === 'default') {
+        const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
+        if (!notificationDismissed) {
+          setShowNotifications(true);
+        }
+      }
+    }
   };
 
   const handleNotificationRequest = async () => {
@@ -307,25 +318,11 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <CardDescription>
-              Get notified for race start, handoffs, and race completion
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-                Race start alert
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-                Handoff notifications
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-                Race completion alert
-              </div>
-            </div>
+                         <CardDescription>
+               Get notified of handoffs and other important race updates
+             </CardDescription>
+           </CardHeader>
+           <CardContent className="space-y-3">
 
             <div className="flex gap-2">
               <Button

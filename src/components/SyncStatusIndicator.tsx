@@ -93,7 +93,7 @@ const SyncStatusIndicator = () => {
       case 'offline':
         return {
           icon: CloudOff,
-          text: `Offline${formatSyncTimeWithParentheses()}`,
+          text: formatSyncTimeWithParentheses(),
           variant: 'destructive' as const,
           className: 'bg-red-500/10 text-red-600 border-red-200'
         };

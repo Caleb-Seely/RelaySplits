@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useRaceStore } from '@/store/raceStore';
+import { useTeam } from '@/contexts/TeamContext';
 import { notificationManager, generateStartNotification, generateFinishNotification, generateHandoffNotification } from '@/utils/notifications';
 
 export const useNotifications = () => {
   const { legs, runners } = useRaceStore();
+  const { deviceInfo } = useTeam();
   const prevLegsRef = useRef(legs);
   const isInitialized = useRef(false);
   const sentNotificationsRef = useRef<Set<string>>(new Set()); // Track sent notifications to prevent duplicates
@@ -41,6 +43,12 @@ export const useNotifications = () => {
       if (currentLeg.actualFinish && !prevLeg.actualFinish) {
         const runner = runners.find(r => r.id === currentLeg.runnerId);
         if (runner) {
+          // Skip notification if the current user is the one who performed this action
+          // We can't perfectly detect this, but we can check if the runner name matches the current user's display name
+          if (deviceInfo?.displayName && runner.name === deviceInfo.displayName) {
+            console.log(`[useNotifications] Skipping notification for current user's action: ${runner.name}`);
+            return;
+          }
           const isFinalLeg = currentLeg.id === 36; // Assuming 36 legs total
           const isFirstLeg = currentLeg.id === 1;
           
@@ -59,11 +67,15 @@ export const useNotifications = () => {
           else if (isFinalLeg) {
             const notificationKey = `finish_${currentLeg.id}`;
             if (!sentNotificationsRef.current.has(notificationKey)) {
+              // Find the final runner (next runner for leg 36)
+              const nextLeg = currentLegs.find(l => l.id === currentLeg.id + 1);
+              const nextRunner = nextLeg ? runners.find(r => r.id === nextLeg.runnerId) : null;
+              
               const notification = generateFinishNotification(
                 runner.name,
                 currentLeg.id,
-                undefined,
-                undefined,
+                nextRunner?.name,
+                nextLeg?.id,
                 true
               );
               notificationManager.showNotification(notification).then(() => {
