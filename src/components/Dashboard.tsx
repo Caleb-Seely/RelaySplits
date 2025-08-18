@@ -51,7 +51,8 @@ import {
   Undo,
   Download,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  HelpCircle
 } from 'lucide-react';
 import LegScheduleTable from './LegScheduleTable';
 import MajorExchanges from './MajorExchanges';
@@ -64,6 +65,8 @@ import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
 import TeamSettings from './TeamSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import QuickHelpPopup from './QuickHelpPopup';
+import { useQuickHelp } from '@/hooks/useQuickHelp';
 
 // Import confetti with proper ES module syntax and fallback
 let confetti: any = null;
@@ -146,6 +149,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
   // Determine if user can edit (not in view-only mode and has edit permissions)
   const canEdit = !isViewOnly && (deviceInfo?.role === 'admin' || deviceInfo?.role === 'member');
+
+  // Quick help popup for new team members
+  const { shouldShowHelp, dismissHelp } = useQuickHelp();
+  
+  // Debug help popup
+  console.log('[Dashboard] Help popup state:', { shouldShowHelp, isViewOnly, canEdit });
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
@@ -326,8 +335,17 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const copyJoinCode = () => {
     const codeToCopy = team?.join_code || team?.id || teamId;
     if (codeToCopy) {
-      navigator.clipboard.writeText(codeToCopy);
-      toast.success(team?.join_code ? `View Only code "${team.join_code}" copied to clipboard!` : 'Team ID copied to clipboard');
+      if (team?.join_code) {
+        // Format for view code: "Use viewer code XXXXXX to watch TEAM NAME run the Hood 2 Coast"
+        const teamName = team?.name || 'Team';
+        const copyText = `Use viewer code ${team.join_code} to watch ${teamName} run the Hood to Coast!`;
+        navigator.clipboard.writeText(copyText);
+        toast.success('View code copied to clipboard!');
+      } else {
+        // Fallback for team ID
+        navigator.clipboard.writeText(codeToCopy);
+        toast.success('Team ID copied to clipboard');
+      }
     } else {
       toast.error('No team code available');
     }
@@ -1078,17 +1096,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     <Settings className="h-4 w-4 mr-2" />
                     Settings
                   </Button>
-                )}
+                                  )}
 
-                {/* Temporary test confetti button for debugging */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={testConfetti}
-                >
-                  🎉 Test Confetti
-                </Button>
-                
                 {/* Join Code Button */}
                 {team?.join_code && (
                   <Button
@@ -1119,10 +1128,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      navigator.clipboard.writeText(team.invite_token);
-                      toast.success('Invite token copied to clipboard');
+                      const teamName = team?.name || 'Team';
+                      const copyText = `Join ${teamName}\nJoin Token: ${team.invite_token}`;
+                      navigator.clipboard.writeText(copyText);
+                      toast.success('Team invite copied to clipboard');
                     }}
-                    title="Copy invite token"
+                    title="Copy team invite"
                   >
                     <Users className="h-4 w-4 mr-1" />
                     Invite
@@ -1190,6 +1201,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
       {/* Real-time database sync integration */}
       <RunnerSyncIntegration />
+
+      {/* Quick Help Popup for new team members */}
+      <QuickHelpPopup 
+        isOpen={shouldShowHelp && !isViewOnly} 
+        onClose={dismissHelp} 
+      />
     </>
   );
 };

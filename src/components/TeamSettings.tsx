@@ -35,6 +35,55 @@ import {
 } from 'lucide-react';
 import { useRaceStore } from '@/store/raceStore';
 
+// Import confetti with proper ES module syntax and fallback
+let confetti: any = null;
+
+// Function to initialize confetti
+const initConfetti = async () => {
+  try {
+    // Check if canvas is supported
+    const canvas = document.createElement('canvas');
+    if (!canvas.getContext) {
+      console.error('Canvas not supported in this browser');
+      return;
+    }
+
+    // Try ES module import first
+    const confettiModule = await import('canvas-confetti');
+    confetti = confettiModule.default || confettiModule;
+    console.log('Confetti loaded successfully via ES module import');
+    
+    // Test if confetti is callable
+    if (typeof confetti === 'function') {
+      console.log('Confetti is a callable function');
+    } else {
+      console.error('Confetti is not a callable function:', typeof confetti);
+      confetti = null;
+    }
+  } catch (e) {
+    console.warn('ES module import failed, trying require...');
+    try {
+      // Fallback to require
+      confetti = require('canvas-confetti');
+      console.log('Confetti loaded successfully via require');
+      
+      // Test if confetti is callable
+      if (typeof confetti === 'function') {
+        console.log('Confetti is a callable function (require)');
+      } else {
+        console.error('Confetti is not a callable function (require):', typeof confetti);
+        confetti = null;
+      }
+    } catch (requireError) {
+      console.error('Failed to load confetti:', requireError);
+      confetti = null;
+    }
+  }
+};
+
+// Initialize confetti when component loads
+initConfetti();
+
 interface Device {
   device_id: string;
   role: string;
@@ -163,9 +212,10 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
 
   const copyInviteLink = () => {
     if (team?.invite_token) {
-      const inviteUrl = `${team.invite_token}`;
-      navigator.clipboard.writeText(inviteUrl);
-      toast.success('Invite token copied to clipboard!');
+      const teamName = team?.name || 'Team';
+      const copyText = `Join ${teamName}\nJoin Token: ${team.invite_token}`;
+      navigator.clipboard.writeText(copyText);
+      toast.success('Team invite copied to clipboard!');
     }
   };
 
@@ -208,6 +258,20 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
   const handleClose = () => {
     if (onClose) {
       onClose();
+    }
+  };
+
+  // Test confetti function for debugging
+  const testConfetti = () => {
+    console.log('Testing confetti, confetti object:', confetti);
+    if (confetti) {
+      confetti({
+        particleCount: 50,
+        spread: 50,
+        origin: { y: 0.6 }
+      });
+    } else {
+      console.warn('Confetti not available');
     }
   };
 
@@ -474,12 +538,19 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
               </div>
             </div>
 
-            {/* Close Button */}
-            <div className="">
+            {/* Close Button and Test Confetti */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={testConfetti}
+                className="flex-1 h-12 rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
+              >
+                🎉 Test Confetti
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleClose}
-                className="w-full h-12 rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
+                className="flex-1 h-12 rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
               >
                 Close Settings
               </Button>
@@ -757,6 +828,24 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
                   }}
                 />
               </div>
+            </div>
+
+            {/* Close Button and Test Confetti - Desktop */}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={testConfetti}
+                className="flex-1 h-12 rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
+              >
+                🎉 Test Confetti
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleClose}
+                className="flex-1 h-12 rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
+              >
+                Close Settings
+              </Button>
             </div>
           </div>
         </div>

@@ -208,6 +208,8 @@ const DemoLanding = () => {
     navigate(`/view/${viewerCode.trim()}`);
   };
 
+
+
   // Demo calculations
   const currentRunner = getCurrentRunner(demoLegs, currentTime);
   const nextRunner = getNextRunner(demoLegs, currentTime);
@@ -582,6 +584,8 @@ const DemoLanding = () => {
           </div>
         )}
       </div>
+
+
 
       {/* Demo Content */}
       <div className={`container mx-auto px-4 py-8 ${isFormVisible ? 'blur-sm' : ''}`}>
