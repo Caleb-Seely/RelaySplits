@@ -35,7 +35,9 @@ import {
   Zap,
   CheckCircle,
   Grid3X3,
-  List
+  List,
+  Trophy,
+  ArrowRight
 } from 'lucide-react';
 import { getDemoRunners, getDemoStartTime, initializeDemoLegs, demoTeam, updateDemoLeg } from '@/utils/demoData';
 import { useTeamSync } from '@/hooks/useTeamSync';
@@ -585,6 +587,22 @@ const DemoLanding = () => {
             </div>
           </div>
         )}
+      </div>
+
+
+
+      {/* Leaderboard Button */}
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex justify-center">
+          <Button
+            onClick={() => toast.info('Leaderboard coming soon! Invite other teams! Stay tuned for real-time team rankings and competition features.')}
+            className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+          >
+            <Trophy className="h-5 w-5" />
+            Leaderboard
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
 
