@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRaceStore } from '@/store/raceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
-import { useSyncManager } from '@/hooks/useSyncManager';
+import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 
@@ -72,7 +72,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import QuickHelpPopup from './QuickHelpPopup';
 import { useQuickHelp } from '@/hooks/useQuickHelp';
 import { usePWA } from '@/hooks/usePWA';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useDecoupledNotifications } from '@/hooks/useDecoupledNotifications';
 import DashboardPrompts from './DashboardPrompts';
 
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
@@ -99,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   } = useRaceStore();
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
-  const { setupRealtimeSubscriptions, manualRetry } = useSyncManager(onConflictDetected);
+  const { performSmartSync, getQueueStatus, isProcessingSync } = useEnhancedSyncManager();
   const { 
     isSupported: notificationsSupported, 
     getPermission: notificationPermission, 
@@ -109,14 +109,17 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     setNotificationPreference,
     getPendingNotificationsCount,
     getNotificationState
-  } = useNotifications();
+  } = useDecoupledNotifications();
 
-  // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
+  // Ensure enhanced sync is active when Dashboard is mounted (but not in view-only mode)
   useEffect(() => {
     if (!teamId || isViewOnly) return;
-    const cleanup = setupRealtimeSubscriptions(teamId);
-    return cleanup;
-  }, [teamId, setupRealtimeSubscriptions, isViewOnly]);
+    
+    // Perform initial smart sync when dashboard loads
+    if (navigator.onLine) {
+      performSmartSync();
+    }
+  }, [teamId, performSmartSync, isViewOnly]);
 
   const { team, updateTeamStartTime, loading } = useTeamSync();
   const { deviceInfo } = useTeam();
@@ -674,27 +677,29 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                         <div className="flex items-center justify-between">
                           <div>
                             <h3 className="text-2xl font-bold text-foreground">
-                              {nextRunnerInfo.name}
+                              {nextRunnerInfo?.name || 'Unknown Runner'}
                             </h3>
                             <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
                               <Users className="h-4 w-4" />
-                              <span>Van {nextRunnerInfo.van}</span>
+                              <span>Van {nextRunnerInfo?.van || '?'}</span>
                             </div>
                           </div>
                           <div className="text-center">
                             <Badge 
                               onClick={() => {
-                                const directionsUrl = getLegDirectionsUrl(nextRunner.id);
-                                window.open(directionsUrl, '_blank');
+                                if (nextRunner) {
+                                  const directionsUrl = getLegDirectionsUrl(nextRunner.id);
+                                  window.open(directionsUrl, '_blank');
+                                }
                               }}
                               className="bg-blue-500 text-white text-sm px-3 py-1 font-semibold mb-2 cursor-pointer hover:bg-blue-600 transition-colors duration-200"
                             >
                               <MapPin className="h-4 w-4 mr-0.5" />
-                              Leg {nextRunner.id}
+                              Leg {nextRunner?.id}
                             </Badge>
                             <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
                               <Target className="h-4 w-4" />
-                              <span>{formatPace((nextRunner as any).paceOverride ?? nextRunnerInfo.pace)}</span>
+                              <span>{formatPace((nextRunner as any)?.paceOverride ?? nextRunnerInfo?.pace ?? 420)}</span>
                             </div>
                           </div>
                         </div>
@@ -841,7 +846,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                         <div className="grid grid-cols-2 gap-4">
                           <div className="text-center">
                             <div className="text-3xl font-bold text-foreground mb-2">
-                              {nextRunner.distance} mi
+                              {nextRunner?.distance ?? 0} mi
                             </div>
                             <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
                               <MapPin className="h-4 w-4" />
@@ -861,7 +866,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                 }
                                 
                                 // For other legs or after race starts, use effective start time
-                                return formatRaceTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime));
+                                return nextRunner ? formatRaceTime(getEffectiveStartTime(nextRunner, legs, actualRaceStartTime)) : '--';
                               })()}
                             </div>
                             <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
@@ -1148,8 +1153,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     size="sm"
                     onClick={() => {
                       const teamName = team?.name || 'Team';
-                      const copyText = `
-                      ${teamName}Join Token:\n ${team.invite_token}`;
+                      const copyText = `Join ${teamName} using this token!:\n ${team.invite_token}`;
                       navigator.clipboard.writeText(copyText);
                       toast.success('Team invite copied to clipboard');
                     }}

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { RaceData, Runner, Leg } from '@/types/race';
 import { initializeRace, recalculateProjections } from '@/utils/raceUtils';
+import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 
 
 
@@ -93,14 +94,52 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   }),
   
   updateRunner: (id, updates) => set((state) => {
+    const currentRunner = state.runners.find(r => r.id === id);
+    if (!currentRunner) return state;
+
     const updatedRunners = state.runners.map(runner => 
       runner.id === id ? { ...runner, ...updates } : runner
     );
     
     if (updates.pace && state.legs.length > 0) {
       const updatedLegs = recalculateProjections(state.legs, 0, updatedRunners, state.startTime);
+      
+      // Publish high-priority data event for sync
+      eventBus.publish({
+        type: EVENT_TYPES.RUNNER_UPDATE,
+        payload: {
+          runnerId: id,
+          updates,
+          previousValues: {
+            name: currentRunner.name,
+            pace: currentRunner.pace,
+            van: currentRunner.van
+          },
+          timestamp: Date.now()
+        },
+        priority: 'high',
+        source: 'raceStore'
+      });
+      
       return { runners: updatedRunners, legs: updatedLegs };
     }
+    
+    // Publish high-priority data event for sync
+    eventBus.publish({
+      type: EVENT_TYPES.RUNNER_UPDATE,
+      payload: {
+        runnerId: id,
+        updates,
+        previousValues: {
+          name: currentRunner.name,
+          pace: currentRunner.pace,
+          van: currentRunner.van
+        },
+        timestamp: Date.now()
+      },
+      priority: 'high',
+      source: 'raceStore'
+    });
     
     return { runners: updatedRunners };
   }),
@@ -127,6 +166,9 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     const legIndex = state.legs.findIndex(leg => leg.id === id);
     if (legIndex === -1) return state;
 
+    const currentLeg = state.legs[legIndex];
+    const previousValue = currentLeg[field];
+
     const updatedLegs = [...state.legs];
     updatedLegs[legIndex] = { ...updatedLegs[legIndex], [field]: time };
 
@@ -139,6 +181,21 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     }
 
     const finalLegs = recalculateProjections(updatedLegs, legIndex, state.runners, state.startTime);
+
+    // Publish high-priority data event for sync
+    eventBus.publish({
+      type: EVENT_TYPES.LEG_UPDATE,
+      payload: {
+        legId: id,
+        field,
+        value: time,
+        previousValue,
+        runnerId: currentLeg.runnerId,
+        timestamp: Date.now()
+      },
+      priority: 'high',
+      source: 'raceStore'
+    });
 
     return { legs: finalLegs };
   }),
