@@ -22,6 +22,7 @@ export const useEnhancedSyncManager = () => {
   const isProcessingSync = useRef(false);
   const lastSyncAttempt = useRef(0);
   const SYNC_COOLDOWN_MS = 2000; // 2 second cooldown between sync attempts
+  const needsFullDataFetch = useRef(false); // Flag to control when full data fetch is needed
   
   // Real-time subscription tracking
   const realtimeSubscription = useRef<any>(null);
@@ -283,7 +284,7 @@ export const useEnhancedSyncManager = () => {
           });
         } else {
           console.log(`[useEnhancedSyncManager] Successfully synced first leg start`);
-          // Update last synced timestamp
+          // Update last synced timestamp without triggering a full data fetch
           storeRef.current.setLastSyncedAt(Date.now());
         }
       } catch (error) {
@@ -408,7 +409,7 @@ export const useEnhancedSyncManager = () => {
         });
       } else {
         console.log(`[useEnhancedSyncManager] Successfully synced start runner`);
-        // Update last synced timestamp
+        // Update last synced timestamp without triggering a full data fetch
         storeRef.current.setLastSyncedAt(Date.now());
       }
     } catch (error) {
@@ -538,8 +539,11 @@ export const useEnhancedSyncManager = () => {
     // First, process any queued offline changes
     await processQueue(storeRef.current.teamId);
     
-    // Then fetch latest data from server
-    await fetchLatestData();
+    // Only fetch latest data if we need it (not after every sync operation)
+    if (needsFullDataFetch.current) {
+      await fetchLatestData();
+      needsFullDataFetch.current = false;
+    }
   }, [processQueue]);
 
   // Fetch latest data from server
@@ -812,13 +816,9 @@ export const useEnhancedSyncManager = () => {
             source: 'realtime'
           });
           
-          // Trigger immediate data fetch for the updated table
+          // Mark that we need a full data fetch on next sync
           if (payload.payload.type === 'legs' || payload.payload.type === 'runners') {
-            // Small delay to ensure server has processed the change
-            setTimeout(() => {
-              console.log('[useEnhancedSyncManager] Fetching latest data after real-time update');
-              fetchLatestData();
-            }, 500);
+            needsFullDataFetch.current = true;
           }
         }
       })
@@ -846,12 +846,13 @@ export const useEnhancedSyncManager = () => {
       syncLogger.debug('Skipping initial sync (recent sync or no data)');
     }
     
-    // Set up periodic sync as backup (every 60 seconds instead of 30)
+    // Set up periodic sync as backup (every 2 minutes instead of 1 minute)
     const syncInterval = setInterval(() => {
       if (navigator.onLine && storeRef.current.teamId) {
-        fetchLatestData();
+        needsFullDataFetch.current = true;
+        performSmartSync();
       }
-    }, 60000);
+    }, 120000);
     
     return () => {
       clearInterval(syncInterval);

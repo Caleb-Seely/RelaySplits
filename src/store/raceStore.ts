@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { RaceData, Runner, Leg } from '@/types/race';
-import { initializeRace, recalculateProjections, validateRaceState } from '@/utils/raceUtils';
+import { initializeRace, recalculateProjections, validateRaceState, clearRunnerCache } from '@/utils/raceUtils';
 import { validateRaceData, createValidationReport } from '@/utils/validation';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 
@@ -195,6 +195,9 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
 
     const finalLegs = recalculateProjections(updatedLegs, legIndex, state.runners, state.startTime);
 
+    // Clear runner cache to ensure immediate UI updates
+    clearRunnerCache();
+
     // Publish high-priority data event for sync
     eventBus.publish({
       type: EVENT_TYPES.LEG_UPDATE,
@@ -254,6 +257,9 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     };
 
     const finalLegs = recalculateProjections(updatedLegs, nextLegIndex, state.runners, state.startTime);
+
+    // Clear runner cache to ensure immediate UI updates
+    clearRunnerCache();
 
     // Publish event for sync
     eventBus.publish({
@@ -394,6 +400,10 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   },
 
   setRaceData: (data: Partial<{ runners: Runner[]; legs: Leg[]; startTime: number; isSetupComplete: boolean }>) => {
+    // Clear runner cache if legs data is being updated
+    if (data.legs) {
+      clearRunnerCache();
+    }
     set((state) => ({ ...state, ...data }));
   },
 

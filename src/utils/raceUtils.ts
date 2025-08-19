@@ -225,6 +225,21 @@ let currentRunnerCache: {
   result: null
 };
 
+// Function to clear cache when legs data changes
+export function clearRunnerCache() {
+  currentRunnerCache = {
+    legsHash: null,
+    currentTime: null,
+    result: null
+  };
+  nextRunnerCache = {
+    legsHash: null,
+    currentTime: null,
+    raceStartTime: null,
+    result: null
+  };
+}
+
 export function getCurrentRunner(legs: Leg[], now: Date): Leg | null {
   const currentTime = now.getTime();
   
@@ -234,8 +249,8 @@ export function getCurrentRunner(legs: Leg[], now: Date): Leg | null {
   
   // Use cache if:
   // 1. Legs haven't changed
-  // 2. Time difference is less than 5 seconds (for countdown accuracy)
-  if (currentRunnerCache.legsHash === legsHash && timeDiff < 5000) {
+  // 2. Time difference is less than 1 second (reduced from 5 seconds for faster UI updates)
+  if (currentRunnerCache.legsHash === legsHash && timeDiff < 1000) {
     return currentRunnerCache.result;
   }
   
@@ -292,10 +307,10 @@ export function getNextRunner(legs: Leg[], now: Date, raceStartTime?: number): L
   
   // Use cache if:
   // 1. Legs haven't changed
-  // 2. Time difference is less than 5 seconds (for countdown accuracy)
+  // 2. Time difference is less than 1 second (reduced from 5 seconds for faster UI updates)
   // 3. Race start time hasn't changed
   if (nextRunnerCache.legsHash === legsHash && 
-      timeDiff < 5000 && 
+      timeDiff < 1000 && 
       nextRunnerCache.raceStartTime === raceStartTime) {
     return nextRunnerCache.result;
   }

@@ -26,7 +26,8 @@ import {
   formatDuration,
   formatPace,
   calculateTotalDistanceTraveled,
-  getEffectiveStartTime
+  getEffectiveStartTime,
+  clearRunnerCache
 } from '@/utils/raceUtils';
 import { getLegDirectionsUrl } from '@/utils/legData';
 import { getRandomCelebrationMessage } from '@/utils/celebrationMessages';
@@ -322,7 +323,13 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const canEdit = !isViewOnly && (deviceInfo?.role === 'admin' || deviceInfo?.role === 'member');
 
   // Comprehensive loading condition that includes team loading and race data initialization
-  const isDataLoading = loading || (legs.length === 0 && teamId && !isViewOnly);
+  // Optimized to prevent showing skeleton when we have valid local data during sync operations
+  const isDataLoading = loading || (
+    legs.length === 0 && 
+    teamId && 
+    !isViewOnly && 
+    !isSetupComplete // Don't show loading if setup is complete and we're just waiting for data
+  );
 
   // Quick help popup for new team members
   const { shouldShowHelp, dismissHelp } = useQuickHelp();
@@ -414,6 +421,10 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const currentRunner = getCurrentRunner(legs, currentTime);
   const nextRunner = getNextRunner(legs, currentTime, startTime);
   
+  // Enhanced loading state for current runner card that prevents skeleton when we have runner data
+  const isCurrentRunnerLoading = isDataLoading && !currentRunner;
+  const isNextRunnerLoading = isDataLoading && !nextRunner;
+  
   // Debug logging for current and next runner
   if (process.env.NODE_ENV === 'development') {
     
@@ -494,6 +505,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     setIsStartingRunner(true);
     
     try {
+      // Clear runner cache to ensure immediate UI updates
+      clearRunnerCache();
+      
       // Trigger confetti
       console.log('Triggering confetti for start runner');
       triggerConfetti({ particleCount: 100, spread: 70 });
@@ -509,6 +523,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         console.log('[handleStartRunner] Transitioning from leg', currentRunner.id, 'to leg', nextRunner.id);
         startNextRunner(currentRunner.id, nextRunner.id);
       }
+      
+      // Force immediate UI refresh by updating currentTime
+      setCurrentTime(new Date());
       
       // Show appropriate toast message based on the scenario
       if (!currentRunner) {
@@ -708,7 +725,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
               <div className="p-2 sm:p-3 md:p-4 bg-green-500/10 rounded-b-none rounded-lg">
                 <div className="space-y-4">
-                  {isDataLoading ? (
+                  {isCurrentRunnerLoading ? (
                     <div className="flex items-center justify-between">
                       <div>
                         <Skeleton className="h-8 w-32 mb-2" />
@@ -772,7 +789,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
               <CardContent className="pt-4">
                 <div className="space-y-4">
-                  {isDataLoading ? (
+                  {isCurrentRunnerLoading ? (
                     <>
                       <div className="grid grid-cols-2 gap-6">
                         <div className="text-center">
@@ -886,7 +903,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               <div className="absolute inset-0 bg-blue-500 h-1"></div>
 
               <div className="p-2 sm:p-3 md:p-4 bg-blue-500/10 rounded-b-none rounded-lg">
-                {isDataLoading ? (
+                {isNextRunnerLoading ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
