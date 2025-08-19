@@ -131,6 +131,7 @@ export const EVENT_TYPES = {
   RUNNER_UPDATE: 'runner_update',
   START_RUNNER: 'start_runner', // Atomic start runner action
   REALTIME_UPDATE: 'realtime_update', // New event type for real-time server updates
+  RACE_STATE_FIXED: 'race_state_fixed', // Race state validation and fixes
   
   // Low priority events (notifications)
   NOTIFICATION_LEG_START: 'notification_leg_start',

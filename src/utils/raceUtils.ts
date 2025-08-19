@@ -234,7 +234,10 @@ export function getCurrentRunner(legs: Leg[], now: Date): Leg | null {
 export function getNextRunner(legs: Leg[], now: Date): Leg | null {
   const currentTime = now.getTime();
   
-  for (const leg of legs) {
+  // Sort legs by ID to ensure we check in order
+  const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
+  
+  for (const leg of sortedLegs) {
     // If this leg hasn't started yet, it's the next runner
     if (!leg.actualStart) {
       return leg;
@@ -332,26 +335,62 @@ export function calculateTotalDistanceTraveled(legs: Leg[]): number {
 }
 
 export function initializeRace(startTime: number, runners: Runner[]): Leg[] {
+  // Validate input parameters
+  if (!runners || runners.length === 0) {
+    throw new Error('Cannot initialize race: no runners provided');
+  }
+
+  if (startTime <= 0) {
+    throw new Error('Cannot initialize race: invalid start time');
+  }
+
+  // Validate runner data integrity
+  const validRunners = runners.filter(runner => {
+    if (!runner || typeof runner.id !== 'number' || runner.id <= 0) {
+      console.warn(`[initializeRace] Skipping invalid runner:`, runner);
+      return false;
+    }
+    if (typeof runner.pace !== 'number' || runner.pace <= 0) {
+      console.warn(`[initializeRace] Runner ${runner.id} has invalid pace: ${runner.pace}`);
+      return false;
+    }
+    if (runner.van !== 1 && runner.van !== 2) {
+      console.warn(`[initializeRace] Runner ${runner.id} has invalid van: ${runner.van}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (validRunners.length === 0) {
+    throw new Error('Cannot initialize race: no valid runners found');
+  }
+
+  if (validRunners.length !== runners.length) {
+    console.warn(`[initializeRace] Filtered out ${runners.length - validRunners.length} invalid runners`);
+  }
+
   const legs: Leg[] = [];
   let currentStartTime = startTime;
   
   DEFAULT_LEG_DISTANCES.forEach((distance, index) => {
     const legNumber = index + 1;
-    const runnerIndex = index % runners.length; // Use runners.length instead of hardcoded 12
-    const runner = runners[runnerIndex];
+    const runnerIndex = index % validRunners.length;
+    const runner = validRunners[runnerIndex];
     
-    if (!runner) {
-      throw new Error(`No runner found for leg ${legNumber}`);
+    // Double-check runner validity (defensive programming)
+    if (!runner || runner.id <= 0) {
+      throw new Error(`Invalid runner data for leg ${legNumber}: runner ID must be positive`);
     }
     
     const projectedFinish = calculateProjectedFinish(currentStartTime, runner.pace, distance);
     
-    const leg = {
+    const leg: Leg = {
       id: legNumber,
-      runnerId: runner.id,
+      runnerId: runner.id, // This is now guaranteed to be valid
       distance,
       projectedStart: currentStartTime,
-      projectedFinish
+      projectedFinish,
+      updated_at: null
     };
     
     legs.push(leg);
@@ -359,5 +398,64 @@ export function initializeRace(startTime: number, runners: Runner[]): Leg[] {
     currentStartTime = projectedFinish;
   });
   
+  // Final validation of created legs
+  const invalidLegs = legs.filter(leg => !leg.runnerId || leg.runnerId <= 0);
+  if (invalidLegs.length > 0) {
+    throw new Error(`Race initialization failed: ${invalidLegs.length} legs have invalid runnerId`);
+  }
+  
+  console.log(`[initializeRace] Successfully initialized ${legs.length} legs with ${validRunners.length} runners`);
   return legs;
+}
+
+export function validateRaceState(legs: Leg[]): { isValid: boolean; issues: string[] } {
+  const issues: string[] = [];
+  const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
+  
+  // Check for gaps in leg sequence
+  for (let i = 0; i < sortedLegs.length - 1; i++) {
+    const currentLeg = sortedLegs[i];
+    const nextLeg = sortedLegs[i + 1];
+    
+    // Check for non-sequential leg IDs
+    if (nextLeg.id !== currentLeg.id + 1) {
+      issues.push(`Gap in leg sequence: ${currentLeg.id} -> ${nextLeg.id}`);
+    }
+    
+    // Check for inconsistent finish/start times
+    if (currentLeg.actualFinish && nextLeg.actualStart) {
+      if (currentLeg.actualFinish > nextLeg.actualStart) {
+        issues.push(`Leg ${currentLeg.id} finished after Leg ${nextLeg.id} started`);
+      }
+    }
+    
+    // Check for missing start times when finish exists
+    if (currentLeg.actualFinish && !currentLeg.actualStart) {
+      issues.push(`Leg ${currentLeg.id} has finish time but no start time`);
+    }
+  }
+  
+  // Check for multiple running legs
+  const runningLegs = sortedLegs.filter(leg => 
+    leg.actualStart && !leg.actualFinish
+  );
+  
+  if (runningLegs.length > 1) {
+    issues.push(`Multiple runners currently running: ${runningLegs.map(l => l.id).join(', ')}`);
+  }
+  
+  // Check for race completion consistency
+  const lastLeg = sortedLegs[sortedLegs.length - 1];
+  if (lastLeg && lastLeg.actualFinish) {
+    // If final leg is finished, all previous legs should be finished
+    const unfinishedLegs = sortedLegs.slice(0, -1).filter(leg => !leg.actualFinish);
+    if (unfinishedLegs.length > 0) {
+      issues.push(`Race marked as complete but legs ${unfinishedLegs.map(l => l.id).join(', ')} are not finished`);
+    }
+  }
+  
+  return {
+    isValid: issues.length === 0,
+    issues
+  };
 }

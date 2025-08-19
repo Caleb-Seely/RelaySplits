@@ -64,8 +64,21 @@ export const ConflictResolutionProvider: React.FC<ConflictResolutionProviderProp
     );
     store.setRaceData({ legs: updatedLegs });
 
-    // The enhanced sync manager will automatically handle the sync via event bus
-    // No need to manually call sync functions anymore
+    // Manually trigger sync by publishing a LEG_UPDATE event
+    eventBus.publish({
+      type: EVENT_TYPES.LEG_UPDATE,
+      payload: {
+        legId: currentConflict.legId,
+        field: field === 'actualStart' ? 'start' : 'finish',
+        value: selectedTime,
+        previousValue: field === 'actualStart' ? currentConflict.localTime : currentConflict.serverTime,
+        runnerId: store.legs.find(leg => leg.id === currentConflict.legId)?.runnerId,
+        timestamp: Date.now(),
+        source: 'conflict-resolution'
+      },
+      priority: 'high',
+      source: 'conflictResolution'
+    });
 
     // Clear the conflict
     setCurrentConflict(null);

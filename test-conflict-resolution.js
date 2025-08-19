@@ -93,6 +93,92 @@ function checkNetwork() {
   console.log('Connection type:', navigator.connection ? navigator.connection.effectiveType : 'unknown');
 }
 
+// Test 6: Test conflict resolution sync
+function testConflictResolutionSync() {
+  console.log('\n🔧 Test 6: Testing conflict resolution sync...');
+  
+  try {
+    // Check if eventBus is available
+    if (typeof eventBus !== 'undefined') {
+      console.log('✅ EventBus is available');
+      
+      // Check if LEG_UPDATE event type is defined
+      if (typeof EVENT_TYPES !== 'undefined' && EVENT_TYPES.LEG_UPDATE) {
+        console.log('✅ LEG_UPDATE event type is available');
+        
+        // Simulate a conflict resolution event
+        const testEvent = {
+          type: EVENT_TYPES.LEG_UPDATE,
+          payload: {
+            legId: 1,
+            field: 'start',
+            value: Date.now(),
+            previousValue: Date.now() - 60000,
+            runnerId: 1,
+            timestamp: Date.now(),
+            source: 'conflict-resolution'
+          },
+          priority: 'high',
+          source: 'test'
+        };
+        
+        console.log('📤 Publishing test LEG_UPDATE event...');
+        eventBus.publish(testEvent);
+        console.log('✅ Test event published successfully');
+        
+        // Check if useEnhancedSyncManager is listening
+        console.log('ℹ️ The useEnhancedSyncManager should now process this event and sync to database');
+        
+      } else {
+        console.log('❌ EVENT_TYPES not available');
+      }
+    } else {
+      console.log('❌ EventBus not available');
+    }
+  } catch (error) {
+    console.log('❌ Error testing conflict resolution sync:', error.message);
+  }
+}
+
+// Test 7: Check button alignment in conflict modal
+function checkConflictModalAlignment() {
+  console.log('\n🎯 Test 7: Checking conflict modal button alignment...');
+  
+  try {
+    // Look for the conflict resolution modal in the DOM
+    const modal = document.querySelector('[role="dialog"]');
+    if (modal) {
+      console.log('✅ Conflict modal found');
+      
+      // Check for buttons
+      const buttons = modal.querySelectorAll('button');
+      console.log(`Found ${buttons.length} buttons in modal`);
+      
+      if (buttons.length >= 2) {
+        // Check if buttons are in a flex container
+        const buttonContainer = buttons[0].parentElement;
+        if (buttonContainer) {
+          const styles = window.getComputedStyle(buttonContainer);
+          console.log('Button container display:', styles.display);
+          console.log('Button container justify-content:', styles.justifyContent);
+          console.log('Button container align-items:', styles.alignItems);
+          
+          if (styles.display === 'flex' && styles.justifyContent === 'center') {
+            console.log('✅ Buttons should be properly centered');
+          } else {
+            console.log('⚠️ Button container may not be properly centered');
+          }
+        }
+      }
+    } else {
+      console.log('ℹ️ No conflict modal currently visible');
+      console.log('💡 To test button alignment, trigger a conflict first');
+    }
+  } catch (error) {
+    console.log('❌ Error checking modal alignment:', error.message);
+  }
+}
+
 // Run all tests
 function runConflictResolutionTest() {
   console.log('🚀 Running conflict resolution tests...');
@@ -105,6 +191,8 @@ function runConflictResolutionTest() {
   }
   
   testMergeLogic();
+  testConflictResolutionSync();
+  checkConflictModalAlignment();
   console.log('\n✅ Conflict resolution tests completed!');
 }
 
@@ -115,7 +203,9 @@ window.conflictResolutionTest = {
   checkLocalStore,
   simulateOfflineChange,
   testMergeLogic,
-  checkNetwork
+  checkNetwork,
+  testConflictResolutionSync,
+  checkConflictModalAlignment
 };
 
 console.log('📚 Conflict resolution test functions available as window.conflictResolutionTest');

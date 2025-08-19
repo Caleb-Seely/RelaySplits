@@ -1,165 +1,277 @@
-import { z } from 'zod';
+import type { Runner, Leg } from '@/types/race';
 
-// Base schemas for common data types
-export const RunnerSchema = z.object({
-  id: z.string().uuid().optional(),
-  name: z.string().min(1, 'Name is required').max(100, 'Name too long').trim(),
-  pace: z.string().regex(/^\d{1,2}:\d{2}$/, 'Pace must be in MM:SS format'),
-  van: z.string().regex(/^[12]$/, 'Van must be 1 or 2'),
-  team_id: z.string().uuid().optional(),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
-});
-
-export const LegSchema = z.object({
-  id: z.number().int().positive(),
-  team_id: z.string().uuid().optional(),
-  runner_id: z.string().uuid().optional(),
-  distance: z.number().positive().max(100, 'Distance too long'),
-  projected_start: z.number().optional(),
-  projected_finish: z.number().optional(),
-  actual_start: z.number().optional(),
-  actual_finish: z.number().optional(),
-  status: z.enum(['ready', 'running', 'finished', 'next']).optional(),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
-});
-
-export const TeamSchema = z.object({
-  id: z.string().uuid().optional(),
-  name: z.string().min(1, 'Team name is required').max(100, 'Team name too long').trim(),
-  start_time: z.number().positive(),
-  owner_id: z.string().uuid().optional(),
-  invite_token: z.string().uuid().optional(),
-  admin_secret: z.string().min(10, 'Admin secret too short').optional(),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
-});
-
-// Input sanitization functions
-export const sanitizeString = (input: string): string => {
-  if (typeof input !== 'string') return '';
-  
-  // Remove potentially dangerous characters
-  return input
-    .replace(/[<>]/g, '') // Remove < and > to prevent XSS
-    .replace(/javascript:/gi, '') // Remove javascript: protocol
-    .replace(/on\w+=/gi, '') // Remove event handlers
-    .trim();
-};
-
-export const sanitizeNumber = (input: any): number => {
-  const num = Number(input);
-  return isNaN(num) ? 0 : Math.max(0, num);
-};
-
-export const sanitizeDate = (input: any): number => {
-  const date = new Date(input);
-  return isNaN(date.getTime()) ? Date.now() : date.getTime();
-};
-
-// Validation functions with sanitization
-export const validateRunner = (data: any) => {
-  try {
-    const sanitized = {
-      ...data,
-      name: sanitizeString(data.name),
-      pace: sanitizeString(data.pace),
-      van: sanitizeString(data.van),
-    };
-    return { success: true, data: RunnerSchema.parse(sanitized) };
-  } catch (error) {
-    return { success: false, error: error instanceof z.ZodError ? error.errors : 'Validation failed' };
-  }
-};
-
-export const validateLeg = (data: any) => {
-  try {
-    const sanitized = {
-      ...data,
-      distance: sanitizeNumber(data.distance),
-      projected_start: data.projected_start ? sanitizeDate(data.projected_start) : undefined,
-      projected_finish: data.projected_finish ? sanitizeDate(data.projected_finish) : undefined,
-      actual_start: data.actual_start ? sanitizeDate(data.actual_start) : undefined,
-      actual_finish: data.actual_finish ? sanitizeDate(data.actual_finish) : undefined,
-    };
-    return { success: true, data: LegSchema.parse(sanitized) };
-  } catch (error) {
-    return { success: false, error: error instanceof z.ZodError ? error.errors : 'Validation failed' };
-  }
-};
-
-export const validateTeam = (data: any) => {
-  try {
-    const sanitized = {
-      ...data,
-      name: sanitizeString(data.name),
-      start_time: sanitizeDate(data.start_time),
-    };
-    return { success: true, data: TeamSchema.parse(sanitized) };
-  } catch (error) {
-    return { success: false, error: error instanceof z.ZodError ? error.errors : 'Validation failed' };
-  }
-};
-
-// Rate limiting utility
-export class RateLimiter {
-  private attempts: Map<string, { count: number; resetTime: number }> = new Map();
-  private maxAttempts: number;
-  private windowMs: number;
-
-  constructor(maxAttempts: number = 10, windowMs: number = 60000) {
-    this.maxAttempts = maxAttempts;
-    this.windowMs = windowMs;
-  }
-
-  isAllowed(key: string): boolean {
-    const now = Date.now();
-    const attempt = this.attempts.get(key);
-
-    if (!attempt || now > attempt.resetTime) {
-      this.attempts.set(key, { count: 1, resetTime: now + this.windowMs });
-      return true;
-    }
-
-    if (attempt.count >= this.maxAttempts) {
-      return false;
-    }
-
-    attempt.count++;
-    return true;
-  }
-
-  reset(key: string): void {
-    this.attempts.delete(key);
-  }
+/**
+ * Validation result interface for comprehensive data validation
+ */
+export interface ValidationResult {
+  isValid: boolean;
+  issues: string[];
+  warnings: string[];
+  suggestions: string[];
 }
 
-// Data integrity checks
-export const validateDataIntegrity = (data: any): { valid: boolean; errors: string[] } => {
-  const errors: string[] = [];
+/**
+ * Validates a single runner object
+ */
+export function validateRunner(runner: any, index?: number): ValidationResult {
+  const issues: string[] = [];
+  const warnings: string[] = [];
+  const suggestions: string[] = [];
 
-  // Check for required fields
-  if (!data) {
-    errors.push('Data is required');
-    return { valid: false, errors };
+  if (!runner) {
+    issues.push(`Runner ${index !== undefined ? `at index ${index}` : ''} is null or undefined`);
+    return { isValid: false, issues, warnings, suggestions };
   }
 
-  // Check for circular references
-  try {
-    JSON.stringify(data);
-  } catch (error) {
-    errors.push('Data contains circular references');
+  // Check required fields
+  if (typeof runner.id !== 'number' || runner.id <= 0) {
+    issues.push(`Runner ${index !== undefined ? `at index ${index}` : ''} has invalid ID: ${runner.id}`);
   }
 
-  // Check for excessive data size (prevent DoS)
-  const dataSize = JSON.stringify(data).length;
-  if (dataSize > 1000000) { // 1MB limit
-    errors.push('Data size exceeds limit');
+  if (typeof runner.name !== 'string' || runner.name.trim().length === 0) {
+    issues.push(`Runner ${runner.id || index} has invalid name: "${runner.name}"`);
   }
 
-  return { valid: errors.length === 0, errors };
-};
+  if (typeof runner.pace !== 'number' || runner.pace <= 0) {
+    issues.push(`Runner ${runner.id || index} has invalid pace: ${runner.pace}`);
+  } else if (runner.pace < 180) { // Less than 3:00 pace
+    warnings.push(`Runner ${runner.id || index} has very fast pace: ${runner.pace} seconds/mile`);
+  } else if (runner.pace > 900) { // More than 15:00 pace
+    warnings.push(`Runner ${runner.id || index} has very slow pace: ${runner.pace} seconds/mile`);
+  }
 
-// Export schemas for use in components
-// Note: Individual schemas are already exported above
+  if (runner.van !== 1 && runner.van !== 2) {
+    issues.push(`Runner ${runner.id || index} has invalid van assignment: ${runner.van}`);
+  }
+
+  // Check for duplicate IDs
+  if (runner.id && runner.id > 0) {
+    suggestions.push(`Consider validating runner ID ${runner.id} for uniqueness across all runners`);
+  }
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+    warnings,
+    suggestions
+  };
+}
+
+/**
+ * Validates a single leg object
+ */
+export function validateLeg(leg: any, index?: number, allRunners?: Runner[]): ValidationResult {
+  const issues: string[] = [];
+  const warnings: string[] = [];
+  const suggestions: string[] = [];
+
+  if (!leg) {
+    issues.push(`Leg ${index !== undefined ? `at index ${index}` : ''} is null or undefined`);
+    return { isValid: false, issues, warnings, suggestions };
+  }
+
+  // Check required fields
+  if (typeof leg.id !== 'number' || leg.id <= 0) {
+    issues.push(`Leg ${index !== undefined ? `at index ${index}` : ''} has invalid ID: ${leg.id}`);
+  }
+
+  if (typeof leg.runnerId !== 'number' || leg.runnerId <= 0) {
+    issues.push(`Leg ${leg.id || index} has invalid runnerId: ${leg.runnerId}`);
+  }
+
+  if (typeof leg.distance !== 'number' || leg.distance <= 0) {
+    issues.push(`Leg ${leg.id || index} has invalid distance: ${leg.distance}`);
+  } else if (leg.distance > 10) {
+    warnings.push(`Leg ${leg.id || index} has very long distance: ${leg.distance} miles`);
+  }
+
+  if (typeof leg.projectedStart !== 'number' || leg.projectedStart <= 0) {
+    issues.push(`Leg ${leg.id || index} has invalid projectedStart: ${leg.projectedStart}`);
+  }
+
+  if (typeof leg.projectedFinish !== 'number' || leg.projectedFinish <= 0) {
+    issues.push(`Leg ${leg.id || index} has invalid projectedFinish: ${leg.projectedFinish}`);
+  }
+
+  // Check time consistency
+  if (leg.projectedStart && leg.projectedFinish && leg.projectedFinish <= leg.projectedStart) {
+    issues.push(`Leg ${leg.id || index} has invalid time range: finish (${leg.projectedFinish}) <= start (${leg.projectedStart})`);
+  }
+
+  // Check actual times if present
+  if (leg.actualStart !== undefined && leg.actualStart !== null) {
+    if (typeof leg.actualStart !== 'number' || leg.actualStart <= 0) {
+      issues.push(`Leg ${leg.id || index} has invalid actualStart: ${leg.actualStart}`);
+    }
+  }
+
+  if (leg.actualFinish !== undefined && leg.actualFinish !== null) {
+    if (typeof leg.actualFinish !== 'number' || leg.actualFinish <= 0) {
+      issues.push(`Leg ${leg.id || index} has invalid actualFinish: ${leg.actualFinish}`);
+    }
+    
+    if (leg.actualStart && leg.actualFinish <= leg.actualStart) {
+      issues.push(`Leg ${leg.id || index} has invalid actual time range: finish (${leg.actualFinish}) <= start (${leg.actualStart})`);
+    }
+  }
+
+  // Check runner assignment if runners are provided
+  if (allRunners && leg.runnerId) {
+    const assignedRunner = allRunners.find(r => r.id === leg.runnerId);
+    if (!assignedRunner) {
+      issues.push(`Leg ${leg.id || index} assigned to non-existent runner ${leg.runnerId}`);
+    }
+  }
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+    warnings,
+    suggestions
+  };
+}
+
+/**
+ * Validates the entire race data structure
+ */
+export function validateRaceData(runners: Runner[], legs: Leg[], startTime?: number): ValidationResult {
+  const issues: string[] = [];
+  const warnings: string[] = [];
+  const suggestions: string[] = [];
+
+  // Validate start time
+  if (startTime !== undefined && (typeof startTime !== 'number' || startTime <= 0)) {
+    issues.push(`Invalid start time: ${startTime}`);
+  }
+
+  // Validate runners array
+  if (!Array.isArray(runners)) {
+    issues.push('Runners must be an array');
+    return { isValid: false, issues, warnings, suggestions };
+  }
+
+  if (runners.length === 0) {
+    issues.push('No runners provided');
+    return { isValid: false, issues, warnings, suggestions };
+  }
+
+  // Validate individual runners
+  const runnerValidationResults = runners.map((runner, index) => validateRunner(runner, index));
+  runnerValidationResults.forEach(result => {
+    issues.push(...result.issues);
+    warnings.push(...result.warnings);
+    suggestions.push(...result.suggestions);
+  });
+
+  // Check for duplicate runner IDs
+  const runnerIds = runners.map(r => r.id).filter(id => id > 0);
+  const uniqueRunnerIds = new Set(runnerIds);
+  if (runnerIds.length !== uniqueRunnerIds.size) {
+    issues.push('Duplicate runner IDs found');
+  }
+
+  // Validate legs array
+  if (!Array.isArray(legs)) {
+    issues.push('Legs must be an array');
+    return { isValid: false, issues, warnings, suggestions };
+  }
+
+  // Validate individual legs
+  const legValidationResults = legs.map((leg, index) => validateLeg(leg, index, runners));
+  legValidationResults.forEach(result => {
+    issues.push(...result.issues);
+    warnings.push(...result.warnings);
+    suggestions.push(...result.suggestions);
+  });
+
+  // Check for duplicate leg IDs
+  const legIds = legs.map(l => l.id).filter(id => id > 0);
+  const uniqueLegIds = new Set(legIds);
+  if (legIds.length !== uniqueLegIds.size) {
+    issues.push('Duplicate leg IDs found');
+  }
+
+  // Check leg sequence
+  const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
+  for (let i = 0; i < sortedLegs.length - 1; i++) {
+    const currentLeg = sortedLegs[i];
+    const nextLeg = sortedLegs[i + 1];
+    
+    if (nextLeg.id !== currentLeg.id + 1) {
+      issues.push(`Gap in leg sequence: ${currentLeg.id} -> ${nextLeg.id}`);
+    }
+  }
+
+  // Check for multiple running legs
+  const runningLegs = legs.filter(leg => 
+    leg.actualStart && !leg.actualFinish
+  );
+  
+  if (runningLegs.length > 1) {
+    issues.push(`Multiple runners currently running: ${runningLegs.map(l => l.id).join(', ')}`);
+  }
+
+  // Check race completion consistency
+  const lastLeg = sortedLegs[sortedLegs.length - 1];
+  if (lastLeg && lastLeg.actualFinish) {
+    const unfinishedLegs = sortedLegs.slice(0, -1).filter(leg => !leg.actualFinish);
+    if (unfinishedLegs.length > 0) {
+      issues.push(`Race marked as complete but legs ${unfinishedLegs.map(l => l.id).join(', ')} are not finished`);
+    }
+  }
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+    warnings,
+    suggestions
+  };
+}
+
+/**
+ * Creates a comprehensive validation report
+ */
+export function createValidationReport(runners: Runner[], legs: Leg[], startTime?: number): string {
+  const result = validateRaceData(runners, legs, startTime);
+  
+  let report = '=== RACE DATA VALIDATION REPORT ===\n\n';
+  
+  if (result.isValid) {
+    report += '✅ All data is valid!\n\n';
+  } else {
+    report += '❌ Data validation failed!\n\n';
+  }
+  
+  if (result.issues.length > 0) {
+    report += '🚨 CRITICAL ISSUES:\n';
+    result.issues.forEach(issue => {
+      report += `  • ${issue}\n`;
+    });
+    report += '\n';
+  }
+  
+  if (result.warnings.length > 0) {
+    report += '⚠️  WARNINGS:\n';
+    result.warnings.forEach(warning => {
+      report += `  • ${warning}\n`;
+    });
+    report += '\n';
+  }
+  
+  if (result.suggestions.length > 0) {
+    report += '💡 SUGGESTIONS:\n';
+    result.suggestions.forEach(suggestion => {
+      report += `  • ${suggestion}\n`;
+    });
+    report += '\n';
+  }
+  
+  report += `📊 SUMMARY:\n`;
+  report += `  • Runners: ${runners.length}\n`;
+  report += `  • Legs: ${legs.length}\n`;
+  report += `  • Issues: ${result.issues.length}\n`;
+  report += `  • Warnings: ${result.warnings.length}\n`;
+  report += `  • Suggestions: ${result.suggestions.length}\n`;
+  
+  return report;
+}

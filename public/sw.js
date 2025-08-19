@@ -22,6 +22,7 @@ const NOTIFICATION_DEDUP_WINDOW = 5 * 60 * 1000; // 5 minutes
 // Global variable to store team ID received from main thread
 let currentTeamId = null;
 let supabaseUrl = null;
+let supabaseAnonKey = null;
 
 // Install event - cache static files
 self.addEventListener('install', (event) => {
@@ -210,15 +211,32 @@ async function fetchRaceDataWithRetry(teamId, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`[SW] Fetching race data, attempt ${attempt}/${maxRetries}`);
-      const response = await fetch(`${supabaseUrl}/functions/v1/legs-list?teamId=${teamId}`);
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // Use POST with proper authentication headers
+      const legsResponse = await fetch(`${supabaseUrl}/functions/v1/legs-list`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({ teamId })
+      });
+      
+      if (!legsResponse.ok) {
+        throw new Error(`HTTP ${legsResponse.status}`);
       }
       
-      const legsData = await response.json();
+      const legsData = await legsResponse.json();
       
-      const runnersResponse = await fetch(`${supabaseUrl}/functions/v1/runners-list?teamId=${teamId}`);
+      const runnersResponse = await fetch(`${supabaseUrl}/functions/v1/runners-list`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({ teamId })
+      });
+      
       if (!runnersResponse.ok) {
         throw new Error(`HTTP ${runnersResponse.status}`);
       }
@@ -603,10 +621,11 @@ self.addEventListener('message', (event) => {
     console.log('[SW] Team ID updated:', currentTeamId);
   }
 
-  // Handle Supabase URL updates from main thread
-  if (event.data && event.data.type === 'UPDATE_SUPABASE_URL') {
+  // Handle Supabase config updates from main thread
+  if (event.data && event.data.type === 'UPDATE_SUPABASE_CONFIG') {
     supabaseUrl = event.data.supabaseUrl;
-    console.log('[SW] Supabase URL updated:', supabaseUrl);
+    supabaseAnonKey = event.data.supabaseAnonKey;
+    console.log('[SW] Supabase config updated:', { supabaseUrl, hasAnonKey: !!supabaseAnonKey });
   }
   
   // Handle start background sync message

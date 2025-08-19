@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { RaceData, Runner, Leg } from '@/types/race';
-import { initializeRace, recalculateProjections } from '@/utils/raceUtils';
+import { initializeRace, recalculateProjections, validateRaceState } from '@/utils/raceUtils';
+import { validateRaceData, createValidationReport } from '@/utils/validation';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 
 // Subscribe to real-time updates from other devices
@@ -28,7 +29,7 @@ interface RaceStore extends RaceData {
   setRunners: (runners: Runner[]) => void;
   updateLegDistance: (id: number, distance: number) => void;
   updateLegActualTime: (id: number, field: 'actualStart' | 'actualFinish', time: number | null) => void;
-  startNextRunner: (currentRunnerId: number, nextRunnerId: number) => void;
+  startNextRunner: (currentLegId: number | null, nextLegId: number) => void;
   setCurrentVan: (van: 1 | 2) => void;
   nextSetupStep: () => void;
   prevSetupStep: () => void;
@@ -57,6 +58,9 @@ interface RaceStore extends RaceData {
   undoLastStartRunner: () => void;
   canUndo: () => boolean;
   getUndoDescription: () => string | null;
+  validateAndFixRaceState: () => { isValid: boolean; issues: string[]; fixed: boolean };
+  validateRaceData: () => { isValid: boolean; issues: string[]; warnings: string[]; suggestions: string[] };
+  getValidationReport: () => string;
 }
 
 const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
@@ -210,40 +214,54 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     return { legs: finalLegs, lastSyncedAt: Date.now() };
   }),
 
-  // New atomic function for start runner action
-  startNextRunner: (currentRunnerId: number, nextRunnerId: number) => set((state) => {
-    const currentLegIndex = state.legs.findIndex(leg => leg.id === currentRunnerId);
-    const nextLegIndex = state.legs.findIndex(leg => leg.id === nextRunnerId);
-    
-    if (currentLegIndex === -1 || nextLegIndex === -1) return state;
+  // Simple timekeeping function - start the next leg
+  startNextRunner: (currentLegId: number | null, nextLegId: number) => set((state) => {
+    // Validate input parameters
+    if ((currentLegId !== null && typeof currentLegId !== 'number') || typeof nextLegId !== 'number') {
+      console.warn('[startNextRunner] Invalid parameters:', { currentLegId, nextLegId });
+      return state;
+    }
 
-    const currentLeg = state.legs[currentLegIndex];
-    const nextLeg = state.legs[nextLegIndex];
+    const nextLegIndex = state.legs.findIndex(leg => leg.id === nextLegId);
+    if (nextLegIndex === -1) {
+      console.warn('[startNextRunner] Invalid next leg ID:', nextLegId);
+      return state;
+    }
+
     const now = Date.now();
-
     const updatedLegs = [...state.legs];
-    
-    // Finish current runner
-    updatedLegs[currentLegIndex] = { 
-      ...updatedLegs[currentLegIndex], 
-      actualFinish: now 
-    };
-    
-    // Start next runner
+
+    // If there's a current leg, finish it first
+    if (currentLegId !== null) {
+      const currentLegIndex = state.legs.findIndex(leg => leg.id === currentLegId);
+      if (currentLegIndex !== -1) {
+        const currentLeg = state.legs[currentLegIndex];
+        if (currentLeg.actualStart && !currentLeg.actualFinish) {
+          console.log('[startNextRunner] Finishing leg:', currentLeg.id);
+          updatedLegs[currentLegIndex] = { 
+            ...currentLeg, 
+            actualFinish: now 
+          };
+        }
+      }
+    }
+
+    // Start the next leg
+    console.log('[startNextRunner] Starting leg:', nextLegId);
     updatedLegs[nextLegIndex] = { 
       ...updatedLegs[nextLegIndex], 
       actualStart: now 
     };
 
-    const finalLegs = recalculateProjections(updatedLegs, Math.min(currentLegIndex, nextLegIndex), state.runners, state.startTime);
+    const finalLegs = recalculateProjections(updatedLegs, nextLegIndex, state.runners, state.startTime);
 
-    // Publish atomic start runner event for sync
+    // Publish event for sync
     eventBus.publish({
       type: EVENT_TYPES.START_RUNNER,
       payload: {
-        currentRunnerId,
-        nextRunnerId,
-        finishTime: now,
+        currentLegId,
+        nextLegId,
+        finishTime: currentLegId ? updatedLegs.find(l => l.id === currentLegId)?.actualFinish : undefined,
         startTime: now,
         timestamp: Date.now()
       },
@@ -251,7 +269,6 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       source: 'raceStore'
     });
 
-    // Update last synced timestamp to indicate local change
     return { legs: finalLegs, lastSyncedAt: Date.now() };
   }),
 
@@ -294,8 +311,82 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   setDidInitFromTeam: (val) => set({ didInitFromTeam: val }),
 
   initializeLegs: () => set((state) => {
-    const initialLegs = initializeRace(state.startTime, state.runners);
-    return { legs: initialLegs };
+    try {
+      // Ensure we have valid runners before initializing legs
+      if (!state.runners || state.runners.length === 0) {
+        console.warn('[initializeLegs] No runners available, creating default runners');
+        const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
+          id: i + 1,
+          name: `Runner ${i + 1}`,
+          pace: 420, // 7:00 pace default
+          van: (i < 6 ? 1 : 2) as 1 | 2,
+          remoteId: undefined,
+          updated_at: null
+        }));
+        
+        // Update runners first, then initialize legs
+        const initialLegs = initializeRace(state.startTime, defaultRunners);
+        return { runners: defaultRunners, legs: initialLegs };
+      }
+
+      // Validate existing runners before initialization
+      const validRunners = state.runners.filter(runner => 
+        runner && 
+        typeof runner.id === 'number' && 
+        runner.id > 0 && 
+        typeof runner.pace === 'number' && 
+        runner.pace > 0 &&
+        (runner.van === 1 || runner.van === 2)
+      );
+
+      if (validRunners.length === 0) {
+        console.warn('[initializeLegs] No valid runners found, creating default runners');
+        const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
+          id: i + 1,
+          name: `Runner ${i + 1}`,
+          pace: 420, // 7:00 pace default
+          van: (i < 6 ? 1 : 2) as 1 | 2,
+          remoteId: undefined,
+          updated_at: null
+        }));
+        
+        const initialLegs = initializeRace(state.startTime, defaultRunners);
+        return { runners: defaultRunners, legs: initialLegs };
+      }
+
+      if (validRunners.length !== state.runners.length) {
+        console.warn(`[initializeLegs] Filtered out ${state.runners.length - validRunners.length} invalid runners`);
+        // Use only valid runners for initialization
+        const initialLegs = initializeRace(state.startTime, validRunners);
+        return { runners: validRunners, legs: initialLegs };
+      }
+
+      // All runners are valid, proceed with initialization
+      const initialLegs = initializeRace(state.startTime, state.runners);
+      return { legs: initialLegs };
+    } catch (error) {
+      console.error('[initializeLegs] Failed to initialize legs:', error);
+      
+      // Fallback: create default race state
+      const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
+        id: i + 1,
+        name: `Runner ${i + 1}`,
+        pace: 420, // 7:00 pace default
+        van: (i < 6 ? 1 : 2) as 1 | 2,
+        remoteId: undefined,
+        updated_at: null
+      }));
+      
+      try {
+        const fallbackLegs = initializeRace(state.startTime, defaultRunners);
+        console.log('[initializeLegs] Successfully created fallback race state');
+        return { runners: defaultRunners, legs: fallbackLegs };
+      } catch (fallbackError) {
+        console.error('[initializeLegs] Fallback initialization also failed:', fallbackError);
+        // Return empty legs array as last resort
+        return { legs: [] };
+      }
+    }
   }),
 
   setTeamId: (teamId: string | undefined) => {
@@ -338,36 +429,84 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   fixDataInconsistencies: () => {
     const state = get();
     let hasChanges = false;
+    const issues: string[] = [];
+    
+    // First, ensure we have valid runners
+    const validRunners = state.runners.filter(runner => 
+      runner && 
+      typeof runner.id === 'number' && 
+      runner.id > 0 && 
+      typeof runner.pace === 'number' && 
+      runner.pace > 0 &&
+      (runner.van === 1 || runner.van === 2)
+    );
+    
+    if (validRunners.length === 0) {
+      console.warn('[fixDataInconsistencies] No valid runners found, creating default runners');
+      const defaultRunners: Runner[] = Array.from({ length: 12 }, (_, i) => ({
+        id: i + 1,
+        name: `Runner ${i + 1}`,
+        pace: 420, // 7:00 pace default
+        van: (i < 6 ? 1 : 2) as 1 | 2,
+        remoteId: undefined,
+        updated_at: null
+      }));
+      
+      set({ runners: defaultRunners });
+      hasChanges = true;
+      issues.push('Created default runners due to invalid runner data');
+    } else if (validRunners.length !== state.runners.length) {
+      console.warn(`[fixDataInconsistencies] Filtered out ${state.runners.length - validRunners.length} invalid runners`);
+      set({ runners: validRunners });
+      hasChanges = true;
+      issues.push(`Removed ${state.runners.length - validRunners.length} invalid runners`);
+    }
     
     // Fix legs with invalid runnerIds by reassigning them based on leg number
     const fixedLegs = state.legs.map(leg => {
       if (!leg.runnerId || leg.runnerId <= 0) {
         console.warn(`[fixDataInconsistencies] Fixing leg ${leg.id} with invalid runnerId: ${leg.runnerId}`);
         // Reassign based on leg number (round-robin assignment)
-        const runnerIndex = (leg.id - 1) % state.runners.length;
-        const newRunnerId = state.runners[runnerIndex]?.id || 1;
+        const runnerIndex = (leg.id - 1) % validRunners.length;
+        const newRunnerId = validRunners[runnerIndex]?.id || 1;
         hasChanges = true;
+        issues.push(`Fixed leg ${leg.id}: assigned runner ${newRunnerId} (was ${leg.runnerId})`);
         return { ...leg, runnerId: newRunnerId };
       }
       
       // Check if assigned runner exists
-      const runner = state.runners.find(r => r.id === leg.runnerId);
+      const runner = validRunners.find(r => r.id === leg.runnerId);
       if (!runner) {
         console.warn(`[fixDataInconsistencies] Fixing leg ${leg.id} assigned to non-existent runner ${leg.runnerId}`);
         // Reassign based on leg number
-        const runnerIndex = (leg.id - 1) % state.runners.length;
-        const newRunnerId = state.runners[runnerIndex]?.id || 1;
+        const runnerIndex = (leg.id - 1) % validRunners.length;
+        const newRunnerId = validRunners[runnerIndex]?.id || 1;
         hasChanges = true;
+        issues.push(`Fixed leg ${leg.id}: reassigned from non-existent runner ${leg.runnerId} to runner ${newRunnerId}`);
         return { ...leg, runnerId: newRunnerId };
       }
       
       return leg;
     });
     
+    // Validate leg sequence integrity
+    const sortedLegs = [...fixedLegs].sort((a, b) => a.id - b.id);
+    for (let i = 0; i < sortedLegs.length - 1; i++) {
+      const currentLeg = sortedLegs[i];
+      const nextLeg = sortedLegs[i + 1];
+      
+      // Check for non-sequential leg IDs
+      if (nextLeg.id !== currentLeg.id + 1) {
+        issues.push(`Warning: Gap in leg sequence: ${currentLeg.id} -> ${nextLeg.id}`);
+      }
+    }
+    
     if (hasChanges) {
-      console.log('[fixDataInconsistencies] Fixed data inconsistencies, updating legs');
-      const recalculatedLegs = recalculateProjections(fixedLegs, 0, state.runners, state.startTime);
+      console.log('[fixDataInconsistencies] Fixed data inconsistencies:', issues);
+      const recalculatedLegs = recalculateProjections(fixedLegs, 0, validRunners, state.startTime);
       set({ legs: recalculatedLegs });
+    } else {
+      console.log('[fixDataInconsistencies] No data inconsistencies found');
     }
     
     return hasChanges;
@@ -559,5 +698,35 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     } else {
       return "Undo Last Start";
     }
+  },
+
+  // Validate and fix race state inconsistencies
+  validateAndFixRaceState: () => {
+    // Disable automatic fixing - let the simple timekeeping system work
+    const state = get();
+    const validation = validateRaceState(state.legs);
+    
+    if (validation.isValid) {
+      return { isValid: true, issues: [], fixed: false };
+    }
+    
+    console.warn('[validateAndFixRaceState] Found issues (not auto-fixing):', validation.issues);
+    
+    return { 
+      isValid: validation.isValid, 
+      issues: validation.issues, 
+      fixed: false 
+    };
+  },
+
+  validateRaceData: () => {
+    const state = get();
+    const validation = validateRaceData(state.runners, state.legs, state.startTime);
+    return validation;
+  },
+
+  getValidationReport: () => {
+    const state = get();
+    return createValidationReport(state.runners, state.legs, state.startTime);
   }
 }));

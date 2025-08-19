@@ -44,7 +44,7 @@ const ConflictResolutionModal: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center gap-4">
               <Button
                 variant="outline"
                 className="flex-1 h-24 flex flex-col items-center justify-center space-y-3 border-0 bg-gradient-to-br from-blue-50 to-blue-25 hover:from-blue-100 hover:to-blue-50 rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow-lg"
@@ -58,7 +58,7 @@ const ConflictResolutionModal: React.FC = () => {
                 </div>
               </Button>
 
-              <div className="text-gray-300 text-sm font-medium px-3">or</div>
+              <div className="text-gray-300 text-sm font-medium px-3 flex-shrink-0">or</div>
 
               <Button
                 variant="outline"

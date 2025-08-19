@@ -33,6 +33,9 @@ export const useTeamSync = () => {
 
   const loadStoredTeamInfo = () => {
     try {
+      // Send Supabase config to service worker immediately
+      sendSupabaseUrlToServiceWorker();
+      
       const storedTeamId = localStorage.getItem('relay_team_id');
       const storedDeviceInfo = localStorage.getItem('relay_device_info');
       const storedTeamName = localStorage.getItem('relay_team_name');
@@ -385,15 +388,17 @@ export const useTeamSync = () => {
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        if (supabaseUrl) {
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseAnonKey) {
           navigator.serviceWorker.controller.postMessage({
-            type: 'UPDATE_SUPABASE_URL',
-            supabaseUrl: supabaseUrl
+            type: 'UPDATE_SUPABASE_CONFIG',
+            supabaseUrl: supabaseUrl,
+            supabaseAnonKey: supabaseAnonKey
           });
-          console.log('[useTeamSync] Sent Supabase URL to service worker');
+          console.log('[useTeamSync] Sent Supabase config to service worker');
         }
       } catch (error) {
-        console.log('[useTeamSync] Failed to send Supabase URL to service worker:', error);
+        console.log('[useTeamSync] Failed to send Supabase config to service worker:', error);
       }
     }
   };

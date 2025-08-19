@@ -557,7 +557,7 @@ export function generateFinishNotification(
     }
     return {
       title: "Handoff Complete! 🤝",
-      body: `${finishedRunnerName} hands off to ${nextRunnerName} running Leg ${nextLegNumber}!`,
+      body: `Leg ${finishedLegNumber} complete. ${finishedRunnerName} has made the exchange to ${nextRunnerName}`,
       data: { 
         type: 'runner_finish', 
         finishedLegNumber, 

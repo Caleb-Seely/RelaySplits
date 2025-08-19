@@ -59,22 +59,6 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
     ? legs[0].actualStart
     : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
 
-  // Auto-fix data inconsistencies when detected
-  useEffect(() => {
-    if (legs.length > 0 && runners.length > 0) {
-      const hasInconsistencies = legs.some(leg => {
-        if (!leg.runnerId || leg.runnerId <= 0) return true;
-        const runner = runners.find(r => r.id === leg.runnerId);
-        return !runner;
-      });
-      
-      if (hasInconsistencies) {
-        console.warn('[LegScheduleTable] Data inconsistencies detected, attempting to fix...');
-        fixDataInconsistencies();
-      }
-    }
-  }, [legs, runners, fixDataInconsistencies]);
-  
   // Filter legs by current van
   const vanRunners = runners.filter(r => r.van === currentVan);
   const vanRunnerIds = new Set(vanRunners.map(r => r.id));
@@ -94,8 +78,29 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
     return vanRunnerIds.has(leg.runnerId);
   });
 
-
-
+  // Auto-fix data inconsistencies when component mounts or data changes
+  useEffect(() => {
+    if (legs.length > 0 && runners.length > 0) {
+      const hasInvalidLegs = legs.some(leg => !leg.runnerId || leg.runnerId <= 0);
+      const hasInvalidRunners = runners.some(runner => 
+        !runner || 
+        typeof runner.id !== 'number' || 
+        runner.id <= 0 || 
+        typeof runner.pace !== 'number' || 
+        runner.pace <= 0 ||
+        (runner.van !== 1 && runner.van !== 2)
+      );
+      
+      if (hasInvalidLegs || hasInvalidRunners) {
+        console.warn('[LegScheduleTable] Detected data inconsistencies, attempting auto-fix');
+        const wasFixed = fixDataInconsistencies();
+        if (wasFixed) {
+          console.log('[LegScheduleTable] Successfully fixed data inconsistencies');
+        }
+      }
+    }
+  }, [legs, runners, fixDataInconsistencies]);
+  
   // Function to format time without seconds, using AM/PM
   const formatTimeShort = (timestamp: number) => {
     if (!timestamp || timestamp <= 0) return '';

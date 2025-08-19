@@ -97,7 +97,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     teamId,
     assignRunnerToLegs,
     isSetupComplete,
-    didInitFromTeam
+    didInitFromTeam,
+    validateAndFixRaceState
   } = useRaceStore();
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
@@ -208,6 +209,23 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     return () => clearInterval(timer);
   }, []);
 
+  // Validate race state periodically to catch sync issues
+  useEffect(() => {
+    if (!legs.length || !isSetupComplete) return;
+    
+    const validationTimer = setInterval(() => {
+      const result = validateAndFixRaceState();
+      if (!result.isValid && result.fixed) {
+        console.log('[Dashboard] Fixed race state issues:', result.issues);
+        toast.success('Fixed race synchronization issues');
+      } else if (!result.isValid && !result.fixed) {
+        console.warn('[Dashboard] Race state issues detected but could not auto-fix:', result.issues);
+      }
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(validationTimer);
+  }, [legs.length, isSetupComplete, validateAndFixRaceState]);
+
   // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
   const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
     ? legs[0].actualStart
@@ -283,13 +301,29 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       console.log('Triggering confetti for start runner');
       triggerConfetti({ particleCount: 100, spread: 70 });
       
-      // Use atomic start runner function to prevent timing gaps
-      if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
-        startNextRunner(currentRunner.id, nextRunner.id);
+      // Use the improved atomic start runner function that handles all scenarios
+      // It will automatically determine the correct action based on the current state
+      if (!currentRunner) {
+        // Starting the first leg - no current runner exists
+        console.log('[handleStartRunner] Starting first leg:', nextRunner.id);
+        startNextRunner(null, nextRunner.id);
       } else {
-        // If no current runner, just start the next runner
-        updateLegActualTime(nextRunner.id, 'actualStart', Date.now());
+        // Transitioning from current to next leg
+        console.log('[handleStartRunner] Transitioning from leg', currentRunner.id, 'to leg', nextRunner.id);
+        startNextRunner(currentRunner.id, nextRunner.id);
       }
+      
+      // Show appropriate toast message based on the scenario
+      if (!currentRunner) {
+        toast.success(`Started ${nextRunnerInfo?.name || `Runner ${nextRunner.runnerId}`} on Leg ${nextRunner.id}`);
+      } else if (nextRunner.id === 36) {
+        toast.success(`Finished ${currentRunnerInfo?.name || `Runner ${currentRunner.runnerId}`} on Final Leg`);
+      } else {
+        toast.success(`Transitioned from ${currentRunnerInfo?.name || `Runner ${currentRunner.runnerId}`} to ${nextRunnerInfo?.name || `Runner ${nextRunner.runnerId}`}`);
+      }
+    } catch (error) {
+      console.error('[handleStartRunner] Error:', error);
+      toast.error('Failed to start runner. Please try again.');
     } finally {
       // Add a small delay to prevent rapid clicking
       setTimeout(() => {
