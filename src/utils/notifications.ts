@@ -59,11 +59,14 @@ export class NotificationManager {
   async showNotification(message: NotificationMessage): Promise<void> {
     if (this.permission !== 'granted' || !this.registration) {
       console.log('[Notifications] Cannot show notification - permission not granted or no registration');
+      console.log('[Notifications] Permission:', this.permission, 'Registration:', !!this.registration);
       return;
     }
 
     try {
       console.log('[Notifications] Attempting to show notification:', message.title, message.body);
+      console.log('[Notifications] Page visibility:', !document.hidden ? 'visible' : 'hidden');
+      console.log('[Notifications] Service worker state:', this.registration.active ? 'active' : 'inactive');
       
       // Create a unique tag for this specific notification to prevent duplicates
       const notificationTag = this.createNotificationTag(message);
@@ -73,11 +76,12 @@ export class NotificationManager {
         icon: '/favicon.ico',
         badge: '/favicon.ico',
         data: message.data,
-        requireInteraction: true, // Make notifications require interaction to ensure they're visible
+        requireInteraction: false, // Changed to false to allow background notifications
         silent: false,
         tag: notificationTag // Use unique tag for deduplication
       };
 
+      console.log('[Notifications] Showing notification with options:', options);
       const notification = await this.registration.showNotification(message.title, options);
       console.log('[Notifications] Notification sent successfully:', notification);
       
@@ -87,12 +91,27 @@ export class NotificationManager {
           const fallbackNotification = new Notification(message.title, {
             body: message.body,
             icon: '/favicon.ico',
-            requireInteraction: true,
+            requireInteraction: false, // Changed to false
             tag: notificationTag // Use same tag for native notifications
           });
           console.log('[Notifications] Fallback notification also sent');
         } catch (fallbackError) {
           console.log('[Notifications] Fallback notification failed:', fallbackError);
+        }
+      }
+      
+      // Also try sending through service worker message API as another fallback
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        try {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title: message.title,
+            body: message.body,
+            data: message.data
+          });
+          console.log('[Notifications] Service worker message sent as fallback');
+        } catch (messageError) {
+          console.log('[Notifications] Service worker message failed:', messageError);
         }
       }
     } catch (error) {
@@ -220,13 +239,27 @@ export class NotificationManager {
         const nativeNotification = new Notification("Native Test! 🏃‍♂️", {
           body: "This is a native browser notification test",
           icon: '/favicon.ico',
-          requireInteraction: true
+          requireInteraction: false
         });
         console.log('[Notifications] Native test notification sent');
       } catch (error) {
         console.error('[Notifications] Native test notification failed:', error);
       }
     }
+  }
+
+  // Test background notification specifically
+  async showBackgroundTestNotification(): Promise<void> {
+    console.log('[Notifications] Showing background test notification...');
+    console.log('[Notifications] Current page visibility:', !document.hidden ? 'visible' : 'hidden');
+    console.log('[Notifications] Service worker registration:', !!this.registration);
+    console.log('[Notifications] Service worker active:', this.registration?.active ? 'yes' : 'no');
+    
+    await this.showNotification({
+      title: "Background Test! 🏃‍♂️",
+      body: "This notification should appear even when the app is in the background.",
+      data: { type: 'background_test', timestamp: Date.now() }
+    });
   }
 }
 

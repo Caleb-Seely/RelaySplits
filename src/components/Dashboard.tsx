@@ -1258,6 +1258,32 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     </Button>
                   )}
 
+                  {/* Background Test Notification Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && notificationPermission() === 'granted' && isNotificationPreferenceEnabled() && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await notificationManager.showBackgroundTestNotification();
+                          toast.success('Background test notification sent!');
+                          
+                          // Also show a browser alert as a fallback for testing
+                          setTimeout(() => {
+                            alert('Background test notification sent! Check your browser notifications.');
+                          }, 1000);
+                        } catch (error) {
+                          console.error('Background test notification failed:', error);
+                          toast.error('Background test notification failed');
+                        }
+                      }}
+                      title="Send background test notification"
+                    >
+                      <Bell className="h-4 w-4 mr-1" />
+                      Background Test
+                    </Button>
+                  )}
+
                   {/* PWA Install Button */}
                   {canInstall && (
                     <Button

@@ -18,11 +18,29 @@ export const useNotifications = () => {
   const { deviceInfo } = useTeam();
   const prevLegsRef = useRef(legs);
   const isInitialized = useRef(false);
+  const isPageVisible = useRef(true);
   
   // Persistent storage key for notification history
   const getNotificationHistoryKey = useCallback(() => {
     return `relay_notifications_${teamId || 'no-team'}`;
   }, [teamId]);
+
+  // Monitor page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      isPageVisible.current = !document.hidden;
+      console.log(`[useNotifications] Page visibility changed: ${isPageVisible.current ? 'visible' : 'hidden'}`);
+    };
+
+    // Set initial visibility state
+    isPageVisible.current = !document.hidden;
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Load notification history from localStorage
   const loadNotificationHistory = useCallback((): NotificationRecord[] => {
@@ -139,18 +157,72 @@ export const useNotifications = () => {
 
   // Monitor leg changes and trigger notifications
   useEffect(() => {
-    if (!isInitialized.current || legs.length === 0 || !teamId) return;
+    if (!isInitialized.current || legs.length === 0 || !teamId) {
+      console.log('[useNotifications] Skipping notification check - not initialized, no legs, or no team');
+      return;
+    }
     
     // Only send notifications if user has enabled them
-    if (!notificationManager.isNotificationPreferenceEnabled()) return;
+    if (!notificationManager.isNotificationPreferenceEnabled()) {
+      console.log('[useNotifications] Notifications disabled by user preference');
+      return;
+    }
+
+    console.log(`[useNotifications] Checking for notifications - Page visible: ${isPageVisible.current}, Legs: ${legs.length}`);
 
     const prevLegs = prevLegsRef.current;
     const currentLegs = legs;
 
-    // Check for finish time changes (runner finishing) - this is where we send handoff notifications
+    // Check for start and finish time changes
     currentLegs.forEach((currentLeg) => {
       const prevLeg = prevLegs.find(l => l.id === currentLeg.id);
       if (!prevLeg) return;
+
+      // Check if a runner just started (actualStart was added)
+      if (currentLeg.actualStart && !prevLeg.actualStart) {
+        const runner = runners.find(r => r.id === currentLeg.runnerId);
+        if (runner) {
+          // Skip notification if the current user is the one who performed this action
+          if (deviceInfo?.displayName && runner.name === deviceInfo.displayName) {
+            console.log(`[useNotifications] Skipping notification for current user's action: ${runner.name}`);
+            return;
+          }
+
+          // Get the event timestamp (when the start time was set)
+          const eventTimestamp = currentLeg.actualStart;
+          
+          // Skip old events to prevent spam after refresh
+          if (shouldSkipOldEvent(eventTimestamp)) {
+            console.log(`[useNotifications] Skipping old event for leg ${currentLeg.id} (${runner.name})`);
+            return;
+          }
+
+          // Only send notifications when the page is NOT visible (app is in background)
+          if (isPageVisible.current) {
+            console.log(`[useNotifications] Page is visible, skipping notification for leg ${currentLeg.id} (${runner.name})`);
+            return;
+          }
+
+          const isFirstLeg = currentLeg.id === 1;
+          
+          // Send start notification for any leg that just started
+          if (!wasNotificationSent('start', currentLeg.id, runner.name)) {
+            const notification = generateStartNotification(runner.name, currentLeg.id, isFirstLeg);
+            notificationManager.showNotification(notification).then(() => {
+              console.log(`[useNotifications] Sent start notification for ${runner.name} on leg ${currentLeg.id}`);
+              saveNotificationRecord({
+                type: 'start',
+                legId: currentLeg.id,
+                runnerName: runner.name,
+                timestamp: eventTimestamp,
+                sentAt: Date.now()
+              });
+            });
+          } else {
+            console.log(`[useNotifications] Start notification already sent for leg ${currentLeg.id} (${runner.name})`);
+          }
+        }
+      }
 
       // Check if a runner just finished (actualFinish was added)
       if (currentLeg.actualFinish && !prevLeg.actualFinish) {
@@ -171,29 +243,16 @@ export const useNotifications = () => {
             return;
           }
 
-          const isFinalLeg = currentLeg.id === 36; // Assuming 36 legs total
-          const isFirstLeg = currentLeg.id === 1;
-          
-          // For first leg, send a start notification (special case)
-          if (isFirstLeg) {
-            if (!wasNotificationSent('start', currentLeg.id, runner.name)) {
-              const notification = generateStartNotification(runner.name, currentLeg.id, true);
-              notificationManager.showNotification(notification).then(() => {
-                console.log(`[useNotifications] Sent first leg start notification for ${runner.name}`);
-                saveNotificationRecord({
-                  type: 'start',
-                  legId: currentLeg.id,
-                  runnerName: runner.name,
-                  timestamp: eventTimestamp,
-                  sentAt: Date.now()
-                });
-              });
-            } else {
-              console.log(`[useNotifications] Start notification already sent for leg ${currentLeg.id} (${runner.name})`);
-            }
+          // Only send notifications when the page is NOT visible (app is in background)
+          if (isPageVisible.current) {
+            console.log(`[useNotifications] Page is visible, skipping notification for leg ${currentLeg.id} (${runner.name})`);
+            return;
           }
+
+          const isFinalLeg = currentLeg.id === 36; // Assuming 36 legs total
+          
           // For final leg, send a finish notification (special case)
-          else if (isFinalLeg) {
+          if (isFinalLeg) {
             // Find the final runner (next runner for leg 36)
             const nextLeg = currentLegs.find(l => l.id === currentLeg.id + 1);
             const nextRunner = nextLeg ? runners.find(r => r.id === nextLeg.runnerId) : null;

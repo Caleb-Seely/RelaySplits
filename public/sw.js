@@ -177,17 +177,55 @@ async function syncOfflineData() {
 
 // Handle push notifications (future feature)
 self.addEventListener('push', (event) => {
+  console.log('[SW] Push event received:', event);
+  
   if (event.data) {
-    const data = event.data.json();
-    const options = {
-      body: data.body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      data: data.data
-    };
+    try {
+      const data = event.data.json();
+      console.log('[SW] Push data:', data);
+      
+      const options = {
+        body: data.body,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        data: data.data,
+        requireInteraction: false,
+        silent: false
+      };
+      
+      event.waitUntil(
+        self.registration.showNotification(data.title, options)
+          .then(() => {
+            console.log('[SW] Push notification shown successfully');
+          })
+          .catch((error) => {
+            console.error('[SW] Failed to show push notification:', error);
+          })
+      );
+    } catch (error) {
+      console.error('[SW] Error parsing push data:', error);
+    }
+  } else {
+    console.log('[SW] Push event received but no data');
+  }
+});
+
+// Handle messages from the main app
+self.addEventListener('message', (event) => {
+  console.log('[SW] Message received:', event.data);
+  
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, body, data } = event.data;
     
     event.waitUntil(
-      self.registration.showNotification(data.title, options)
+      self.registration.showNotification(title, {
+        body,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        data,
+        requireInteraction: false,
+        silent: false
+      })
     );
   }
 });
