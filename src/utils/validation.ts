@@ -11,6 +11,23 @@ export interface ValidationResult {
 }
 
 /**
+ * Race timing validation configuration
+ */
+export interface TimingValidationConfig {
+  maxLegDuration: number; // Maximum leg duration in milliseconds (default: 6 hours)
+  minLegDuration: number; // Minimum leg duration in milliseconds (default: 1 minute)
+  maxPaceVariance: number; // Maximum pace variance percentage (default: 50%)
+  raceStartBuffer: number; // Buffer before race start for early timing (default: 1 hour)
+}
+
+const DEFAULT_TIMING_CONFIG: TimingValidationConfig = {
+  maxLegDuration: 6 * 60 * 60 * 1000, // 6 hours
+  minLegDuration: 60 * 1000, // 1 minute
+  maxPaceVariance: 0.5, // 50%
+  raceStartBuffer: 60 * 60 * 1000 // 1 hour
+};
+
+/**
  * Validates a single runner object
  */
 export function validateRunner(runner: any, index?: number): ValidationResult {
@@ -58,9 +75,15 @@ export function validateRunner(runner: any, index?: number): ValidationResult {
 }
 
 /**
- * Validates a single leg object
+ * Validates a single leg object with comprehensive timing checks
  */
-export function validateLeg(leg: any, index?: number, allRunners?: Runner[]): ValidationResult {
+export function validateLeg(
+  leg: any, 
+  index?: number, 
+  allRunners?: Runner[], 
+  raceStartTime?: number,
+  config: TimingValidationConfig = DEFAULT_TIMING_CONFIG
+): ValidationResult {
   const issues: string[] = [];
   const warnings: string[] = [];
   const suggestions: string[] = [];
@@ -93,15 +116,20 @@ export function validateLeg(leg: any, index?: number, allRunners?: Runner[]): Va
     issues.push(`Leg ${leg.id || index} has invalid projectedFinish: ${leg.projectedFinish}`);
   }
 
-  // Check time consistency
+  // Check projected time consistency
   if (leg.projectedStart && leg.projectedFinish && leg.projectedFinish <= leg.projectedStart) {
-    issues.push(`Leg ${leg.id || index} has invalid time range: finish (${leg.projectedFinish}) <= start (${leg.projectedStart})`);
+    issues.push(`Leg ${leg.id || index} has invalid projected time range: finish (${leg.projectedFinish}) <= start (${leg.projectedStart})`);
   }
 
   // Check actual times if present
   if (leg.actualStart !== undefined && leg.actualStart !== null) {
     if (typeof leg.actualStart !== 'number' || leg.actualStart <= 0) {
       issues.push(`Leg ${leg.id || index} has invalid actualStart: ${leg.actualStart}`);
+    }
+    
+    // Check if leg started before race start (with buffer)
+    if (raceStartTime && leg.actualStart < raceStartTime - config.raceStartBuffer) {
+      issues.push(`Leg ${leg.id || index} started too early: ${new Date(leg.actualStart).toLocaleString()} (race starts: ${new Date(raceStartTime).toLocaleString()})`);
     }
   }
 
@@ -110,8 +138,33 @@ export function validateLeg(leg: any, index?: number, allRunners?: Runner[]): Va
       issues.push(`Leg ${leg.id || index} has invalid actualFinish: ${leg.actualFinish}`);
     }
     
+    // Check actual time consistency
     if (leg.actualStart && leg.actualFinish <= leg.actualStart) {
       issues.push(`Leg ${leg.id || index} has invalid actual time range: finish (${leg.actualFinish}) <= start (${leg.actualStart})`);
+    }
+    
+    // Check leg duration
+    if (leg.actualStart && leg.actualFinish) {
+      const duration = leg.actualFinish - leg.actualStart;
+      
+      if (duration < config.minLegDuration) {
+        issues.push(`Leg ${leg.id || index} duration too short: ${Math.round(duration / 1000)}s (minimum: ${Math.round(config.minLegDuration / 1000)}s)`);
+      }
+      
+      if (duration > config.maxLegDuration) {
+        issues.push(`Leg ${leg.id || index} duration too long: ${Math.round(duration / 60000)}min (maximum: ${Math.round(config.maxLegDuration / 60000)}min)`);
+      }
+    }
+  }
+
+  // Check for incomplete legs (started but not finished)
+  if (leg.actualStart && !leg.actualFinish) {
+    const timeSinceStart = Date.now() - leg.actualStart;
+    
+    if (timeSinceStart > config.maxLegDuration) {
+      issues.push(`Leg ${leg.id || index} has been running too long: ${Math.round(timeSinceStart / 60000)}min (maximum: ${Math.round(config.maxLegDuration / 60000)}min)`);
+    } else if (timeSinceStart > config.maxLegDuration / 2) {
+      warnings.push(`Leg ${leg.id || index} has been running for ${Math.round(timeSinceStart / 60000)}min - consider checking on runner`);
     }
   }
 
@@ -120,6 +173,18 @@ export function validateLeg(leg: any, index?: number, allRunners?: Runner[]): Va
     const assignedRunner = allRunners.find(r => r.id === leg.runnerId);
     if (!assignedRunner) {
       issues.push(`Leg ${leg.id || index} assigned to non-existent runner ${leg.runnerId}`);
+    } else {
+      // Check pace vs actual time consistency
+      if (leg.actualStart && leg.actualFinish && leg.distance) {
+        const actualDuration = leg.actualFinish - leg.actualStart;
+        const actualPace = (actualDuration / 1000) / leg.distance; // seconds per mile
+        const expectedPace = assignedRunner.pace;
+        const variance = Math.abs(actualPace - expectedPace) / expectedPace;
+        
+        if (variance > config.maxPaceVariance) {
+          warnings.push(`Leg ${leg.id || index} actual pace (${Math.round(actualPace)}s/mile) differs significantly from runner's expected pace (${expectedPace}s/mile)`);
+        }
+      }
     }
   }
 
@@ -134,7 +199,12 @@ export function validateLeg(leg: any, index?: number, allRunners?: Runner[]): Va
 /**
  * Validates the entire race data structure
  */
-export function validateRaceData(runners: Runner[], legs: Leg[], startTime?: number): ValidationResult {
+export function validateRaceData(
+  runners: Runner[], 
+  legs: Leg[], 
+  startTime?: number,
+  config: TimingValidationConfig = DEFAULT_TIMING_CONFIG
+): ValidationResult {
   const issues: string[] = [];
   const warnings: string[] = [];
   const suggestions: string[] = [];
@@ -151,23 +221,22 @@ export function validateRaceData(runners: Runner[], legs: Leg[], startTime?: num
   }
 
   if (runners.length === 0) {
-    issues.push('No runners provided');
-    return { isValid: false, issues, warnings, suggestions };
+    issues.push('No runners defined');
   }
 
   // Validate individual runners
-  const runnerValidationResults = runners.map((runner, index) => validateRunner(runner, index));
-  runnerValidationResults.forEach(result => {
-    issues.push(...result.issues);
-    warnings.push(...result.warnings);
-    suggestions.push(...result.suggestions);
+  runners.forEach((runner, index) => {
+    const runnerValidation = validateRunner(runner, index);
+    issues.push(...runnerValidation.issues);
+    warnings.push(...runnerValidation.warnings);
+    suggestions.push(...runnerValidation.suggestions);
   });
 
   // Check for duplicate runner IDs
-  const runnerIds = runners.map(r => r.id).filter(id => id > 0);
-  const uniqueRunnerIds = new Set(runnerIds);
-  if (runnerIds.length !== uniqueRunnerIds.size) {
-    issues.push('Duplicate runner IDs found');
+  const runnerIds = runners.map(r => r.id);
+  const duplicateIds = runnerIds.filter((id, index) => runnerIds.indexOf(id) !== index);
+  if (duplicateIds.length > 0) {
+    issues.push(`Duplicate runner IDs found: ${duplicateIds.join(', ')}`);
   }
 
   // Validate legs array
@@ -176,48 +245,53 @@ export function validateRaceData(runners: Runner[], legs: Leg[], startTime?: num
     return { isValid: false, issues, warnings, suggestions };
   }
 
+  if (legs.length === 0) {
+    issues.push('No legs defined');
+  }
+
   // Validate individual legs
-  const legValidationResults = legs.map((leg, index) => validateLeg(leg, index, runners));
-  legValidationResults.forEach(result => {
-    issues.push(...result.issues);
-    warnings.push(...result.warnings);
-    suggestions.push(...result.suggestions);
+  legs.forEach((leg, index) => {
+    const legValidation = validateLeg(leg, index, runners, startTime, config);
+    issues.push(...legValidation.issues);
+    warnings.push(...legValidation.warnings);
+    suggestions.push(...legValidation.suggestions);
   });
 
   // Check for duplicate leg IDs
-  const legIds = legs.map(l => l.id).filter(id => id > 0);
-  const uniqueLegIds = new Set(legIds);
-  if (legIds.length !== uniqueLegIds.size) {
-    issues.push('Duplicate leg IDs found');
+  const legIds = legs.map(l => l.id);
+  const duplicateLegIds = legIds.filter((id, index) => legIds.indexOf(id) !== index);
+  if (duplicateLegIds.length > 0) {
+    issues.push(`Duplicate leg IDs found: ${duplicateLegIds.join(', ')}`);
   }
 
-  // Check leg sequence
-  const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
-  for (let i = 0; i < sortedLegs.length - 1; i++) {
-    const currentLeg = sortedLegs[i];
-    const nextLeg = sortedLegs[i + 1];
+  // Check leg sequence consistency
+  for (let i = 1; i < legs.length; i++) {
+    const prevLeg = legs[i - 1];
+    const currLeg = legs[i];
     
-    if (nextLeg.id !== currentLeg.id + 1) {
-      issues.push(`Gap in leg sequence: ${currentLeg.id} -> ${nextLeg.id}`);
+    if (prevLeg.actualFinish && currLeg.actualStart && 
+        currLeg.actualStart < prevLeg.actualFinish) {
+      issues.push(`Leg ${currLeg.id} started before leg ${prevLeg.id} finished`);
     }
   }
 
-  // Check for multiple running legs
-  const runningLegs = legs.filter(leg => 
-    leg.actualStart && !leg.actualFinish
-  );
+  // Check van assignments
+  const van1Runners = runners.filter(r => r.van === 1);
+  const van2Runners = runners.filter(r => r.van === 2);
   
-  if (runningLegs.length > 1) {
-    issues.push(`Multiple runners currently running: ${runningLegs.map(l => l.id).join(', ')}`);
+  if (van1Runners.length === 0) {
+    warnings.push('No runners assigned to Van 1');
+  }
+  
+  if (van2Runners.length === 0) {
+    warnings.push('No runners assigned to Van 2');
   }
 
-  // Check race completion consistency
-  const lastLeg = sortedLegs[sortedLegs.length - 1];
-  if (lastLeg && lastLeg.actualFinish) {
-    const unfinishedLegs = sortedLegs.slice(0, -1).filter(leg => !leg.actualFinish);
-    if (unfinishedLegs.length > 0) {
-      issues.push(`Race marked as complete but legs ${unfinishedLegs.map(l => l.id).join(', ')} are not finished`);
-    }
+  // Check for unassigned runners
+  const assignedRunnerIds = new Set(legs.map(l => l.runnerId));
+  const unassignedRunners = runners.filter(r => !assignedRunnerIds.has(r.id));
+  if (unassignedRunners.length > 0) {
+    warnings.push(`Unassigned runners: ${unassignedRunners.map(r => r.name).join(', ')}`);
   }
 
   return {
@@ -231,47 +305,63 @@ export function validateRaceData(runners: Runner[], legs: Leg[], startTime?: num
 /**
  * Creates a comprehensive validation report
  */
-export function createValidationReport(runners: Runner[], legs: Leg[], startTime?: number): string {
-  const result = validateRaceData(runners, legs, startTime);
+export function createValidationReport(
+  runners: Runner[], 
+  legs: Leg[], 
+  startTime?: number,
+  config: TimingValidationConfig = DEFAULT_TIMING_CONFIG
+): string {
+  const validation = validateRaceData(runners, legs, startTime, config);
   
-  let report = '=== RACE DATA VALIDATION REPORT ===\n\n';
+  let report = '=== Race Data Validation Report ===\n\n';
   
-  if (result.isValid) {
-    report += '✅ All data is valid!\n\n';
+  if (validation.isValid) {
+    report += '✅ Race data is valid!\n\n';
   } else {
-    report += '❌ Data validation failed!\n\n';
-  }
-  
-  if (result.issues.length > 0) {
-    report += '🚨 CRITICAL ISSUES:\n';
-    result.issues.forEach(issue => {
+    report += '❌ Race data has issues:\n';
+    validation.issues.forEach(issue => {
       report += `  • ${issue}\n`;
     });
     report += '\n';
   }
   
-  if (result.warnings.length > 0) {
-    report += '⚠️  WARNINGS:\n';
-    result.warnings.forEach(warning => {
+  if (validation.warnings.length > 0) {
+    report += '⚠️  Warnings:\n';
+    validation.warnings.forEach(warning => {
       report += `  • ${warning}\n`;
     });
     report += '\n';
   }
   
-  if (result.suggestions.length > 0) {
-    report += '💡 SUGGESTIONS:\n';
-    result.suggestions.forEach(suggestion => {
+  if (validation.suggestions.length > 0) {
+    report += '💡 Suggestions:\n';
+    validation.suggestions.forEach(suggestion => {
       report += `  • ${suggestion}\n`;
     });
     report += '\n';
   }
   
-  report += `📊 SUMMARY:\n`;
+  // Add summary statistics
+  report += '📊 Summary:\n';
   report += `  • Runners: ${runners.length}\n`;
   report += `  • Legs: ${legs.length}\n`;
-  report += `  • Issues: ${result.issues.length}\n`;
-  report += `  • Warnings: ${result.warnings.length}\n`;
-  report += `  • Suggestions: ${result.suggestions.length}\n`;
+  report += `  • Issues: ${validation.issues.length}\n`;
+  report += `  • Warnings: ${validation.warnings.length}\n`;
+  report += `  • Suggestions: ${validation.suggestions.length}\n`;
   
   return report;
+}
+
+/**
+ * Quick validation for sync operations
+ */
+export function validateForSync(leg: any, operation: string): boolean {
+  const validation = validateLeg(leg, undefined, undefined, undefined, DEFAULT_TIMING_CONFIG);
+  
+  if (!validation.isValid) {
+    console.warn(`[${operation}] Validation failed for leg ${leg.id}:`, validation.issues);
+    return false;
+  }
+  
+  return true;
 }

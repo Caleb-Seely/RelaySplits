@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useRaceStore } from '@/store/raceStore';
+import { useRaceStore } from '@/store/useRaceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeam } from '@/contexts/TeamContext';

@@ -9,6 +9,8 @@ import type { Runner, Leg } from '@/types/race';
 import type { Tables } from '@/integrations/supabase/types';
 import { recalculateProjections } from '@/utils/raceUtils';
 import { syncLogger } from '@/utils/logger';
+import { validateForSync, validateLeg } from '@/utils/validation';
+import { getSynchronizedTime } from '@/services/clockSync';
 
 // Enhanced sync manager that prioritizes data accuracy and integrates with existing systems
 export const useEnhancedSyncManager = () => {
@@ -86,6 +88,11 @@ export const useEnhancedSyncManager = () => {
     };
   }, []);
 
+  // Use consolidated validation from validation.ts
+  const validateLegDataIntegrity = (leg: any, operation: string) => {
+    return validateForSync(leg, operation);
+  };
+
   // Handle leg synchronization with conflict detection
   const handleLegSync = useCallback(async (
     legId: number,
@@ -98,6 +105,12 @@ export const useEnhancedSyncManager = () => {
 
     const leg = storeRef.current.legs.find(l => l.id === legId);
     if (!leg?.remoteId) return;
+
+    // Validate before sync
+    if (!validateLegDataIntegrity(leg, 'pre-sync')) {
+      console.error('Pre-sync validation failed, aborting sync');
+      return;
+    }
 
     // Create a unique key for this sync operation
     const syncKey = `${legId}-${field}-${value}`;
@@ -129,12 +142,15 @@ export const useEnhancedSyncManager = () => {
         return;
       }
 
-      // Build the payload for the leg update
+      // Build the complete payload for the leg update (include all leg data to prevent data loss)
       const payload = {
         id: leg.remoteId,
         number: leg.id,
         distance: leg.distance,
-        [field === 'actualStart' ? 'start_time' : 'finish_time']: value ? new Date(value).toISOString() : null
+        start_time: leg.actualStart ? new Date(leg.actualStart).toISOString() : null,
+        finish_time: leg.actualFinish ? new Date(leg.actualFinish).toISOString() : null,
+        synchronized_timestamp: getSynchronizedTime(),
+        // Include any other fields that should be preserved
       };
 
       console.log(`[useEnhancedSyncManager] Syncing leg ${legId} ${field}:`, payload);
@@ -161,6 +177,14 @@ export const useEnhancedSyncManager = () => {
         });
       } else {
         console.log(`[useEnhancedSyncManager] Successfully synced leg ${legId} ${field}`);
+        
+        // Validate after sync
+        const updatedLeg = storeRef.current.legs.find(l => l.id === legId);
+        if (updatedLeg && !validateLegDataIntegrity(updatedLeg, 'post-sync')) {
+          console.error('Post-sync validation failed, data may be corrupted');
+          // Could trigger recovery mechanism here
+        }
+        
         // Update last synced timestamp
         storeRef.current.setLastSyncedAt(Date.now());
       }
@@ -226,12 +250,13 @@ export const useEnhancedSyncManager = () => {
           return;
         }
 
-        // Build the payload for the first leg start
+        // Build the complete payload for the first leg start (include all leg data)
         const legsPayload = [{
           id: nextLeg.remoteId,
           number: nextLeg.id,
           distance: nextLeg.distance,
-          start_time: new Date(startTime).toISOString()
+          start_time: new Date(startTime).toISOString(),
+          finish_time: nextLeg.actualFinish ? new Date(nextLeg.actualFinish).toISOString() : null
         }];
 
         console.log(`[useEnhancedSyncManager] Syncing first leg start:`, legsPayload);
@@ -329,19 +354,21 @@ export const useEnhancedSyncManager = () => {
         return;
       }
 
-      // Build the payload for both leg updates
+      // Build the complete payload for both leg updates (include all leg data)
       const legsPayload = [
         ...(finishTime ? [{
           id: currentLeg.remoteId,
           number: currentLeg.id,
           distance: currentLeg.distance,
+          start_time: currentLeg.actualStart ? new Date(currentLeg.actualStart).toISOString() : null,
           finish_time: new Date(finishTime).toISOString()
         }] : []),
         {
           id: nextLeg.remoteId,
           number: nextLeg.id,
           distance: nextLeg.distance,
-          start_time: new Date(startTime).toISOString()
+          start_time: new Date(startTime).toISOString(),
+          finish_time: nextLeg.actualFinish ? new Date(nextLeg.actualFinish).toISOString() : null
         }
       ];
 
@@ -621,7 +648,7 @@ export const useEnhancedSyncManager = () => {
     }
   }, []);
 
-  // Merge function with conflict detection
+  // Merge function with conflict detection and field-level merging
   const mergeWithConflictDetection = useCallback((
     incomingItems: any[],
     localItems: any[],
@@ -676,7 +703,36 @@ export const useEnhancedSyncManager = () => {
       if (!localItem || !localItem.updated_at || new Date(incomingItem.updated_at!) > new Date(localItem.updated_at)) {
         const existingIndex = mergedItems.findIndex(item => item.id === incomingItem.id);
         if (existingIndex !== -1) {
-          mergedItems[existingIndex] = incomingItem;
+          // FIELD-LEVEL MERGING: Preserve existing fields that aren't in incoming data
+          const existingItem = mergedItems[existingIndex];
+          const mergedItem = {
+            ...existingItem,  // Keep all existing fields
+            ...incomingItem,  // Override with incoming fields
+            // Preserve critical timing fields if they exist locally but not in incoming data
+            ...(table === 'legs' && {
+              actualStart: incomingItem.actualStart ?? existingItem.actualStart,
+              actualFinish: incomingItem.actualFinish ?? existingItem.actualFinish,
+            })
+          };
+          mergedItems[existingIndex] = mergedItem;
+          
+          // Log data integrity check
+          if (table === 'legs') {
+            const dataLost = (existingItem.actualStart && !mergedItem.actualStart) || 
+                           (existingItem.actualFinish && !mergedItem.actualFinish);
+            if (dataLost) {
+              console.warn(`[useEnhancedSyncManager] Data integrity warning: Potential data loss for leg ${existingItem.id}`, {
+                before: {
+                  actualStart: existingItem.actualStart,
+                  actualFinish: existingItem.actualFinish
+                },
+                after: {
+                  actualStart: mergedItem.actualStart,
+                  actualFinish: mergedItem.actualFinish
+                }
+              });
+            }
+          }
         } else {
           mergedItems.push(incomingItem);
         }
