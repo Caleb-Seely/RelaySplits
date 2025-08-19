@@ -92,18 +92,18 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
     }
 
     // Debug PWA state
-    console.log('[DashboardPrompts] PWA Debug - canInstall:', canInstall, 'isInstalling:', isInstalling);
+    // console.log('[DashboardPrompts] PWA Debug - canInstall:', canInstall, 'isInstalling:', isInstalling);
 
     // Check PWA install status
     if (canInstall) {
       const pwaDismissed = sessionStorage.getItem('pwa-install-dismissed');
-      console.log('[DashboardPrompts] PWA can install, dismissed:', pwaDismissed);
+      // console.log('[DashboardPrompts] PWA can install, dismissed:', pwaDismissed);
       if (!pwaDismissed) {
-        console.log('[DashboardPrompts] Setting showPWA to true');
+        // console.log('[DashboardPrompts] Setting showPWA to true');
         setShowPWA(true);
       }
     } else {
-      console.log('[DashboardPrompts] PWA cannot install - criteria not met');
+      // console.log('[DashboardPrompts] PWA cannot install - criteria not met');
     }
 
     // Don't show notification prompt immediately - only after PWA prompt is handled

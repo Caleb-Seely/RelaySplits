@@ -12,8 +12,8 @@ export const useRunnerSync = () => {
   const { safeUpdate } = useSyncManager();
 
   // Deduplication windows (ms)
-  const RUNNER_SYNC_COOLDOWN_MS = 1200;
-  const LEG_SYNC_COOLDOWN_MS = 1200;
+  const RUNNER_SYNC_COOLDOWN_MS = 3000; // Increased further
+  const LEG_SYNC_COOLDOWN_MS = 3000; // Increased further
 
   // Track last sync timestamps to avoid duplicate syncs in a short window
   const lastRunnerSyncRef = useRef<Map<number, number>>(new Map());
@@ -53,11 +53,9 @@ export const useRunnerSync = () => {
       const now = Date.now();
       const last = lastLegFieldSyncRef.current.get(key) ?? 0;
       if (now - last < LEG_SYNC_COOLDOWN_MS) {
-        console.log(`[useRunnerSync] Skipping duplicate ${field} sync for leg ${legId} within cooldown`);
         return;
       }
       if (inflightLegFieldRef.current.has(key)) {
-        console.log(`[useRunnerSync] Skipping overlapping ${field} sync for leg ${legId}`);
         return;
       }
       inflightLegFieldRef.current.add(key);
@@ -68,7 +66,6 @@ export const useRunnerSync = () => {
         console.error(`[useRunnerSync] Failed to sync ${field} for leg ${legId}:`, result.error);
         toast.error(`Failed to sync ${field === 'actualStart' ? 'start' : 'finish'} time`);
       } else {
-        console.log(`[useRunnerSync] Successfully synced ${field} for leg ${legId}`);
         // Update last sync timestamp
         lastLegFieldSyncRef.current.set(key, now);
         store.setLastSyncedAt(now);
@@ -112,11 +109,9 @@ export const useRunnerSync = () => {
       const now = Date.now();
       const last = lastRunnerSyncRef.current.get(runnerId) ?? 0;
       if (now - last < RUNNER_SYNC_COOLDOWN_MS) {
-        console.log(`[useRunnerSync] Skipping duplicate runner sync for runner ${runnerId} within cooldown`);
         return;
       }
       if (inflightRunnerRef.current.has(runnerId)) {
-        console.log(`[useRunnerSync] Skipping overlapping runner sync for runner ${runnerId}`);
         return;
       }
       inflightRunnerRef.current.add(runnerId);
@@ -127,7 +122,6 @@ export const useRunnerSync = () => {
         console.error(`[useRunnerSync] Failed to sync runner ${runnerId}:`, result.error);
         toast.error('Failed to sync runner changes');
       } else {
-        console.log(`[useRunnerSync] Successfully synced runner ${runnerId}`);
         // Update last sync timestamp
         lastRunnerSyncRef.current.set(runnerId, now);
         store.setLastSyncedAt(now);
@@ -177,11 +171,9 @@ export const useRunnerSync = () => {
       const now = Date.now();
       const last = lastLegFieldSyncRef.current.get(key) ?? 0;
       if (now - last < LEG_SYNC_COOLDOWN_MS) {
-        console.log(`[useRunnerSync] Skipping duplicate leg assignment sync for leg ${legId} within cooldown`);
         return;
       }
       if (inflightLegFieldRef.current.has(key)) {
-        console.log(`[useRunnerSync] Skipping overlapping leg assignment sync for leg ${legId}`);
         return;
       }
       inflightLegFieldRef.current.add(key);
@@ -192,7 +184,6 @@ export const useRunnerSync = () => {
         console.error(`[useRunnerSync] Failed to sync leg assignment for leg ${legId}:`, result.error);
         toast.error('Failed to sync leg assignment');
       } else {
-        console.log(`[useRunnerSync] Successfully synced leg assignment for leg ${legId}`);
         // Update last sync timestamp
         lastLegFieldSyncRef.current.set(key, now);
         store.setLastSyncedAt(now);

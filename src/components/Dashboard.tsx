@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useRaceStore } from '@/store/raceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useSyncManager } from '@/hooks/useSyncManager';
@@ -92,7 +93,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     updateLegActualTime,
     startTime,
     teamId,
-    assignRunnerToLegs
+    assignRunnerToLegs,
+    isSetupComplete,
+    didInitFromTeam
   } = useRaceStore();
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
@@ -103,9 +106,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     notificationManager,
     isNotificationPreferenceEnabled,
     clearNotificationPreference,
-    setNotificationPreference,
-    clearNotificationHistory,
-    getNotificationHistory
+    setNotificationPreference
   } = useNotifications();
 
   // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
@@ -115,11 +116,14 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     return cleanup;
   }, [teamId, setupRealtimeSubscriptions, isViewOnly]);
 
-  const { team, updateTeamStartTime } = useTeamSync();
+  const { team, updateTeamStartTime, loading } = useTeamSync();
   const { deviceInfo } = useTeam();
 
   // Determine if user can edit (not in view-only mode and has edit permissions)
   const canEdit = !isViewOnly && (deviceInfo?.role === 'admin' || deviceInfo?.role === 'member');
+
+  // Comprehensive loading condition that includes team loading and race data initialization
+  const isDataLoading = loading || legs.length === 0;
 
   // Quick help popup for new team members
   const { shouldShowHelp, dismissHelp } = useQuickHelp();
@@ -415,7 +419,24 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
               <div className="p-2 sm:p-3 md:p-4 bg-green-500/10 rounded-b-none rounded-lg">
                 <div className="space-y-4">
-                  {currentRunner && currentRunnerInfo ? (
+                  {isDataLoading ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Skeleton className="h-8 w-32 mb-2" />
+                        <div className="flex items-center gap-1">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <Skeleton className="h-6 w-20 mb-2" />
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-12" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : currentRunner && currentRunnerInfo ? (
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-2xl font-bold text-foreground">
@@ -462,7 +483,34 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
               <CardContent className="pt-4">
                 <div className="space-y-4">
-                  {currentRunner && currentRunnerInfo ? (
+                  {isDataLoading ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="text-center">
+                          <Skeleton className="h-10 w-16 mb-2" />
+                          <div className="flex items-center justify-center gap-1">
+                            <Skeleton className="h-4 w-4" />
+                            <Skeleton className="h-4 w-16" />
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <Skeleton className="h-10 w-20 mb-2" />
+                          <div className="flex items-center justify-center gap-1">
+                            <Skeleton className="h-4 w-4" />
+                            <Skeleton className="h-4 w-20" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Skeleton className="w-full h-3 rounded-full" />
+                        <div className="flex justify-between items-baseline">
+                          <Skeleton className="h-5 w-24" />
+                          <Skeleton className="h-5 w-32" />
+                        </div>
+                      </div>
+                    </>
+                  ) : currentRunner && currentRunnerInfo ? (
                     <>
                       <div className="grid grid-cols-2 gap-6">
                         <div className="text-center">
@@ -549,7 +597,31 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               <div className="absolute inset-0 bg-blue-500 h-1"></div>
 
               <div className="p-2 sm:p-3 md:p-4 bg-blue-500/10 rounded-b-none rounded-lg">
-                {(() => {
+                {isDataLoading ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Skeleton className="h-8 w-32 mb-2" />
+                        <div className="flex items-center gap-1">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <Skeleton className="h-6 w-20 mb-2" />
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-12" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (() => {
+                  // Don't show race completion content if data is still loading
+                  if (isDataLoading) {
+                    return false; // This will show the skeleton instead
+                  }
+                  
                   // Check if race is completed (leg 36 has actual finish time)
                   const leg36 = legs.find(leg => leg.id === 36);
                   const isRaceCompleted = leg36?.actualFinish;
@@ -710,7 +782,42 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               </div>
 
               <CardContent className="pt-4">
-                {(() => {
+                {isDataLoading ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <Skeleton className="h-10 w-16 mb-2" />
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <Skeleton className="h-10 w-20 mb-2" />
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="w-full h-3 flex items-center">
+                        <div className="w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+                      </div>
+                      <div className="flex justify-between items-baseline">
+                        <Skeleton className="h-5 w-48" />
+                        <div className="flex gap-2">
+                          <Skeleton className="h-8 w-24" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (() => {
+                  // Don't show race completion content if data is still loading
+                  if (isDataLoading) {
+                    return false; // This will show the skeleton instead
+                  }
+                  
                   // Check if race is completed (leg 36 has actual finish time)
                   const leg36 = legs.find(leg => leg.id === 36);
                   const isRaceCompleted = leg36?.actualFinish;
@@ -1127,55 +1234,28 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
                   {/* Test Notification Button - Only show in development */}
                   {process.env.NODE_ENV === 'development' && notificationPermission() === 'granted' && isNotificationPreferenceEnabled() && (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            await notificationManager.showTestNotification();
-                            toast.success('Test notification sent!');
-                            
-                            // Also show a browser alert as a fallback for testing
-                            setTimeout(() => {
-                              alert('Test notification should have appeared! Check your browser notifications.');
-                            }, 1000);
-                          } catch (error) {
-                            console.error('Test notification failed:', error);
-                            toast.error('Test notification failed');
-                          }
-                        }}
-                        title="Send test notification"
-                      >
-                        <Bell className="h-4 w-4 mr-1" />
-                        Test
-                      </Button>
-                      
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const history = getNotificationHistory();
-                          console.log('📋 Notification History:', history);
-                          toast.success(`Notification history: ${history.length} records`);
-                        }}
-                        title="View notification history"
-                      >
-                        📋 History
-                      </Button>
-                      
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          clearNotificationHistory();
-                          toast.success('Notification history cleared');
-                        }}
-                        title="Clear notification history"
-                      >
-                        🧹 Clear
-                      </Button>
-                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await notificationManager.showTestNotification();
+                          toast.success('Test notification sent!');
+                          
+                          // Also show a browser alert as a fallback for testing
+                          setTimeout(() => {
+                            alert('Test notification should have appeared! Check your browser notifications.');
+                          }, 1000);
+                        } catch (error) {
+                          console.error('Test notification failed:', error);
+                          toast.error('Test notification failed');
+                        }
+                      }}
+                      title="Send test notification"
+                    >
+                      <Bell className="h-4 w-4 mr-1" />
+                      Test
+                    </Button>
                   )}
 
                   {/* PWA Install Button */}

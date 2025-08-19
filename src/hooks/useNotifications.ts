@@ -278,6 +278,8 @@ export const useNotifications = () => {
     isNotificationPreferenceEnabled: notificationManager.isNotificationPreferenceEnabled.bind(notificationManager),
     clearNotificationPreference: notificationManager.clearNotificationPreference.bind(notificationManager),
     setNotificationPreference: notificationManager.setNotificationPreference.bind(notificationManager),
+    getNotificationPreferenceValue: notificationManager.getNotificationPreferenceValue.bind(notificationManager),
+    resetNotificationPreference: notificationManager.resetNotificationPreference.bind(notificationManager),
     clearNotificationHistory,
     getNotificationHistory
   };

@@ -112,16 +112,20 @@ export const useOfflineQueue = () => {
         item.timestamp
       );
       
-      console.log('[useOfflineQueue] Queue filtering - original:', queue.length, 'filtered:', filteredQueue.length);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[useOfflineQueue] Queue filtering - original:', queue.length, 'filtered:', filteredQueue.length);
+      }
       if (queue.length !== filteredQueue.length) {
-        console.log('[useOfflineQueue] Filtered out items:', queue.filter((item: any) => 
-          !(item && 
-            typeof item === 'object' && 
-            item.table && 
-            item.remoteId && 
-            item.payload &&
-            item.timestamp)
-        ));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useOfflineQueue] Filtered out items:', queue.filter((item: any) => 
+            !(item && 
+              typeof item === 'object' && 
+              item.table && 
+              item.remoteId && 
+              item.payload &&
+              item.timestamp)
+          ));
+        }
       }
       
       return filteredQueue;
@@ -189,7 +193,9 @@ export const useOfflineQueue = () => {
   const queueChange = useCallback((change: Omit<QueuedChange, 'id' | 'timestamp' | 'deviceId' | 'retryCount'>) => {
     const queue = getQueue();
     
-    console.log('[useOfflineQueue] Attempting to queue change:', change);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[useOfflineQueue] Attempting to queue change:', change);
+    }
     
     // Skip validation for now - just queue the change
     // TODO: Add proper validation back once we confirm the queue is working
@@ -255,14 +261,15 @@ export const useOfflineQueue = () => {
           
           // Skip if max retries reached
           if (retryCount >= MAX_RETRY_ATTEMPTS) {
-            console.error(`Max retries reached for change ${changeId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Max retries reached for change ${changeId}`);
+            }
             failedChanges.push({ ...change, id: changeId, retryCount: retryCount + 1 });
             continue;
           }
 
           // Skip if recently attempted
           if (lastAttempt && Date.now() - lastAttempt < RETRY_DELAY_MS) {
-            console.log(`Skipping change ${changeId}, too recent`);
             continue;
           }
 
@@ -273,10 +280,14 @@ export const useOfflineQueue = () => {
           const result = await safeUpdate(change.table, teamId, change.remoteId, change.payload);
           
           if (result.error) {
-            console.error(`[useOfflineQueue] Failed to sync change ${changeId}:`, result.error);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`[useOfflineQueue] Failed to sync change ${changeId}:`, result.error);
+            }
             failedChanges.push({ ...change, id: changeId, retryCount: retryCount + 1 });
           } else {
-            console.log(`[useOfflineQueue] Successfully synced change ${changeId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[useOfflineQueue] Successfully synced change ${changeId}`);
+            }
             successfulChanges.push(changeId);
           }
 
@@ -291,11 +302,15 @@ export const useOfflineQueue = () => {
       saveQueue(failedChanges);
       setLastSyncTime(Date.now());
 
-      console.log(`[useOfflineQueue] Queue processing complete. Success: ${successfulChanges.length}, Failed: ${failedChanges.length}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[useOfflineQueue] Queue processing complete. Success: ${successfulChanges.length}, Failed: ${failedChanges.length}`);
+      }
       
       // If all changes were successful, we can now allow fresh data to overwrite local changes
       if (successfulChanges.length > 0 && failedChanges.length === 0) {
-        console.log('[useOfflineQueue] All changes synced successfully, local data can now be updated from server');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useOfflineQueue] All changes synced successfully, local data can now be updated from server');
+        }
       }
 
     } catch (error) {
@@ -341,13 +356,19 @@ export const useOfflineQueue = () => {
     const handleOnline = () => {
       const teamId = useRaceStore.getState().teamId;
       if (teamId && navigator.onLine) {
-        console.log('[useOfflineQueue] Back online, processing queue...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useOfflineQueue] Back online, processing queue...');
+        }
         const queueStatus = getQueueStatus();
-        console.log('[useOfflineQueue] Queue status:', queueStatus);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useOfflineQueue] Queue status:', queueStatus);
+        }
         if (queueStatus.pendingCount > 0) {
           processQueue(teamId);
         } else {
-          console.log('[useOfflineQueue] No pending changes to process');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[useOfflineQueue] No pending changes to process');
+          }
         }
       }
     };

@@ -13,58 +13,83 @@ export const RunnerSyncIntegration = () => {
   // Track previous state to detect changes
   const prevLegsRef = useRef(legs);
   const prevRunnersRef = useRef(runners);
+  const isInitializedRef = useRef(false);
 
-  // When setup completes or teamId changes, reset previous refs to current
-  // to prevent the first post-setup run from syncing the entire dataset.
+  // Initialize sync tracking when setup is complete
   useEffect(() => {
     if (!teamId || !isSetupComplete) return;
-    prevLegsRef.current = legs;
-    prevRunnersRef.current = runners;
-  }, [teamId, isSetupComplete]);
+    
+    if (!isInitializedRef.current && legs.length > 0) {
+      prevLegsRef.current = legs;
+      prevRunnersRef.current = runners;
+      isInitializedRef.current = true;
+    }
+  }, [teamId, isSetupComplete, legs, runners]);
 
+  // Sync leg changes
   useEffect(() => {
-    // Only sync if we have a team and setup is complete (avoid auto-submitting defaults during setup)
-    if (!teamId || !isSetupComplete) return;
+    if (!teamId || !isSetupComplete || !isInitializedRef.current) return;
 
     const prevLegs = prevLegsRef.current;
     const currentLegs = legs;
 
-    // Check for leg actual time changes
+    // Skip initial load
+    if (prevLegs.length === 0 && currentLegs.length > 0) {
+      prevLegsRef.current = currentLegs;
+      return;
+    }
+
+    // Only sync if we have previous legs to compare against
+    if (prevLegs.length === 0) return;
+
+    // Check for changes and sync with delays
+    let changeCount = 0;
     currentLegs.forEach((currentLeg) => {
       const prevLeg = prevLegs.find(l => l.id === currentLeg.id);
       if (!prevLeg) return;
 
-      // Check for actualStart changes
       if (currentLeg.actualStart !== prevLeg.actualStart) {
-        console.log(`[RunnerSyncIntegration] Detected actualStart change for leg ${currentLeg.id}`);
-        syncLegActualTime(currentLeg.id, 'actualStart', currentLeg.actualStart || null);
+        setTimeout(() => {
+          syncLegActualTime(currentLeg.id, 'actualStart', currentLeg.actualStart || null);
+        }, changeCount * 500);
+        changeCount++;
       }
 
-      // Check for actualFinish changes
       if (currentLeg.actualFinish !== prevLeg.actualFinish) {
-        console.log(`[RunnerSyncIntegration] Detected actualFinish change for leg ${currentLeg.id}`);
-        syncLegActualTime(currentLeg.id, 'actualFinish', currentLeg.actualFinish || null);
+        setTimeout(() => {
+          syncLegActualTime(currentLeg.id, 'actualFinish', currentLeg.actualFinish || null);
+        }, changeCount * 500);
+        changeCount++;
       }
 
-      // Check for runner assignment changes
       if (currentLeg.runnerId !== prevLeg.runnerId) {
-        console.log(`[RunnerSyncIntegration] Detected runner assignment change for leg ${currentLeg.id}`);
-        syncLegAssignment(currentLeg.id, currentLeg.runnerId || null);
+        setTimeout(() => {
+          syncLegAssignment(currentLeg.id, currentLeg.runnerId || null);
+        }, changeCount * 500);
+        changeCount++;
       }
     });
 
-    // Update ref for next comparison
     prevLegsRef.current = currentLegs;
   }, [legs, teamId, isSetupComplete, syncLegActualTime, syncLegAssignment]);
 
+  // Sync runner changes
   useEffect(() => {
-    // Only sync if we have a team and setup is complete (avoid auto-submitting defaults during setup)
-    if (!teamId || !isSetupComplete) return;
+    if (!teamId || !isSetupComplete || !isInitializedRef.current) return;
 
     const prevRunners = prevRunnersRef.current;
     const currentRunners = runners;
 
-    // Check for runner changes (name, pace, van)
+    // Skip initial load
+    if (prevRunners.length === 0 && currentRunners.length > 0) {
+      prevRunnersRef.current = currentRunners;
+      return;
+    }
+
+    // Only sync if we have previous runners to compare against
+    if (prevRunners.length === 0) return;
+
+    let changeCount = 0;
     currentRunners.forEach((currentRunner) => {
       const prevRunner = prevRunners.find(r => r.id === currentRunner.id);
       if (!prevRunner) return;
@@ -75,21 +100,20 @@ export const RunnerSyncIntegration = () => {
         currentRunner.van !== prevRunner.van;
 
       if (hasChanges) {
-        console.log(`[RunnerSyncIntegration] Detected runner changes for runner ${currentRunner.id}`);
-        
         const updates: { name?: string; pace?: number; van?: number } = {};
         if (currentRunner.name !== prevRunner.name) updates.name = currentRunner.name;
         if (currentRunner.pace !== prevRunner.pace) updates.pace = currentRunner.pace;
         if (currentRunner.van !== prevRunner.van) updates.van = currentRunner.van;
         
-        syncRunnerUpdate(currentRunner.id, updates);
+        setTimeout(() => {
+          syncRunnerUpdate(currentRunner.id, updates);
+        }, changeCount * 500);
+        changeCount++;
       }
     });
 
-    // Update ref for next comparison
     prevRunnersRef.current = currentRunners;
   }, [runners, teamId, isSetupComplete, syncRunnerUpdate]);
 
-  // This component doesn't render anything, it just handles sync logic
   return null;
 };

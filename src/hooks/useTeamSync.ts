@@ -72,9 +72,21 @@ export const useTeamSync = () => {
           
           // Sync race store start time with team start time
           race.setStartTime(new Date(teamStartTime).getTime());
+          
+          // Initialize legs if they don't exist yet (with delay to ensure sync tracking is ready)
+          if (race.legs.length === 0) {
+            setTimeout(() => {
+              const currentRace = useRaceStore.getState();
+              if (currentRace.legs.length === 0) {
+                currentRace.initializeLegs();
+              }
+            }, 100);
+          }
         } else {
           // Try to fetch current team details via Edge Function
-          fetchTeamDetails(storedTeamId);
+          if (storedTeamId) {
+            fetchTeamDetails(storedTeamId);
+          }
         }
       }
     } catch (error) {
@@ -82,7 +94,12 @@ export const useTeamSync = () => {
     }
   };
 
-  const fetchTeamDetails = async (teamId: string) => {
+  const fetchTeamDetails = async (teamId: string | undefined) => {
+    if (!teamId) {
+      console.warn('[fetchTeamDetails] No teamId provided');
+      return;
+    }
+    
     try {
       const deviceId = getDeviceId();
       console.log('[fetchTeamDetails] Fetching team details for teamId:', teamId, 'deviceId:', deviceId);
@@ -119,6 +136,16 @@ export const useTeamSync = () => {
         // Sync race store start time with team start time
         const race = useRaceStore.getState();
         race.setStartTime(new Date(teamData.start_time).getTime());
+        
+        // Initialize legs if they don't exist yet (with delay to ensure sync tracking is ready)
+        if (race.legs.length === 0) {
+          setTimeout(() => {
+            const currentRace = useRaceStore.getState();
+            if (currentRace.legs.length === 0) {
+              currentRace.initializeLegs();
+            }
+          }, 100);
+        }
       } else {
         console.error('[fetchTeamDetails] Error in result:', (result as any).error);
       }
@@ -349,7 +376,7 @@ export const useTeamSync = () => {
   };
 
   const refreshTeamData = async () => {
-    const currentTeamId = deviceInfo?.teamId || localStorage.getItem('relay_team_id');
+    const currentTeamId = deviceInfo?.teamId || localStorage.getItem('relay_team_id') || null;
     console.log('[refreshTeamData] Refreshing team data for teamId:', currentTeamId);
     if (currentTeamId) {
       await fetchTeamDetails(currentTeamId);

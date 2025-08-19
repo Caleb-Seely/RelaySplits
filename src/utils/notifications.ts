@@ -42,8 +42,9 @@ export class NotificationManager {
       //   this.permission = permission;
       // }
 
-      // If permission is granted, automatically enable notifications by default
-      if (this.permission === 'granted') {
+      // If permission is granted and no preference is set, enable notifications by default
+      if (this.permission === 'granted' && !localStorage.getItem(this.STORAGE_KEY)) {
+        console.log('[Notifications] Permission granted but no preference set, enabling by default');
         this.saveNotificationPreference(true);
       }
 
@@ -134,8 +135,9 @@ export class NotificationManager {
     const permission = await Notification.requestPermission();
     this.permission = permission;
     
-    // Save the preference if permission was granted
-    if (permission === 'granted') {
+    // Only save preference if permission was granted AND no preference was previously set
+    if (permission === 'granted' && !localStorage.getItem(this.STORAGE_KEY)) {
+      console.log('[Notifications] Permission granted and no preference set, enabling by default');
       this.saveNotificationPreference(true);
     }
     
@@ -154,6 +156,7 @@ export class NotificationManager {
 
   // Public setter for preference
   setNotificationPreference(enabled: boolean): void {
+    console.log(`[Notifications] Setting preference to: ${enabled}`);
     this.saveNotificationPreference(enabled);
   }
 
@@ -161,9 +164,9 @@ export class NotificationManager {
   isNotificationPreferenceEnabled(): boolean {
     try {
       const saved = localStorage.getItem(this.STORAGE_KEY);
-      // If no preference is saved, default to true (enabled)
-      if (saved === null) return true;
-      return saved === 'true';
+      const isEnabled = saved === null ? true : saved === 'true';
+      console.log(`[Notifications] Preference check - saved: "${saved}", enabled: ${isEnabled}`);
+      return isEnabled;
     } catch (error) {
       console.error('[Notifications] Failed to read preference:', error);
       return true; // Default to enabled on error
@@ -173,9 +176,30 @@ export class NotificationManager {
   // Clear saved preference (sets to false so OFF state persists)
   clearNotificationPreference(): void {
     try {
+      console.log('[Notifications] Clearing notification preference (setting to false)');
       localStorage.setItem(this.STORAGE_KEY, 'false');
     } catch (error) {
       console.error('[Notifications] Failed to clear preference:', error);
+    }
+  }
+
+  // Get the raw preference value for debugging
+  getNotificationPreferenceValue(): string | null {
+    try {
+      return localStorage.getItem(this.STORAGE_KEY);
+    } catch (error) {
+      console.error('[Notifications] Failed to get preference value:', error);
+      return null;
+    }
+  }
+
+  // Reset preference to default (enabled) - useful for testing
+  resetNotificationPreference(): void {
+    try {
+      console.log('[Notifications] Resetting notification preference to default (enabled)');
+      localStorage.removeItem(this.STORAGE_KEY);
+    } catch (error) {
+      console.error('[Notifications] Failed to reset preference:', error);
     }
   }
 

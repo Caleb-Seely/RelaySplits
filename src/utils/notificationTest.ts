@@ -96,3 +96,42 @@ export const testNotificationHistory = () => {
     console.log('🧹 Test notification history cleaned up');
   }, 5000);
 };
+
+export const testNotificationPreference = () => {
+  console.log('🧪 Testing notification preference persistence...');
+  
+  // Test 1: Check current state
+  const initialValue = notificationManager.getNotificationPreferenceValue();
+  const initialEnabled = notificationManager.isNotificationPreferenceEnabled();
+  console.log('Initial state:', { value: initialValue, enabled: initialEnabled });
+  
+  // Test 2: Disable notifications
+  console.log('Disabling notifications...');
+  notificationManager.clearNotificationPreference();
+  
+  // Test 3: Check disabled state
+  const disabledValue = notificationManager.getNotificationPreferenceValue();
+  const disabledEnabled = notificationManager.isNotificationPreferenceEnabled();
+  console.log('Disabled state:', { value: disabledValue, enabled: disabledEnabled });
+  
+  // Test 4: Enable notifications
+  console.log('Enabling notifications...');
+  notificationManager.setNotificationPreference(true);
+  
+  // Test 5: Check enabled state
+  const enabledValue = notificationManager.getNotificationPreferenceValue();
+  const enabledEnabled = notificationManager.isNotificationPreferenceEnabled();
+  console.log('Enabled state:', { value: enabledValue, enabled: enabledEnabled });
+  
+  // Test 6: Reset to default
+  console.log('Resetting to default...');
+  notificationManager.resetNotificationPreference();
+  
+  // Test 7: Check reset state
+  const resetValue = notificationManager.getNotificationPreferenceValue();
+  const resetEnabled = notificationManager.isNotificationPreferenceEnabled();
+  console.log('Reset state:', { value: resetValue, enabled: resetEnabled });
+  
+  console.log('✅ Notification preference test complete!');
+  console.log('Check that the preference persists correctly across these operations');
+};
