@@ -165,3 +165,4 @@ To verify icon setup:
 - Only the most commonly used icons are actively served from the `public/` folder
 - Maskable icons (192x192 and 512x512) support adaptive icon shapes on Android
 - Apple touch icons provide proper home screen appearance on iOS devices
+

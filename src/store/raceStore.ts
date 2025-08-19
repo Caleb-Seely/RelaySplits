@@ -28,6 +28,7 @@ interface RaceStore extends RaceData {
   setTeamId: (teamId: string) => void;
   setRaceData: (data: Partial<{ runners: Runner[]; legs: Leg[]; startTime: number; isSetupComplete: boolean }>) => void;
   isDataConsistent: () => boolean;
+  fixDataInconsistencies: () => boolean;
   forceReset: () => void;
   setLastSyncedAt: (ts: number) => void;
   hasOfflineData: () => boolean;
@@ -191,7 +192,59 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         (r.van === 1 || r.van === 2)
       );
     
-    return hasValidRunners;
+    // Check for leg-runner consistency
+    const hasValidLegs = state.legs.every(leg => {
+      if (!leg.runnerId || leg.runnerId <= 0) {
+        console.warn(`[isDataConsistent] Leg ${leg.id} has invalid runnerId: ${leg.runnerId}`);
+        return false;
+      }
+      const runner = state.runners.find(r => r.id === leg.runnerId);
+      if (!runner) {
+        console.warn(`[isDataConsistent] Leg ${leg.id} assigned to non-existent runner ${leg.runnerId}`);
+        return false;
+      }
+      return true;
+    });
+    
+    return hasValidRunners && hasValidLegs;
+  },
+
+  fixDataInconsistencies: () => {
+    const state = get();
+    let hasChanges = false;
+    
+    // Fix legs with invalid runnerIds by reassigning them based on leg number
+    const fixedLegs = state.legs.map(leg => {
+      if (!leg.runnerId || leg.runnerId <= 0) {
+        console.warn(`[fixDataInconsistencies] Fixing leg ${leg.id} with invalid runnerId: ${leg.runnerId}`);
+        // Reassign based on leg number (round-robin assignment)
+        const runnerIndex = (leg.id - 1) % state.runners.length;
+        const newRunnerId = state.runners[runnerIndex]?.id || 1;
+        hasChanges = true;
+        return { ...leg, runnerId: newRunnerId };
+      }
+      
+      // Check if assigned runner exists
+      const runner = state.runners.find(r => r.id === leg.runnerId);
+      if (!runner) {
+        console.warn(`[fixDataInconsistencies] Fixing leg ${leg.id} assigned to non-existent runner ${leg.runnerId}`);
+        // Reassign based on leg number
+        const runnerIndex = (leg.id - 1) % state.runners.length;
+        const newRunnerId = state.runners[runnerIndex]?.id || 1;
+        hasChanges = true;
+        return { ...leg, runnerId: newRunnerId };
+      }
+      
+      return leg;
+    });
+    
+    if (hasChanges) {
+      console.log('[fixDataInconsistencies] Fixed data inconsistencies, updating legs');
+      const recalculatedLegs = recalculateProjections(fixedLegs, 0, state.runners, state.startTime);
+      set({ legs: recalculatedLegs });
+    }
+    
+    return hasChanges;
   },
 
   forceReset: () => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ interface LegScheduleTableProps {
 }
 
 const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerClick, isViewOnly = false }) => {
-  const { legs, runners, currentVan, updateRunner, updateLegDistance, updateLegActualTime, assignRunnerToLegs, startTime } = useRaceStore();
+  const { legs, runners, currentVan, updateRunner, updateLegDistance, updateLegActualTime, assignRunnerToLegs, startTime, fixDataInconsistencies } = useRaceStore();
   const { team } = useTeamSync();
   const [editingRunner, setEditingRunner] = useState<number | null>(null);
   const [editingDistance, setEditingDistance] = useState<number | null>(null);
@@ -58,11 +58,41 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
     ? legs[0].actualStart
     : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
+
+  // Auto-fix data inconsistencies when detected
+  useEffect(() => {
+    if (legs.length > 0 && runners.length > 0) {
+      const hasInconsistencies = legs.some(leg => {
+        if (!leg.runnerId || leg.runnerId <= 0) return true;
+        const runner = runners.find(r => r.id === leg.runnerId);
+        return !runner;
+      });
+      
+      if (hasInconsistencies) {
+        console.warn('[LegScheduleTable] Data inconsistencies detected, attempting to fix...');
+        fixDataInconsistencies();
+      }
+    }
+  }, [legs, runners, fixDataInconsistencies]);
   
   // Filter legs by current van
   const vanRunners = runners.filter(r => r.van === currentVan);
   const vanRunnerIds = new Set(vanRunners.map(r => r.id));
-  const filteredLegs = legs.filter(leg => vanRunnerIds.has(leg.runnerId));
+  const filteredLegs = legs.filter(leg => {
+    // Ensure leg has a valid runnerId and the runner exists
+    if (!leg.runnerId || leg.runnerId <= 0) {
+      console.warn(`[LegScheduleTable] Leg ${leg.id} has invalid runnerId: ${leg.runnerId}`);
+      return false;
+    }
+    
+    const runner = runners.find(r => r.id === leg.runnerId);
+    if (!runner) {
+      console.warn(`[LegScheduleTable] Leg ${leg.id} assigned to non-existent runner ${leg.runnerId}`);
+      return false;
+    }
+    
+    return vanRunnerIds.has(leg.runnerId);
+  });
 
 
 

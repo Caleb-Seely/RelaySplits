@@ -229,17 +229,42 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       );
       console.log('[fetchAndMergeLegs] Runner map:', Object.fromEntries(remoteToLocalRunnerMap));
       
-      const legs: Leg[] = remoteLegs.map((l: Tables<'legs'>) => ({
-        id: l.number,
-        runnerId: l.runner_id ? remoteToLocalRunnerMap.get(l.runner_id) || 0 : 0,
-        distance: l.distance,
-        projectedStart: 0,
-        projectedFinish: 0,
-        actualStart: l.start_time ? new Date(l.start_time).getTime() : undefined,
-        actualFinish: l.finish_time ? new Date(l.finish_time).getTime() : undefined,
-        remoteId: l.id,
-        updated_at: l.updated_at,
-      }));
+      const legs: Leg[] = remoteLegs.map((l: Tables<'legs'>) => {
+        // Get the mapped runner ID, but preserve existing local mapping if remote mapping fails
+        let mappedRunnerId: number;
+        if (l.runner_id) {
+          const remoteMappedId = remoteToLocalRunnerMap.get(l.runner_id);
+          if (remoteMappedId !== undefined) {
+            mappedRunnerId = remoteMappedId;
+          } else {
+            // If remote mapping fails, try to find existing leg with same remoteId and preserve its runnerId
+            const existingLeg = useRaceStore.getState().legs.find(leg => leg.remoteId === l.id);
+            if (existingLeg && existingLeg.runnerId > 0) {
+              console.warn(`[fetchAndMergeLegs] Runner mapping failed for leg ${l.number}, preserving existing runnerId ${existingLeg.runnerId}`);
+              mappedRunnerId = existingLeg.runnerId;
+            } else {
+              console.error(`[fetchAndMergeLegs] No runner mapping found for leg ${l.number} with runner_id ${l.runner_id}, skipping leg`);
+              return null; // Skip this leg to prevent runnerId=0
+            }
+          }
+        } else {
+          // No runner_id in remote data, preserve existing mapping if available
+          const existingLeg = useRaceStore.getState().legs.find(leg => leg.remoteId === l.id);
+          mappedRunnerId = existingLeg?.runnerId || 0;
+        }
+
+        return {
+          id: l.number,
+          runnerId: mappedRunnerId,
+          distance: l.distance,
+          projectedStart: 0,
+          projectedFinish: 0,
+          actualStart: l.start_time ? new Date(l.start_time).getTime() : undefined,
+          actualFinish: l.finish_time ? new Date(l.finish_time).getTime() : undefined,
+          remoteId: l.id,
+          updated_at: l.updated_at,
+        };
+      }).filter(Boolean) as Leg[]; // Remove null entries
       console.log('[fetchAndMergeLegs] Mapped legs:', legs);
       
       merge(legs, useRaceStore.getState().legs, (items) => {
@@ -291,7 +316,19 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
     
     try {
       runnersCount = await fetchAndMergeRunners(teamId);
-      legsCount = await fetchAndMergeLegs(teamId);
+      
+      // Ensure runners are properly loaded before fetching legs
+      const storeState = useRaceStore.getState();
+      const runnersWithRemoteIds = storeState.runners.filter(r => r.remoteId);
+      console.log(`[fetchInitialData] Runners loaded: ${runnersCount}, runners with remoteIds: ${runnersWithRemoteIds.length}`);
+      
+      // Only fetch legs if we have runners with remoteIds to ensure proper mapping
+      if (runnersWithRemoteIds.length > 0) {
+        legsCount = await fetchAndMergeLegs(teamId);
+      } else {
+        console.warn('[fetchInitialData] No runners with remoteIds found, skipping leg fetch to prevent mapping issues');
+      }
+      
       console.log('[fetchInitialData] Merge complete');
     } finally {
       isFetchingInitialData.current = false;
