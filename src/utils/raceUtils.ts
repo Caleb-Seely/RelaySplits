@@ -217,7 +217,10 @@ export function recalculateProjections(legs: Leg[], updatedIndex: number, runner
 export function getCurrentRunner(legs: Leg[], now: Date): Leg | null {
   const currentTime = now.getTime();
   
-  for (const leg of legs) {
+  // Sort legs by ID to ensure we check in order
+  const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
+  
+  for (const leg of sortedLegs) {
     // Only consider a leg as current if it has actually started but not finished
     // Don't auto-transition based on projected finish times
     if (leg.actualStart && leg.actualStart <= currentTime && !leg.actualFinish) {

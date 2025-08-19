@@ -28,6 +28,7 @@ interface RaceStore extends RaceData {
   setRunners: (runners: Runner[]) => void;
   updateLegDistance: (id: number, distance: number) => void;
   updateLegActualTime: (id: number, field: 'actualStart' | 'actualFinish', time: number | null) => void;
+  startNextRunner: (currentRunnerId: number, nextRunnerId: number) => void;
   setCurrentVan: (van: 1 | 2) => void;
   nextSetupStep: () => void;
   prevSetupStep: () => void;
@@ -199,6 +200,51 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         value: time,
         previousValue,
         runnerId: currentLeg.runnerId,
+        timestamp: Date.now()
+      },
+      priority: 'high',
+      source: 'raceStore'
+    });
+
+    // Update last synced timestamp to indicate local change
+    return { legs: finalLegs, lastSyncedAt: Date.now() };
+  }),
+
+  // New atomic function for start runner action
+  startNextRunner: (currentRunnerId: number, nextRunnerId: number) => set((state) => {
+    const currentLegIndex = state.legs.findIndex(leg => leg.id === currentRunnerId);
+    const nextLegIndex = state.legs.findIndex(leg => leg.id === nextRunnerId);
+    
+    if (currentLegIndex === -1 || nextLegIndex === -1) return state;
+
+    const currentLeg = state.legs[currentLegIndex];
+    const nextLeg = state.legs[nextLegIndex];
+    const now = Date.now();
+
+    const updatedLegs = [...state.legs];
+    
+    // Finish current runner
+    updatedLegs[currentLegIndex] = { 
+      ...updatedLegs[currentLegIndex], 
+      actualFinish: now 
+    };
+    
+    // Start next runner
+    updatedLegs[nextLegIndex] = { 
+      ...updatedLegs[nextLegIndex], 
+      actualStart: now 
+    };
+
+    const finalLegs = recalculateProjections(updatedLegs, Math.min(currentLegIndex, nextLegIndex), state.runners, state.startTime);
+
+    // Publish atomic start runner event for sync
+    eventBus.publish({
+      type: EVENT_TYPES.START_RUNNER,
+      payload: {
+        currentRunnerId,
+        nextRunnerId,
+        finishTime: now,
+        startTime: now,
         timestamp: Date.now()
       },
       priority: 'high',

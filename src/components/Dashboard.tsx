@@ -92,6 +92,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     updateRunner,
     updateLegDistance,
     updateLegActualTime,
+    startNextRunner,
     startTime,
     teamId,
     assignRunnerToLegs,
@@ -282,13 +283,13 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       console.log('Triggering confetti for start runner');
       triggerConfetti({ particleCount: 100, spread: 70 });
       
-      // First, finish the current runner if there is one running
+      // Use atomic start runner function to prevent timing gaps
       if (currentRunner && currentRunner.actualStart && !currentRunner.actualFinish) {
-        updateLegActualTime(currentRunner.id, 'actualFinish', Date.now());
+        startNextRunner(currentRunner.id, nextRunner.id);
+      } else {
+        // If no current runner, just start the next runner
+        updateLegActualTime(nextRunner.id, 'actualStart', Date.now());
       }
-      
-      // Then start the next runner
-      updateLegActualTime(nextRunner.id, 'actualStart', Date.now());
     } finally {
       // Add a small delay to prevent rapid clicking
       setTimeout(() => {

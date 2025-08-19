@@ -65,9 +65,24 @@ export const useEnhancedSyncManager = () => {
       await handleRunnerSync(runnerId, updates, previousValues);
     });
 
+    const unsubscribeStartRunner = eventBus.subscribe(EVENT_TYPES.START_RUNNER, async (event) => {
+      const { currentRunnerId, nextRunnerId, finishTime, startTime, timestamp } = event.payload;
+      
+      // Skip if we're processing a sync operation
+      if (isProcessingSync.current) return;
+      
+      // Rate limiting
+      const now = Date.now();
+      if (now - lastSyncAttempt.current < SYNC_COOLDOWN_MS) return;
+      lastSyncAttempt.current = now;
+      
+      await handleStartRunnerSync(currentRunnerId, nextRunnerId, finishTime, startTime);
+    });
+
     return () => {
       unsubscribeLegUpdates();
       unsubscribeRunnerUpdates();
+      unsubscribeStartRunner();
     };
   }, []);
 
@@ -159,6 +174,145 @@ export const useEnhancedSyncManager = () => {
           number: leg.id,
           distance: leg.distance,
           [field === 'actualStart' ? 'start_time' : 'finish_time']: value ? new Date(value).toISOString() : null
+        }
+      });
+    } finally {
+      // Remove from pending syncs
+      pendingSyncs.current.delete(syncKey);
+      isProcessingSync.current = false;
+    }
+  }, [queueChange]);
+
+  // Handle atomic start runner synchronization
+  const handleStartRunnerSync = useCallback(async (
+    currentRunnerId: number,
+    nextRunnerId: number,
+    finishTime: number,
+    startTime: number
+  ) => {
+    if (!storeRef.current.teamId) return;
+
+    const currentLeg = storeRef.current.legs.find(l => l.id === currentRunnerId);
+    const nextLeg = storeRef.current.legs.find(l => l.id === nextRunnerId);
+    
+    if (!currentLeg?.remoteId || !nextLeg?.remoteId) return;
+
+    // Create a unique key for this sync operation
+    const syncKey = `start-runner-${currentRunnerId}-${nextRunnerId}`;
+    
+    // Check if this exact sync is already pending
+    if (pendingSyncs.current.has(syncKey)) {
+      syncLogger.debug(`Start runner sync already pending for ${syncKey}, skipping`);
+      return;
+    }
+    
+    // Add to pending syncs
+    pendingSyncs.current.add(syncKey);
+
+    isProcessingSync.current = true;
+
+    try {
+      // Check if we're offline
+      if (!navigator.onLine) {
+        console.log(`[useEnhancedSyncManager] Offline - queuing start runner update`);
+        
+        // Queue both updates
+        queueChange({
+          table: 'legs',
+          remoteId: currentLeg.remoteId,
+          payload: {
+            number: currentLeg.id,
+            distance: currentLeg.distance,
+            finish_time: new Date(finishTime).toISOString()
+          }
+        });
+        
+        queueChange({
+          table: 'legs',
+          remoteId: nextLeg.remoteId,
+          payload: {
+            number: nextLeg.id,
+            distance: nextLeg.distance,
+            start_time: new Date(startTime).toISOString()
+          }
+        });
+        
+        return;
+      }
+
+      // Build the payload for both leg updates
+      const legsPayload = [
+        {
+          id: currentLeg.remoteId,
+          number: currentLeg.id,
+          distance: currentLeg.distance,
+          finish_time: new Date(finishTime).toISOString()
+        },
+        {
+          id: nextLeg.remoteId,
+          number: nextLeg.id,
+          distance: nextLeg.distance,
+          start_time: new Date(startTime).toISOString()
+        }
+      ];
+
+      console.log(`[useEnhancedSyncManager] Syncing start runner:`, legsPayload);
+
+      const deviceId = getDeviceId();
+      const result = await invokeEdge('legs-upsert', {
+        teamId: storeRef.current.teamId,
+        deviceId,
+        legs: legsPayload,
+        action: 'upsert'
+      });
+      
+      if ((result as any).error) {
+        console.error(`[useEnhancedSyncManager] Failed to sync start runner:`, (result as any).error);
+        // Queue the changes for retry
+        queueChange({
+          table: 'legs',
+          remoteId: currentLeg.remoteId,
+          payload: {
+            number: currentLeg.id,
+            distance: currentLeg.distance,
+            finish_time: new Date(finishTime).toISOString()
+          }
+        });
+        
+        queueChange({
+          table: 'legs',
+          remoteId: nextLeg.remoteId,
+          payload: {
+            number: nextLeg.id,
+            distance: nextLeg.distance,
+            start_time: new Date(startTime).toISOString()
+          }
+        });
+      } else {
+        console.log(`[useEnhancedSyncManager] Successfully synced start runner`);
+        // Update last synced timestamp
+        storeRef.current.setLastSyncedAt(Date.now());
+      }
+    } catch (error) {
+      console.error(`[useEnhancedSyncManager] Error syncing start runner:`, error);
+      // Queue the changes for retry
+      queueChange({
+        table: 'legs',
+        remoteId: currentLeg.remoteId,
+        payload: {
+          number: currentLeg.id,
+          distance: currentLeg.distance,
+          finish_time: new Date(finishTime).toISOString()
+        }
+      });
+      
+      queueChange({
+        table: 'legs',
+        remoteId: nextLeg.remoteId,
+        payload: {
+          number: nextLeg.id,
+          distance: nextLeg.distance,
+          start_time: new Date(startTime).toISOString()
         }
       });
     } finally {
