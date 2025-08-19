@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useRaceStore } from '@/store/raceStore';
-import { useRunnerSync } from '@/hooks/useRunnerSync';
+import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 
 interface Conflict {
   runnerName: string;
@@ -39,7 +39,6 @@ export const ConflictResolutionProvider: React.FC<ConflictResolutionProviderProp
   const [currentConflict, setCurrentConflict] = useState<Conflict | null>(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
   const { runners } = useRaceStore();
-  const { syncLegActualTime } = useRunnerSync();
 
   const showConflict = useCallback((conflict: Conflict) => {
     setCurrentConflict(conflict);
@@ -56,7 +55,7 @@ export const ConflictResolutionProvider: React.FC<ConflictResolutionProviderProp
 
     const field = currentConflict.field === 'start' ? 'actualStart' : 'actualFinish';
     
-    // Update the local store
+    // Update the local store - this will trigger the event bus and sync automatically
     const store = useRaceStore.getState();
     const updatedLegs = store.legs.map(leg => 
       leg.id === currentConflict.legId 
@@ -65,13 +64,13 @@ export const ConflictResolutionProvider: React.FC<ConflictResolutionProviderProp
     );
     store.setRaceData({ legs: updatedLegs });
 
-    // Sync to server
-    await syncLegActualTime(currentConflict.legId, field, selectedTime);
+    // The enhanced sync manager will automatically handle the sync via event bus
+    // No need to manually call sync functions anymore
 
     // Clear the conflict
     setCurrentConflict(null);
     setIsConflictModalOpen(false);
-  }, [currentConflict, syncLegActualTime]);
+  }, [currentConflict]);
 
   const onConflictDetected = useCallback((conflictData: any) => {
     if (conflictData.type === 'timing') {

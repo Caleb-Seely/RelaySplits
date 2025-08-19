@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { X, Download, Smartphone, Monitor, Bell, BellOff } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useDecoupledNotifications } from '@/hooks/useDecoupledNotifications';
 import { notificationManager } from '@/utils/notifications';
 import { toast } from 'sonner';
 
@@ -14,7 +14,7 @@ interface DashboardPromptsProps {
 
 const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
   const { canInstall, isInstalling, install } = usePWA();
-  const { isSupported: notificationsSupported, getPermission, requestPermission, isNotificationPreferenceEnabled } = useNotifications();
+  const { isSupported: notificationsSupported, getPermission, requestPermission, isNotificationPreferenceEnabled } = useDecoupledNotifications();
   const [isDismissed, setIsDismissed] = useState(false);
   const [showPWA, setShowPWA] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);

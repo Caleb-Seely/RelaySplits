@@ -6,10 +6,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { useTeam } from '@/contexts/TeamContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
-import { useSyncManager } from '@/hooks/useSyncManager';
+import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { useRaceStore } from '@/store/raceStore';
-import { useOfflineData } from '@/hooks/useOfflineData';
+
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { runDiagnostics } from '@/utils/diagnostics';
 import Dashboard from '@/components/Dashboard';
@@ -35,12 +35,15 @@ const Index = () => {
   })();
   const restoreFromOffline = useRaceStore((s) => s.restoreFromOffline);
   const isDataConsistent = useRaceStore((s) => s.isDataConsistent);
-  const { isOnline, offlineChangesCount, loadOfflineState } = useOfflineData();
+  const { getQueueStatus: getEnhancedQueueStatus } = useEnhancedSyncManager();
+  const queueStatus = getEnhancedQueueStatus();
+  const isOnline = navigator.onLine;
+  const offlineChangesCount = queueStatus.pendingCount;
   const hasRestoredOfflineRef = useRef(false);
   
   // Initialize Supabase sync and offline queue
   const { onConflictDetected } = useConflictResolution();
-  const { fetchInitialData } = useSyncManager(onConflictDetected);
+  const { fetchLatestData } = useEnhancedSyncManager();
   const { processQueue, getQueueStatus, isProcessing: isQueueProcessing } = useOfflineQueue();
 
   try {
@@ -122,14 +125,14 @@ const Index = () => {
     }
     
     if (teamId && deviceInfo?.role !== 'viewer' && isNewTeam === false) {
-      console.log('[Index] Calling fetchInitialData for team:', teamId);
-      fetchInitialData(teamId);
+      console.log('[Index] Calling fetchLatestData for team:', teamId);
+      fetchLatestData();
       hasFetchedInitialDataRef.current = true;
     } else if (teamId && deviceInfo?.role !== 'viewer' && isNewTeam === undefined) {
       // If isNewTeam is undefined, we haven't determined yet - skip for now
       console.log('[Index] Skipping fetchInitialData - isNewTeam is undefined');
     }
-  }, [teamId, fetchInitialData, deviceInfo?.role, isNewTeam]);
+  }, [teamId, fetchLatestData, deviceInfo?.role, isNewTeam]);
 
   // Realtime subscriptions are established in Dashboard.tsx
 
@@ -157,18 +160,11 @@ const Index = () => {
     if (hasRestoredOfflineRef.current) return;
     if (teamId !== team.id) return;
 
-    const offlineState = loadOfflineState();
-    if (offlineState && !isDataConsistent()) {
-      console.log('🔄 [OFFLINE] Restoring state from offline storage...');
-      restoreFromOffline(
-        offlineState.runners,
-        offlineState.legs,
-        offlineState.isSetupComplete
-      );
-    }
+    // Offline state restoration is now handled by the enhanced sync manager
+    console.log('🔄 [OFFLINE] Offline state restoration handled by enhanced sync manager');
     // Ensure we only attempt restore once per mount/team session
     hasRestoredOfflineRef.current = true;
-  }, [team, teamLoading, teamId, loadOfflineState, isDataConsistent, restoreFromOffline]);
+  }, [team, teamLoading, teamId]);
 
   // Process offline queue when coming back online or when team changes
   useEffect(() => {

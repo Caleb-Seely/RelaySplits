@@ -256,6 +256,17 @@ function validateEdgeFunctionInput(name: string, body: any): { success: boolean;
 
 // Ensure we always have a stable deviceId for Edge Functions
 export function getDeviceId(): string {
+  // First check if we have device info with a registered device ID
+  try {
+    const deviceInfo = JSON.parse(localStorage.getItem('relay_device_info') || '{}');
+    if (deviceInfo.deviceId) {
+      return deviceInfo.deviceId;
+    }
+  } catch (error) {
+    console.warn('[getDeviceId] Error parsing device info:', error);
+  }
+  
+  // Fall back to the legacy relay_device_id
   const key = 'relay_device_id';
   let id = localStorage.getItem(key);
   if (!id) {

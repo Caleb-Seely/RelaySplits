@@ -129,6 +129,7 @@ export const EVENT_TYPES = {
   DATA_SYNC_COMPLETE: 'data_sync_complete',
   LEG_UPDATE: 'leg_update',
   RUNNER_UPDATE: 'runner_update',
+  REALTIME_UPDATE: 'realtime_update', // New event type for real-time server updates
   
   // Low priority events (notifications)
   NOTIFICATION_LEG_START: 'notification_leg_start',

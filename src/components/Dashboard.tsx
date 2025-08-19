@@ -9,6 +9,8 @@ import { useTeamSync } from '@/hooks/useTeamSync';
 import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
+import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
+import { getDeviceId } from '@/integrations/supabase/edge';
 
 import {
   getCurrentRunner,
@@ -65,7 +67,6 @@ import TimePicker from './TimePicker';
 import PaceInputModal from './PaceInputModal';
 import RunnerAssignmentModal from './RunnerAssignmentModal';
 import SyncStatusIndicator from './SyncStatusIndicator';
-import { RunnerSyncIntegration } from './RunnerSyncIntegration';
 import { toast } from 'sonner';
 import TeamSettings from './TeamSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -99,7 +100,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   } = useRaceStore();
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
-  const { performSmartSync, getQueueStatus, isProcessingSync } = useEnhancedSyncManager();
+  const { performSmartSync, getQueueStatus, isProcessingSync, setupRealtimeSubscriptions, manualRetry } = useEnhancedSyncManager();
   const { 
     isSupported: notificationsSupported, 
     getPermission: notificationPermission, 
@@ -115,11 +116,55 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   useEffect(() => {
     if (!teamId || isViewOnly) return;
     
-    // Perform initial smart sync when dashboard loads
-    if (navigator.onLine) {
-      performSmartSync();
-    }
-  }, [teamId, performSmartSync, isViewOnly]);
+    console.log('[Dashboard] Setting up real-time subscriptions for team:', teamId);
+    
+    let cleanup: (() => void) | undefined;
+    let syncStatusInterval: NodeJS.Timeout;
+    
+    // Add a small delay to prevent rapid re-subscriptions
+    const timeoutId = setTimeout(() => {
+      cleanup = setupRealtimeSubscriptions(teamId);
+      
+      // Set up periodic sync status check
+      syncStatusInterval = setInterval(() => {
+        const queueStatus = getQueueStatus();
+        if (queueStatus.pendingCount > 0) {
+          console.log('[Dashboard] Pending sync items:', queueStatus);
+        }
+      }, 10000); // Check every 10 seconds
+    }, 100); // Small delay to prevent rapid re-subscriptions
+    
+    return () => {
+      clearTimeout(timeoutId);
+      if (cleanup) cleanup();
+      if (syncStatusInterval) clearInterval(syncStatusInterval);
+    };
+  }, [teamId, setupRealtimeSubscriptions, isViewOnly]);
+
+  // Listen for real-time updates
+  useEffect(() => {
+    let lastNotificationTime = 0;
+    const NOTIFICATION_COOLDOWN = 3000; // 3 seconds between notifications
+    
+    const unsubscribe = eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event) => {
+      console.log('[Dashboard] Received real-time update:', event.payload);
+      setLastRealtimeUpdate(Date.now());
+      
+      // Show a subtle notification for real-time updates (with cooldown to prevent spam)
+      if (event.payload.device_id !== getDeviceId()) {
+        const now = Date.now();
+        if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+          lastNotificationTime = now;
+          toast.success(`Updated from another device`, {
+            duration: 2000,
+            position: 'top-right'
+          });
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   const { team, updateTeamStartTime, loading } = useTeamSync();
   const { deviceInfo } = useTeam();
@@ -149,6 +194,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isStartingRunner, setIsStartingRunner] = useState(false);
+  const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<number | null>(null);
 
   // Test confetti function for debugging
   const testConfetti = () => {
@@ -1279,6 +1325,44 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     </Button>
                   )}
 
+                  {/* Enhanced Sync System Test Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Import and run the test
+                        import('@/utils/syncTest').then(({ testDecoupledSystem, testRealtimeSubscription, testSyncPerformance, testDataFetching, testStoreUpdates }) => {
+                          testDecoupledSystem();
+                          setTimeout(() => testRealtimeSubscription(), 500);
+                          setTimeout(() => testSyncPerformance(), 1000);
+                          setTimeout(() => testDataFetching(), 1500);
+                          setTimeout(() => testStoreUpdates(), 2000);
+                        });
+                      }}
+                      title="Test enhanced sync system"
+                    >
+                      <HelpCircle className="h-4 w-4 mr-1" />
+                      Test Sync
+                    </Button>
+                  )}
+
+                  {/* Manual Sync Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        console.log('[Dashboard] Manual sync triggered');
+                        manualRetry();
+                      }}
+                      title="Manually trigger sync"
+                    >
+                      <Cloud className="h-4 w-4 mr-1" />
+                      Manual Sync
+                    </Button>
+                  )}
+
                   {/* Notification Debug Button - Only show in development */}
                   {process.env.NODE_ENV === 'development' && (
                     <Button
@@ -1391,8 +1475,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         </DialogContent>
       </Dialog>
 
-      {/* Real-time database sync integration */}
-      <RunnerSyncIntegration />
+      {/* Enhanced sync integration is now handled by useEnhancedSyncManager */}
 
       {/* Quick Help Popup for new team members */}
       <QuickHelpPopup 

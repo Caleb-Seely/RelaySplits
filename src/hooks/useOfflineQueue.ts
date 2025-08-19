@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRaceStore } from '@/store/raceStore';
 import { validateDataIntegrity, validateRunner, validateLeg } from '@/utils/validation';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
+import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 
 // Define the shape of a queued change
 interface QueuedChange {
@@ -390,6 +391,23 @@ export const useOfflineQueue = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, [processQueue, getQueueStatus, safeUpdate]);
+
+  // Subscribe to real-time updates to trigger queue processing
+  useEffect(() => {
+    const unsubscribe = eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event: any) => {
+      // If we receive a real-time update and have pending changes, try to process them
+      const queueStatus = getQueueStatus();
+      if (queueStatus.pendingCount > 0 && navigator.onLine) {
+        const teamId = useRaceStore.getState().teamId;
+        if (teamId) {
+          console.log('[useOfflineQueue] Real-time update received, processing pending queue...');
+          processQueue(teamId);
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [processQueue, getQueueStatus]);
 
   return { 
     queueChange, 

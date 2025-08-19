@@ -52,6 +52,13 @@ export const useTeamSync = () => {
         const race = useRaceStore.getState();
         race.setTeamId(storedTeamId);
         
+        // Check if setup is already completed for this team
+        const setupLocked = localStorage.getItem(`relay_setup_locked_${storedTeamId}`) === '1';
+        if (setupLocked) {
+          console.log('[useTeamSync] Restoring setup completion for team:', storedTeamId);
+          race.markSetupComplete();
+        }
+        
         // Set team with stored name and start time if available
         const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
         

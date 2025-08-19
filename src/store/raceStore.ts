@@ -3,6 +3,14 @@ import type { RaceData, Runner, Leg } from '@/types/race';
 import { initializeRace, recalculateProjections } from '@/utils/raceUtils';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 
+// Subscribe to real-time updates from other devices
+eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event) => {
+  console.log('[RaceStore] Received real-time update:', event.payload);
+  
+  // This will trigger a UI refresh when data is updated from other devices
+  // The actual data fetching is handled by useEnhancedSyncManager
+});
+
 
 
 interface RaceStore extends RaceData {
@@ -197,7 +205,8 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       source: 'raceStore'
     });
 
-    return { legs: finalLegs };
+    // Update last synced timestamp to indicate local change
+    return { legs: finalLegs, lastSyncedAt: Date.now() };
   }),
 
   setCurrentVan: (van) => set({ currentVan: van }),
@@ -215,11 +224,25 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   })),
 
   completeSetup: () => {
+    const state = get();
     set({ isSetupComplete: true });
+    
+    // Persist setup completion to localStorage
+    if (state.teamId) {
+      localStorage.setItem(`relay_setup_locked_${state.teamId}`, '1');
+      console.log('[RaceStore] Setup completion persisted for team:', state.teamId);
+    }
   },
 
   markSetupComplete: () => {
+    const state = get();
     set({ isSetupComplete: true });
+    
+    // Persist setup completion to localStorage
+    if (state.teamId) {
+      localStorage.setItem(`relay_setup_locked_${state.teamId}`, '1');
+      console.log('[RaceStore] Setup completion marked for team:', state.teamId);
+    }
   },
 
   setDidInitFromTeam: (val) => set({ didInitFromTeam: val }),

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useOfflineData } from '@/hooks/useOfflineData';
+
 import { useRaceStore } from '@/store/raceStore';
-import { useSyncManager } from '@/hooks/useSyncManager';
+import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import Dashboard from './Dashboard';
@@ -23,28 +23,28 @@ interface ViewTeamResponse {
 const ViewOnlyDashboard = () => {
   const { viewerCode } = useParams();
   const navigate = useNavigate();
-  const { isOnline } = useOfflineData();
+  const isOnline = navigator.onLine;
   const [teamData, setTeamData] = useState<ViewTeamResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [teamNotSetUp, setTeamNotSetUp] = useState(false);
   const { onConflictDetected } = useConflictResolution();
-  const { fetchInitialData } = useSyncManager(onConflictDetected);
+  const { fetchLatestData } = useEnhancedSyncManager();
   const setTeamId = useRaceStore((s) => s.setTeamId);
   const { setDeviceInfo } = useTeam();
   const hasFetchedData = useRef(false);
-  const fetchInitialDataRef = useRef(fetchInitialData);
+  const fetchLatestDataRef = useRef(fetchLatestData);
   const isMounted = useRef(true);
   const hasUnmounted = useRef(false);
   const fetchInProgress = useRef(false);
   
   console.log('[ViewOnlyDashboard] Component render - viewerCode:', viewerCode, 'hasFetchedData:', hasFetchedData.current, 'isMounted:', isMounted.current, 'hasUnmounted:', hasUnmounted.current);
   
-  // Update ref when fetchInitialData changes
+  // Update ref when fetchLatestData changes
   useEffect(() => {
-    console.log('[ViewOnlyDashboard] fetchInitialData changed, updating ref');
-    fetchInitialDataRef.current = fetchInitialData;
-  }, [fetchInitialData]);
+    console.log('[ViewOnlyDashboard] fetchLatestData changed, updating ref');
+    fetchLatestDataRef.current = fetchLatestData;
+  }, [fetchLatestData]);
   
   // Cleanup on unmount
   useEffect(() => {
@@ -132,7 +132,7 @@ const ViewOnlyDashboard = () => {
           console.log('[ViewOnlyDashboard] Fetching initial data for team:', data.teamId);
           fetchInProgress.current = true;
           try {
-            await fetchInitialDataRef.current(data.teamId);
+            await fetchLatestDataRef.current();
             console.log('[ViewOnlyDashboard] Setting hasFetchedData to true');
             hasFetchedData.current = true;
             

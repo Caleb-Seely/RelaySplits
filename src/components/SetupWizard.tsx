@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
-import { useSyncManager } from '@/hooks/useSyncManager';
+import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
@@ -39,7 +39,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   } = useRaceStore();
 
   const { onConflictDetected } = useConflictResolution();
-  const { saveInitialRows, fetchInitialData } = useSyncManager(onConflictDetected);
+  const { fetchLatestData, saveInitialRows } = useEnhancedSyncManager();
   const { team, refreshTeamData } = useTeamSync();
 
   const [isSaving, setIsSaving] = useState(false);
@@ -206,6 +206,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
         console.log('[SetupWizard] Sample leg:', storeState.legs[0]);
         
         try {
+          // Small delay to ensure device info is properly set
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
           const { error } = await saveInitialRows(team.id);
           console.log('[SetupWizard] saveInitialRows completed, error:', error);
           if (error) {
@@ -214,10 +217,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
             return;
           }
           
-          // After saving initial data, fetch it to ensure it's loaded into the store
-          console.log('[SetupWizard] Fetching initial data after save');
-          await fetchInitialData(team.id);
-          console.log('[SetupWizard] fetchInitialData completed');
+          // Data is already saved and store is updated, no need to fetch again
+          console.log('[SetupWizard] Initial data saved and store updated successfully');
         } catch (e) {
           console.error('[SetupWizard] Exception in saveInitialRows:', e);
           toast.error(`Failed to save initial data: ${(e as Error)?.message || 'Unknown error'}`, { id: toastId });
