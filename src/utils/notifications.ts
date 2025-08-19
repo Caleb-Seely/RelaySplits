@@ -48,6 +48,18 @@ export class NotificationManager {
         this.saveNotificationPreference(true);
       }
 
+      // Start background sync for notifications when app is closed
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        try {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'START_BACKGROUND_SYNC'
+          });
+          console.log('[Notifications] Started background sync for closed app notifications');
+        } catch (error) {
+          console.log('[Notifications] Failed to start background sync:', error);
+        }
+      }
+
       console.log('[Notifications] Initialized with permission:', this.permission);
       return true; // Return true if initialization succeeded, regardless of permission status
     } catch (error) {
@@ -71,14 +83,20 @@ export class NotificationManager {
       // Create a unique tag for this specific notification to prevent duplicates
       const notificationTag = this.createNotificationTag(message);
       
+      // Choose the best icon based on device and platform
+      const icon = this.getBestNotificationIcon();
+      const badge = this.getBestNotificationBadge();
+      
       const options: NotificationOptions = {
         body: message.body,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
+        icon: icon,
+        badge: badge,
         data: message.data,
         requireInteraction: false, // Changed to false to allow background notifications
         silent: false,
-        tag: notificationTag // Use unique tag for deduplication
+        tag: notificationTag, // Use unique tag for deduplication
+        // Add platform-specific options for better appearance
+        ...this.getPlatformSpecificOptions()
       };
 
       console.log('[Notifications] Showing notification with options:', options);
@@ -90,9 +108,11 @@ export class NotificationManager {
         try {
           const fallbackNotification = new Notification(message.title, {
             body: message.body,
-            icon: '/favicon.ico',
+            icon: icon, // Use the same optimized icon
+            badge: badge, // Use the same optimized badge
             requireInteraction: false, // Changed to false
-            tag: notificationTag // Use same tag for native notifications
+            tag: notificationTag, // Use same tag for native notifications
+            ...this.getPlatformSpecificOptions()
           });
           console.log('[Notifications] Fallback notification also sent');
         } catch (fallbackError) {
@@ -116,6 +136,80 @@ export class NotificationManager {
       }
     } catch (error) {
       console.error('[Notifications] Failed to show notification:', error);
+    }
+  }
+
+  // Get the best notification icon based on device and platform
+  private getBestNotificationIcon(): string {
+    // Check if we're on iOS (Safari)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    // Check if we're on Android
+    const isAndroid = /Android/.test(navigator.userAgent);
+    
+    // Check if we're on Windows
+    const isWindows = /Windows/.test(navigator.userAgent);
+    
+    // Check if we're on macOS
+    const isMacOS = /Mac OS X/.test(navigator.userAgent) && !isIOS;
+    
+    // Choose icon based on platform
+    if (isIOS) {
+      // iOS prefers 180x180 or 152x152 icons
+      return '/apple-touch-icon.png';
+    } else if (isAndroid) {
+      // Android prefers 192x192 or 144x144 icons
+      return '/icon-192.png';
+    } else if (isWindows) {
+      // Windows prefers 192x192 icons
+      return '/icon-192.png';
+    } else if (isMacOS) {
+      // macOS prefers 192x192 icons
+      return '/icon-192.png';
+    } else {
+      // Default to 192x192 for other platforms
+      return '/icon-192.png';
+    }
+  }
+
+  // Get the best notification badge based on device and platform
+  private getBestNotificationBadge(): string {
+    // Badge should be smaller, use 96x96 or 72x72
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (isIOS) {
+      // iOS prefers smaller badges
+      return '/icon-72.png';
+    } else {
+      // Other platforms use 96x96
+      return '/icon-96.png';
+    }
+  }
+
+  // Get platform-specific notification options
+  private getPlatformSpecificOptions(): Partial<NotificationOptions> {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    const isAndroid = /Android/.test(navigator.userAgent);
+    
+    if (isIOS) {
+      // iOS-specific options
+      return {
+        silent: false // iOS notifications should have sound
+      };
+    } else if (isAndroid) {
+      // Android-specific options
+      return {
+        silent: false
+      };
+    } else {
+      // Desktop options
+      return {
+        silent: false
+      };
     }
   }
 
@@ -236,10 +330,15 @@ export class NotificationManager {
     // Also try a native notification as backup
     if (Notification.permission === 'granted') {
       try {
+        const icon = this.getBestNotificationIcon();
+        const badge = this.getBestNotificationBadge();
+        
         const nativeNotification = new Notification("Native Test! 🏃‍♂️", {
           body: "This is a native browser notification test",
-          icon: '/favicon.ico',
-          requireInteraction: false
+          icon: icon,
+          badge: badge,
+          requireInteraction: false,
+          ...this.getPlatformSpecificOptions()
         });
         console.log('[Notifications] Native test notification sent');
       } catch (error) {
@@ -263,20 +362,13 @@ export class NotificationManager {
   }
 }
 
-// Notification message generators for different race events
-export function generateStartNotification(runnerName: string, legNumber: number, isFirstLeg: boolean = false): NotificationMessage {
-  if (isFirstLeg) {
-    return {
-      title: "And they're off! 🏃‍♂️",
-      body: `${runnerName} is leaving Timberline!`,
-      data: { type: 'runner_start', legNumber, runnerName, isFirstLeg, timestamp: Date.now() }
-    };
-  }
 
+
+export function generateFirstLegStartNotification(runnerName: string): NotificationMessage {
   return {
-    title: "Runner Started! 🏃‍♂️",
-    body: `${runnerName} is running Leg ${legNumber}`,
-    data: { type: 'runner_start', legNumber, runnerName, isFirstLeg, timestamp: Date.now() }
+    title: "And they're off! 🏃‍♂️",
+    body: `${runnerName} is leaving Timberline!`,
+    data: { type: 'first_leg_start', legNumber: 1, runnerName, timestamp: Date.now() }
   };
 }
 
@@ -334,26 +426,7 @@ export function generateFinishNotification(
   };
 }
 
-// New function for handoff notifications (combines finish + start)
-export function generateHandoffNotification(
-  finishedRunnerName: string,
-  finishedLegNumber: number,
-  nextRunnerName: string,
-  nextLegNumber: number
-): NotificationMessage {
-  return {
-    title: "Handoff Complete! 🤝",
-    body: `${finishedRunnerName} hands off to ${nextRunnerName} running Leg ${nextLegNumber}!`,
-    data: { 
-      type: 'handoff', 
-      finishedLegNumber, 
-      finishedRunnerName, 
-      nextLegNumber, 
-      nextRunnerName,
-      timestamp: Date.now()
-    }
-  };
-}
+
 
 // Export singleton instance
 export const notificationManager = NotificationManager.getInstance();

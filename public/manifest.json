@@ -10,7 +10,7 @@
   "scope": "/",
   "lang": "en",
   "categories": ["sports", "productivity", "utilities"],
-  "permissions": ["notifications"],
+  "permissions": ["notifications", "background-sync"],
   "icons": [
     {
       "src": "/favicon.ico",

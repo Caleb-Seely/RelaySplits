@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useRaceStore } from '@/store/raceStore';
 import { useTeam } from '@/contexts/TeamContext';
-import { notificationManager, generateStartNotification, generateFinishNotification, generateHandoffNotification } from '@/utils/notifications';
+import { notificationManager, generateFirstLegStartNotification, generateFinishNotification } from '@/utils/notifications';
 
 // Interface for stored notification records
 interface NotificationRecord {
-  type: 'start' | 'finish' | 'handoff';
+  type: 'first_leg_start' | 'finish' | 'handoff';
   legId: number;
   runnerName: string;
   nextRunnerName?: string;
@@ -88,7 +88,7 @@ export const useNotifications = () => {
 
   // Check if notification was already sent for this event
   const wasNotificationSent = useCallback((
-    type: 'start' | 'finish' | 'handoff',
+    type: 'first_leg_start' | 'finish' | 'handoff',
     legId: number,
     runnerName: string,
     nextRunnerName?: string
@@ -155,6 +155,40 @@ export const useNotifications = () => {
     }
   }, [teamId, loadNotificationHistory, getNotificationHistoryKey]);
 
+  // Save current state for background sync
+  const saveCurrentStateForBackgroundSync = useCallback(() => {
+    if (!teamId || legs.length === 0) return;
+    
+    try {
+      const currentState = {
+        legs: legs.map(leg => ({
+          number: leg.id,
+          runner_id: leg.runnerId,
+          actual_start: leg.actualStart,
+          actual_finish: leg.actualFinish,
+          distance: leg.distance
+        })),
+        runners: runners.map(runner => ({
+          id: runner.id,
+          name: runner.name,
+          pace: runner.pace,
+          van: runner.van
+        })),
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem('relay_last_known_state', JSON.stringify(currentState));
+      console.log('[useNotifications] Saved current state for background sync');
+    } catch (error) {
+      console.error('[useNotifications] Error saving state for background sync:', error);
+    }
+  }, [teamId, legs, runners]);
+
+  // Save state whenever legs or runners change
+  useEffect(() => {
+    saveCurrentStateForBackgroundSync();
+  }, [saveCurrentStateForBackgroundSync]);
+
   // Monitor leg changes and trigger notifications
   useEffect(() => {
     if (!isInitialized.current || legs.length === 0 || !teamId) {
@@ -178,8 +212,8 @@ export const useNotifications = () => {
       const prevLeg = prevLegs.find(l => l.id === currentLeg.id);
       if (!prevLeg) return;
 
-      // Check if a runner just started (actualStart was added)
-      if (currentLeg.actualStart && !prevLeg.actualStart) {
+      // Check if a runner just started (actualStart was added) - only for first leg
+      if (currentLeg.actualStart && !prevLeg.actualStart && currentLeg.id === 1) {
         const runner = runners.find(r => r.id === currentLeg.runnerId);
         if (runner) {
           // Skip notification if the current user is the one who performed this action
@@ -203,15 +237,13 @@ export const useNotifications = () => {
             return;
           }
 
-          const isFirstLeg = currentLeg.id === 1;
-          
-          // Send start notification for any leg that just started
-          if (!wasNotificationSent('start', currentLeg.id, runner.name)) {
-            const notification = generateStartNotification(runner.name, currentLeg.id, isFirstLeg);
+          // Send start notification for first leg only
+          if (!wasNotificationSent('first_leg_start', currentLeg.id, runner.name)) {
+            const notification = generateFirstLegStartNotification(runner.name);
             notificationManager.showNotification(notification).then(() => {
-              console.log(`[useNotifications] Sent start notification for ${runner.name} on leg ${currentLeg.id}`);
+              console.log(`[useNotifications] Sent first leg start notification for ${runner.name}`);
               saveNotificationRecord({
-                type: 'start',
+                type: 'first_leg_start',
                 legId: currentLeg.id,
                 runnerName: runner.name,
                 timestamp: eventTimestamp,
@@ -219,7 +251,7 @@ export const useNotifications = () => {
               });
             });
           } else {
-            console.log(`[useNotifications] Start notification already sent for leg ${currentLeg.id} (${runner.name})`);
+            console.log(`[useNotifications] First leg start notification already sent for leg ${currentLeg.id} (${runner.name})`);
           }
         }
       }
@@ -253,16 +285,12 @@ export const useNotifications = () => {
           
           // For final leg, send a finish notification (special case)
           if (isFinalLeg) {
-            // Find the final runner (next runner for leg 36)
-            const nextLeg = currentLegs.find(l => l.id === currentLeg.id + 1);
-            const nextRunner = nextLeg ? runners.find(r => r.id === nextLeg.runnerId) : null;
-            
-            if (!wasNotificationSent('finish', currentLeg.id, runner.name, nextRunner?.name)) {
+            if (!wasNotificationSent('finish', currentLeg.id, runner.name)) {
               const notification = generateFinishNotification(
                 runner.name,
                 currentLeg.id,
-                nextRunner?.name,
-                nextLeg?.id,
+                undefined,
+                undefined,
                 true
               );
               notificationManager.showNotification(notification).then(() => {
@@ -271,7 +299,6 @@ export const useNotifications = () => {
                   type: 'finish',
                   legId: currentLeg.id,
                   runnerName: runner.name,
-                  nextRunnerName: nextRunner?.name,
                   timestamp: eventTimestamp,
                   sentAt: Date.now()
                 });
@@ -286,12 +313,13 @@ export const useNotifications = () => {
             const nextLeg = currentLegs.find(l => l.id === currentLeg.id + 1);
             const nextRunner = nextLeg ? runners.find(r => r.id === nextLeg.runnerId) : null;
             
-            if (nextRunner && !wasNotificationSent('handoff', currentLeg.id, runner.name, nextRunner.name)) {
-              const notification = generateHandoffNotification(
+            if (nextRunner && nextLeg && !wasNotificationSent('handoff', currentLeg.id, runner.name, nextRunner.name)) {
+              const notification = generateFinishNotification(
                 runner.name,
                 currentLeg.id,
                 nextRunner.name,
-                nextLeg.id
+                nextLeg.id,
+                false // Not the final leg
               );
               notificationManager.showNotification(notification).then(() => {
                 console.log(`[useNotifications] Sent handoff notification: ${runner.name} → ${nextRunner.name}`);

@@ -106,8 +106,24 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
       // console.log('[DashboardPrompts] PWA cannot install - criteria not met');
     }
 
-    // Don't show notification prompt immediately - only after PWA prompt is handled
-    // Notification prompt will be shown in handlePWAInstall and handlePWAInstallDismiss
+    // Show notification prompt if PWA is not available and notifications are supported
+    // Also show notification prompt for new users who haven't seen it before
+    if (notificationsSupported) {
+      const permission = getPermission();
+      if (permission === 'default') {
+        const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
+        const hasSeenNotificationPrompt = localStorage.getItem('relay-notification-prompt-seen');
+        
+        // Show notification prompt if:
+        // 1. PWA is not available, OR
+        // 2. User has never seen the notification prompt before
+        if (!canInstall || !hasSeenNotificationPrompt) {
+          if (!notificationDismissed) {
+            setShowNotifications(true);
+          }
+        }
+      }
+    }
   }, [canInstall, notificationsSupported, getPermission, hasShownPrompts, isInstalling]);
 
   const handlePWAInstall = async () => {
@@ -121,7 +137,8 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
         const permission = getPermission();
         if (permission === 'default') {
           const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
-          if (!notificationDismissed) {
+          const hasSeenNotificationPrompt = localStorage.getItem('relay-notification-prompt-seen');
+          if (!notificationDismissed && !hasSeenNotificationPrompt) {
             setShowNotifications(true);
           }
         }
@@ -139,7 +156,8 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
       const permission = getPermission();
       if (permission === 'default') {
         const notificationDismissed = sessionStorage.getItem('notification-permission-dismissed');
-        if (!notificationDismissed) {
+        const hasSeenNotificationPrompt = localStorage.getItem('relay-notification-prompt-seen');
+        if (!notificationDismissed && !hasSeenNotificationPrompt) {
           setShowNotifications(true);
         }
       }
@@ -152,16 +170,19 @@ const DashboardPrompts: React.FC<DashboardPromptsProps> = ({ onDismiss }) => {
       toast.success('Notifications enabled! You\'ll receive alerts for runner updates.');
       setShowNotifications(false);
       sessionStorage.setItem('notification-permission-dismissed', 'true');
+      localStorage.setItem('relay-notification-prompt-seen', 'true');
     } else {
       toast.error('Notification permission denied. You can enable them later in your browser settings.');
       setShowNotifications(false);
       sessionStorage.setItem('notification-permission-dismissed', 'true');
+      localStorage.setItem('relay-notification-prompt-seen', 'true');
     }
   };
 
   const handleNotificationDismiss = () => {
     setShowNotifications(false);
     sessionStorage.setItem('notification-permission-dismissed', 'true');
+    localStorage.setItem('relay-notification-prompt-seen', 'true');
   };
 
   const handleDismissAll = () => {
