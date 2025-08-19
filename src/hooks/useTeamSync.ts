@@ -305,8 +305,7 @@ export const useTeamSync = () => {
         invite_token: string;
       };
 
-      // Store team and device info locally
-      const newDeviceInfo: DeviceInfo = {
+      const newDeviceInfo = {
         deviceId: returnedDeviceId || deviceId,
         teamId,
         role,
@@ -322,6 +321,10 @@ export const useTeamSync = () => {
       localStorage.setItem('relay_team_name', teamName);
       localStorage.setItem('relay_team_join_code', join_code);
       localStorage.setItem('relay_team_invite_token', invite_token);
+      
+      // Send team ID and Supabase URL to service worker for background notifications
+      sendTeamIdToServiceWorker(teamId);
+      sendSupabaseUrlToServiceWorker();
       
       // Use race store's current start time for joined team
       const race = useRaceStore.getState();
@@ -355,6 +358,39 @@ export const useTeamSync = () => {
     }
   };
 
+  // Function to send team ID to service worker
+  const sendTeamIdToServiceWorker = (teamId: string | null) => {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      try {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'UPDATE_TEAM_ID',
+          teamId: teamId
+        });
+        console.log('[useTeamSync] Sent team ID to service worker:', teamId);
+      } catch (error) {
+        console.log('[useTeamSync] Failed to send team ID to service worker:', error);
+      }
+    }
+  };
+
+  // Function to send Supabase URL to service worker
+  const sendSupabaseUrlToServiceWorker = () => {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        if (supabaseUrl) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'UPDATE_SUPABASE_URL',
+            supabaseUrl: supabaseUrl
+          });
+          console.log('[useTeamSync] Sent Supabase URL to service worker');
+        }
+      } catch (error) {
+        console.log('[useTeamSync] Failed to send Supabase URL to service worker:', error);
+      }
+    }
+  };
+
   const leaveTeam = () => {
     // Clear local storage
     localStorage.removeItem('relay_team_id');
@@ -364,6 +400,9 @@ export const useTeamSync = () => {
     localStorage.removeItem('relay_team_name');
     localStorage.removeItem('relay_team_join_code');
     localStorage.removeItem('relay_team_invite_token');
+    
+    // Clear team ID in service worker
+    sendTeamIdToServiceWorker(null);
     
     // Clear state
     setTeam(null);

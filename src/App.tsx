@@ -15,6 +15,7 @@ const Index = lazy(() => import("./pages/Index"));
 
 const DemoLanding = lazy(() => import("./components/DemoLanding"));
 const ViewOnlyDashboard = lazy(() => import("./components/ViewOnlyDashboard"));
+const NotificationDiagnostics = lazy(() => import("./components/NotificationDiagnostics"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => {
                 <Route path="/demo" element={<DemoLanding />} />
 
                 <Route path="/view/:viewerCode" element={<ViewOnlyDashboard />} />
+                <Route path="/notifications-test" element={<NotificationDiagnostics />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

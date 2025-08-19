@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Notification Diagnostics</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #ccc; 
+            border-radius: 5px; 
+        }
+        .button { 
+            padding: 10px 15px; 
+            margin: 5px; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 3px; 
+            cursor: pointer; 
+        }
+        .button:hover { background: #0056b3; }
+        .button:disabled { background: #ccc; cursor: not-allowed; }
+        .log { 
+            background: #f8f9fa; 
+            padding: 10px; 
+            border-radius: 3px; 
+            margin: 10px 0; 
+            font-family: monospace; 
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 3px; 
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.warning { background: #fff3cd; color: #856404; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        .test-case { 
+            margin: 10px 0; 
+            padding: 10px; 
+            background: #f0f0f0; 
+            border-radius: 3px; 
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Mobile Notification Diagnostics</h1>
+    
+    <div class="test-section">
+        <h3>System Status</h3>
+        <div id="system-status" class="status info">
+            Checking system status...
+        </div>
+        <button class="button" onclick="checkSystemStatus()">Refresh Status</button>
+    </div>
+
+    <div class="grid">
+        <div class="test-section">
+            <h3>Basic Tests</h3>
+            
+            <div class="test-case">
+                <h4>Test 1: Permission Check</h4>
+                <p>Check if notifications are supported and permitted</p>
+                <button class="button" onclick="testPermission()">Test Permission</button>
+            </div>
+            
+            <div class="test-case">
+                <h4>Test 2: Service Worker</h4>
+                <p>Check if service worker is registered and active</p>
+                <button class="button" onclick="testServiceWorker()">Test Service Worker</button>
+            </div>
+            
+            <div class="test-case">
+                <h4>Test 3: Basic Notification</h4>
+                <p>Send a simple notification to test basic functionality</p>
+                <button class="button" onclick="testBasicNotification()">Test Basic Notification</button>
+            </div>
+            
+            <div class="test-case">
+                <h4>Test 4: Team ID Communication</h4>
+                <p>Test if service worker can receive team ID from main thread</p>
+                <button class="button" onclick="testTeamIdCommunication()">Test Team ID Communication</button>
+            </div>
+            
+            <div class="test-case">
+                <h4>Test 5: Supabase URL Communication</h4>
+                <p>Test if service worker can receive Supabase URL from main thread</p>
+                <button class="button" onclick="testSupabaseUrlCommunication()">Test Supabase URL Communication</button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>Mobile-Specific Tests</h3>
+            
+            <div class="test-case">
+                <h4>Test 6: Page Visibility</h4>
+                <p>Test notifications when page is hidden/visible</p>
+                <button class="button" onclick="testPageVisibility()">Test Page Visibility</button>
+            </div>
+            
+            <div class="test-case">
+                <h4>Test 7: Background Notification</h4>
+                <p>Test notification when app is in background</p>
+                <button class="button" onclick="testBackgroundNotification()">Test Background</button>
+            </div>
+            
+            <div class="test-case">
+                <h4>Test 8: Deduplication</h4>
+                <p>Test notification deduplication system</p>
+                <button class="button" onclick="testDeduplication()">Test Deduplication</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Race Event Tests</h3>
+        
+        <div class="test-case">
+            <h4>Test 9: First Leg Start</h4>
+            <p>Simulate first leg start notification</p>
+            <button class="button" onclick="testFirstLegStart()">Test First Leg Start</button>
+        </div>
+        
+        <div class="test-case">
+            <h4>Test 10: Handoff</h4>
+            <p>Simulate runner handoff notification</p>
+            <button class="button" onclick="testHandoff()">Test Handoff</button>
+        </div>
+        
+        <div class="test-case">
+            <h4>Test 11: Race Complete</h4>
+            <p>Simulate race completion notification</p>
+            <button class="button" onclick="testRaceComplete()">Test Race Complete</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Advanced Tests</h3>
+        
+        <div class="test-case">
+            <h4>Test 12: Multiple Notifications</h4>
+            <p>Send multiple notifications rapidly to test queue system</p>
+            <button class="button" onclick="testMultipleNotifications()">Test Multiple</button>
+        </div>
+        
+        <div class="test-case">
+            <h4>Test 13: Storage Check</h4>
+            <p>Check notification history and preferences</p>
+            <button class="button" onclick="testStorage()">Test Storage</button>
+        </div>
+        
+        <div class="test-case">
+            <h4>Test 14: Clear All Data</h4>
+            <p>Clear all notification data and reset</p>
+            <button class="button" onclick="clearAllData()">Clear All Data</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Log</h3>
+        <div id="test-log" class="log"></div>
+        <button class="button" onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <script>
+        let testResults = {};
+
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('test-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logElement.innerHTML += logEntry;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('test-log').innerHTML = '';
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusElement = document.getElementById('system-status');
+            statusElement.className = `status ${type}`;
+            statusElement.textContent = message;
+        }
+
+        function checkSystemStatus() {
+            log('Checking system status...');
+            
+            const status = {
+                notificationsSupported: 'Notification' in window,
+                serviceWorkerSupported: 'serviceWorker' in navigator,
+                permission: Notification.permission,
+                pageVisible: !document.hidden,
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                onLine: navigator.onLine
+            };
+            
+            log(`System Status: ${JSON.stringify(status, null, 2)}`);
+            
+            let statusMessage = '';
+            let statusType = 'info';
+            
+            if (!status.notificationsSupported) {
+                statusMessage = 'Notifications not supported';
+                statusType = 'error';
+            } else if (status.permission === 'denied') {
+                statusMessage = 'Notification permission denied';
+                statusType = 'error';
+            } else if (status.permission === 'default') {
+                statusMessage = 'Notification permission not requested';
+                statusType = 'warning';
+            } else {
+                statusMessage = 'Notifications ready';
+                statusType = 'success';
+            }
+            
+            updateStatus(statusMessage, statusType);
+            return status;
+        }
+
+        async function testPermission() {
+            log('Testing notification permission...');
+            
+            if (!('Notification' in window)) {
+                log('ERROR: Notifications not supported');
+                return;
+            }
+            
+            if (Notification.permission === 'default') {
+                log('Requesting notification permission...');
+                const permission = await Notification.requestPermission();
+                log(`Permission result: ${permission}`);
+            } else {
+                log(`Current permission: ${Notification.permission}`);
+            }
+            
+            checkSystemStatus();
+        }
+
+        async function testServiceWorker() {
+            log('Testing service worker...');
+            
+            if (!('serviceWorker' in navigator)) {
+                log('ERROR: Service Worker not supported');
+                return;
+            }
+            
+            try {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration) {
+                    log(`Service Worker registered: ${registration.scope}`);
+                    log(`Service Worker state: ${registration.active ? 'active' : 'inactive'}`);
+                    
+                    if (registration.active) {
+                        log('Service Worker is active and ready');
+                    } else {
+                        log('WARNING: Service Worker is not active');
+                    }
+                } else {
+                    log('WARNING: No Service Worker registration found');
+                }
+            } catch (error) {
+                log(`ERROR: Service Worker test failed: ${error.message}`);
+            }
+        }
+
+        async function testBasicNotification() {
+            log('Testing basic notification...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            try {
+                const notification = new Notification('Test Notification', {
+                    body: 'This is a test notification',
+                    icon: '/icon-192.png',
+                    badge: '/icon-96.png',
+                    tag: 'test-basic'
+                });
+                
+                log('Basic notification sent successfully');
+                
+                // Auto-close after 3 seconds
+                setTimeout(() => {
+                    notification.close();
+                    log('Basic notification closed');
+                }, 3000);
+                
+            } catch (error) {
+                log(`ERROR: Basic notification failed: ${error.message}`);
+            }
+        }
+
+        function testPageVisibility() {
+            log('Testing page visibility...');
+            
+            const isVisible = !document.hidden;
+            log(`Page is currently: ${isVisible ? 'visible' : 'hidden'}`);
+            
+            // Add visibility change listener
+            const handleVisibilityChange = () => {
+                const newVisibility = !document.hidden;
+                log(`Page visibility changed to: ${newVisibility ? 'visible' : 'hidden'}`);
+            };
+            
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            
+            // Remove listener after 10 seconds
+            setTimeout(() => {
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+                log('Page visibility test completed');
+            }, 10000);
+            
+            log('Page visibility test started - switch tabs or minimize window to test');
+        }
+
+        async function testBackgroundNotification() {
+            log('Testing background notification...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            try {
+                // Send notification through service worker if available
+                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'SHOW_NOTIFICATION',
+                        title: 'Background Test',
+                        body: 'This notification was sent from the service worker',
+                        data: { type: 'background_test' }
+                    });
+                    log('Background notification sent via service worker');
+                } else {
+                    // Fallback to direct notification
+                    const notification = new Notification('Background Test', {
+                        body: 'This is a background test notification',
+                        icon: '/icon-192.png',
+                        tag: 'test-background'
+                    });
+                    log('Background notification sent directly');
+                    
+                    setTimeout(() => notification.close(), 3000);
+                }
+            } catch (error) {
+                log(`ERROR: Background notification failed: ${error.message}`);
+            }
+        }
+
+        function testDeduplication() {
+            log('Testing notification deduplication...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            const sendDuplicateNotification = () => {
+                const notification = new Notification('Deduplication Test', {
+                    body: 'This notification should be deduplicated',
+                    icon: '/icon-192.png',
+                    tag: 'test-dedup'
+                });
+                
+                setTimeout(() => notification.close(), 2000);
+            };
+            
+            // Send the same notification multiple times
+            sendDuplicateNotification();
+            log('Sent first notification');
+            
+            setTimeout(() => {
+                sendDuplicateNotification();
+                log('Sent second notification (should be deduplicated)');
+            }, 1000);
+            
+            setTimeout(() => {
+                sendDuplicateNotification();
+                log('Sent third notification (should be deduplicated)');
+            }, 2000);
+        }
+
+        function testFirstLegStart() {
+            log('Testing first leg start notification...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            try {
+                const notification = new Notification("And they're off! 🏃‍♂️", {
+                    body: "John Doe is leaving Timberline!",
+                    icon: '/icon-192.png',
+                    badge: '/icon-96.png',
+                    tag: 'test-first-leg-start',
+                    data: { type: 'first_leg_start', legNumber: 1, runnerName: 'John Doe' }
+                });
+                
+                log('First leg start notification sent');
+                setTimeout(() => notification.close(), 3000);
+                
+            } catch (error) {
+                log(`ERROR: First leg start notification failed: ${error.message}`);
+            }
+        }
+
+        function testHandoff() {
+            log('Testing handoff notification...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            try {
+                const notification = new Notification("Handoff Complete! 🤝", {
+                    body: "Jane Smith hands off to Bob Johnson running Leg 6!",
+                    icon: '/icon-192.png',
+                    badge: '/icon-96.png',
+                    tag: 'test-handoff',
+                    data: { 
+                        type: 'handoff', 
+                        finishedLegNumber: 5, 
+                        finishedRunnerName: 'Jane Smith', 
+                        nextLegNumber: 6, 
+                        nextRunnerName: 'Bob Johnson' 
+                    }
+                });
+                
+                log('Handoff notification sent');
+                setTimeout(() => notification.close(), 3000);
+                
+            } catch (error) {
+                log(`ERROR: Handoff notification failed: ${error.message}`);
+            }
+        }
+
+        function testRaceComplete() {
+            log('Testing race complete notification...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            try {
+                const notification = new Notification("Race Complete! 🎉", {
+                    body: "Charlie Davis finished Leg 36. Amazing job, team!",
+                    icon: '/icon-192.png',
+                    badge: '/icon-96.png',
+                    tag: 'test-race-complete',
+                    data: { type: 'finish', legNumber: 36, runnerName: 'Charlie Davis' }
+                });
+                
+                log('Race complete notification sent');
+                setTimeout(() => notification.close(), 3000);
+                
+            } catch (error) {
+                log(`ERROR: Race complete notification failed: ${error.message}`);
+            }
+        }
+
+        function testMultipleNotifications() {
+            log('Testing multiple notifications...');
+            
+            if (Notification.permission !== 'granted') {
+                log('ERROR: Notification permission not granted');
+                return;
+            }
+            
+            const notifications = [
+                { title: 'Notification 1', body: 'First notification' },
+                { title: 'Notification 2', body: 'Second notification' },
+                { title: 'Notification 3', body: 'Third notification' },
+                { title: 'Notification 4', body: 'Fourth notification' },
+                { title: 'Notification 5', body: 'Fifth notification' }
+            ];
+            
+            notifications.forEach((notification, index) => {
+                setTimeout(() => {
+                    try {
+                        const notif = new Notification(notification.title, {
+                            body: notification.body,
+                            icon: '/icon-192.png',
+                            tag: `test-multiple-${index}`
+                        });
+                        
+                        log(`Sent notification ${index + 1}`);
+                        
+                        setTimeout(() => notif.close(), 2000);
+                    } catch (error) {
+                        log(`ERROR: Failed to send notification ${index + 1}: ${error.message}`);
+                    }
+                }, index * 500); // Send every 500ms
+            });
+        }
+
+        function testStorage() {
+            log('Testing notification storage...');
+            
+            try {
+                // Check notification preferences
+                const preference = localStorage.getItem('relay_notifications_enabled');
+                log(`Notification preference: ${preference}`);
+                
+                // Check notification history
+                const history = localStorage.getItem('relay_notifications_test-team');
+                if (history) {
+                    const historyData = JSON.parse(history);
+                    log(`Notification history entries: ${historyData.length}`);
+                } else {
+                    log('No notification history found');
+                }
+                
+                // Check deduplication data
+                const dedupData = localStorage.getItem('relay_notification_dedup');
+                if (dedupData) {
+                    const dedup = JSON.parse(dedupData);
+                    log(`Deduplication entries: ${Object.keys(dedup).length}`);
+                } else {
+                    log('No deduplication data found');
+                }
+                
+                // Check service worker deduplication
+                const swDedup = localStorage.getItem('relay_sw_notification_dedup');
+                if (swDedup) {
+                    const swDedupData = JSON.parse(swDedup);
+                    log(`Service Worker deduplication entries: ${Object.keys(swDedupData).length}`);
+                } else {
+                    log('No Service Worker deduplication data found');
+                }
+                
+            } catch (error) {
+                log(`ERROR: Storage test failed: ${error.message}`);
+            }
+        }
+
+        function clearAllData() {
+            log('Clearing all notification data...');
+            
+            try {
+                // Clear notification preferences
+                localStorage.removeItem('relay_notifications_enabled');
+                
+                // Clear notification history
+                const keys = Object.keys(localStorage);
+                keys.forEach(key => {
+                    if (key.startsWith('relay_notifications_') || 
+                        key.startsWith('relay_notification_dedup') ||
+                        key.startsWith('relay_sw_notification_dedup')) {
+                        localStorage.removeItem(key);
+                        log(`Cleared: ${key}`);
+                    }
+                });
+                
+                log('All notification data cleared');
+                
+            } catch (error) {
+                log(`ERROR: Failed to clear data: ${error.message}`);
+            }
+        }
+
+        function testTeamIdCommunication() {
+            log('Testing team ID communication with service worker...');
+            
+            try {
+                // Set a test team ID in localStorage
+                const testTeamId = 'test-team-id-12345';
+                localStorage.setItem('relay_team_id', testTeamId);
+                log(`Set test team ID in localStorage: ${testTeamId}`);
+                
+                // Send team ID to service worker
+                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    // Send Supabase URL first
+                    const supabaseUrl = 'https://whwsnpzwxagmlkrzrqsa.supabase.co';
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'UPDATE_SUPABASE_URL',
+                        supabaseUrl: supabaseUrl
+                    });
+                    log('Sent Supabase URL to service worker');
+                    
+                    // Send team ID
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'UPDATE_TEAM_ID',
+                        teamId: testTeamId
+                    });
+                    log('Sent team ID to service worker');
+                    
+                    // Wait a moment and then check if service worker received it
+                    setTimeout(() => {
+                        // Try to trigger a race update check to see if team ID is found
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'START_BACKGROUND_SYNC'
+                        });
+                        log('Triggered background sync to test team ID retrieval');
+                    }, 1000);
+                } else {
+                    log('ERROR: Service worker not available');
+                }
+                
+            } catch (error) {
+                log(`ERROR: Team ID communication test failed: ${error.message}`);
+            }
+        }
+
+        function testSupabaseUrlCommunication() {
+            log('Testing Supabase URL communication with service worker...');
+            
+            try {
+                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    // Send Supabase URL
+                    const supabaseUrl = 'https://whwsnpzwxagmlkrzrqsa.supabase.co';
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'UPDATE_SUPABASE_URL',
+                        supabaseUrl: supabaseUrl
+                    });
+                    log('Sent Supabase URL to service worker');
+                    
+                    // Test a simple API call to verify the URL works
+                    setTimeout(async () => {
+                        try {
+                            const response = await fetch(`${supabaseUrl}/functions/v1/legs-list?teamId=test`);
+                            log(`Test API call status: ${response.status}`);
+                            if (response.ok) {
+                                log('Supabase URL is working correctly');
+                            } else {
+                                log(`API call failed with status: ${response.status}`);
+                            }
+                        } catch (error) {
+                            log(`ERROR: Test API call failed: ${error.message}`);
+                        }
+                    }, 500);
+                } else {
+                    log('ERROR: Service worker not available');
+                }
+                
+            } catch (error) {
+                log(`ERROR: Supabase URL communication test failed: ${error.message}`);
+            }
+        }
+
+        // Auto-check system status on page load
+        window.addEventListener('load', () => {
+            log('Mobile Notification Diagnostics loaded');
+            checkSystemStatus();
+        });
+    </script>
+</body>
+</html>

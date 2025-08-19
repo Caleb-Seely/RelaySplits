@@ -15,6 +15,14 @@ const STATIC_FILES = [
 // Background sync interval (check every 30 seconds when app is closed)
 const BACKGROUND_SYNC_INTERVAL = 30000;
 
+// Enhanced notification deduplication
+const NOTIFICATION_DEDUP_KEY = 'relay_sw_notification_dedup';
+const NOTIFICATION_DEDUP_WINDOW = 5 * 60 * 1000; // 5 minutes
+
+// Global variable to store team ID received from main thread
+let currentTeamId = null;
+let supabaseUrl = null;
+
 // Install event - cache static files
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker...');
@@ -60,6 +68,54 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Enhanced deduplication system for service worker notifications
+function isDuplicateNotification(notificationData) {
+  try {
+    const dedupKey = createNotificationDedupKey(notificationData);
+    const now = Date.now();
+    const dedupData = JSON.parse(localStorage.getItem(NOTIFICATION_DEDUP_KEY) || '{}');
+    
+    // Clean up old entries
+    Object.keys(dedupData).forEach(key => {
+      if (now - dedupData[key] > NOTIFICATION_DEDUP_WINDOW) {
+        delete dedupData[key];
+      }
+    });
+    
+    // Check if this notification was recently sent
+    if (dedupData[dedupKey] && (now - dedupData[dedupKey]) < NOTIFICATION_DEDUP_WINDOW) {
+      console.log(`[SW] Duplicate notification detected: ${dedupKey}`);
+      return true;
+    }
+    
+    // Store this notification
+    dedupData[dedupKey] = now;
+    localStorage.setItem(NOTIFICATION_DEDUP_KEY, JSON.stringify(dedupData));
+    
+    return false;
+  } catch (error) {
+    console.error('[SW] Error in deduplication check:', error);
+    return false;
+  }
+}
+
+function createNotificationDedupKey(notificationData) {
+  const data = notificationData.data;
+  if (data?.type && data?.legNumber && data?.runnerName) {
+    return `sw-${data.type}-${data.legNumber}-${data.runnerName}`;
+  }
+  
+  // For other notifications, use a hash of the title and body
+  const content = `${notificationData.title}-${notificationData.body}`;
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return `sw-${Math.abs(hash)}`;
+}
+
 // Start background sync for notifications
 function startBackgroundSync() {
   // Check if we should run background sync
@@ -87,7 +143,7 @@ self.addEventListener('periodicsync', (event) => {
   }
 });
 
-// Check for race updates and send notifications
+// Enhanced race update checking with better error handling
 async function checkForRaceUpdates() {
   try {
     console.log('[SW] Checking for race updates...');
@@ -109,18 +165,24 @@ async function checkForRaceUpdates() {
     // Get the last known state
     const lastKnownState = await getLastKnownState();
     
-    // Fetch current race data
-    const currentState = await fetchRaceData(teamId);
+    // Fetch current race data with retry logic
+    const currentState = await fetchRaceDataWithRetry(teamId);
     if (!currentState) {
-      console.log('[SW] Failed to fetch current race data');
+      console.log('[SW] Failed to fetch current race data after retries');
       return;
     }
 
     // Compare states and send notifications for changes
     const notifications = compareStatesAndGenerateNotifications(lastKnownState, currentState);
     
+    // Send notifications with deduplication
     for (const notification of notifications) {
-      await showNotification(notification);
+      if (!isDuplicateNotification(notification)) {
+        await showNotification(notification);
+        console.log(`[SW] Sent notification: ${notification.title}`);
+      } else {
+        console.log(`[SW] Skipped duplicate notification: ${notification.title}`);
+      }
     }
 
     // Update the last known state
@@ -137,11 +199,58 @@ async function checkForRaceUpdates() {
   }
 }
 
+// Enhanced fetch with retry logic
+async function fetchRaceDataWithRetry(teamId, maxRetries = 3) {
+  // Check if we have the Supabase URL
+  if (!supabaseUrl) {
+    console.log('[SW] No Supabase URL available, skipping race data fetch');
+    return null;
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[SW] Fetching race data, attempt ${attempt}/${maxRetries}`);
+      const response = await fetch(`${supabaseUrl}/functions/v1/legs-list?teamId=${teamId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const legsData = await response.json();
+      
+      const runnersResponse = await fetch(`${supabaseUrl}/functions/v1/runners-list?teamId=${teamId}`);
+      if (!runnersResponse.ok) {
+        throw new Error(`HTTP ${runnersResponse.status}`);
+      }
+      
+      const runnersData = await runnersResponse.json();
+      
+      return {
+        legs: legsData.legs || [],
+        runners: runnersData.runners || [],
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error(`[SW] Fetch attempt ${attempt} failed:`, error);
+      
+      if (attempt === maxRetries) {
+        console.error('[SW] All fetch attempts failed');
+        return null;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Get team ID from storage
 async function getTeamIdFromStorage() {
   try {
-    const teamId = localStorage.getItem('relay_team_id');
-    return teamId;
+    // Service workers don't have direct access to localStorage
+    // We'll need to get this from the main thread or use a different approach
+    return currentTeamId; // Return the team ID received from main thread
   } catch (error) {
     console.log('[SW] Error getting team ID from storage:', error);
     return null;
@@ -151,8 +260,9 @@ async function getTeamIdFromStorage() {
 // Get notification preference
 async function getNotificationPreference() {
   try {
-    const preference = localStorage.getItem('relay_notifications_enabled');
-    return preference === null ? true : preference === 'true';
+    // Service workers don't have direct access to localStorage
+    // Default to enabled for now
+    return true;
   } catch (error) {
     console.log('[SW] Error getting notification preference:', error);
     return true; // Default to enabled
@@ -162,8 +272,8 @@ async function getNotificationPreference() {
 // Get last known state from storage
 async function getLastKnownState() {
   try {
-    const state = localStorage.getItem('relay_last_known_state');
-    return state ? JSON.parse(state) : null;
+    // Service workers don't have direct access to localStorage
+    return null;
   } catch (error) {
     console.log('[SW] Error getting last known state:', error);
     return null;
@@ -173,41 +283,14 @@ async function getLastKnownState() {
 // Save last known state to storage
 async function saveLastKnownState(state) {
   try {
-    localStorage.setItem('relay_last_known_state', JSON.stringify(state));
+    // Service workers don't have direct access to localStorage
+    // This function is disabled for now
   } catch (error) {
     console.log('[SW] Error saving last known state:', error);
   }
 }
 
-// Fetch current race data from the API
-async function fetchRaceData(teamId) {
-  try {
-    const response = await fetch(`/functions/v1/legs-list?teamId=${teamId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    const legsData = await response.json();
-    
-    const runnersResponse = await fetch(`/functions/v1/runners-list?teamId=${teamId}`);
-    if (!runnersResponse.ok) {
-      throw new Error(`HTTP ${runnersResponse.status}`);
-    }
-    
-    const runnersData = await runnersResponse.json();
-    
-    return {
-      legs: legsData.legs || [],
-      runners: runnersData.runners || [],
-      timestamp: Date.now()
-    };
-  } catch (error) {
-    console.error('[SW] Error fetching race data:', error);
-    return null;
-  }
-}
-
-// Compare states and generate notifications
+// Enhanced state comparison with better change detection
 function compareStatesAndGenerateNotifications(lastState, currentState) {
   const notifications = [];
   
@@ -231,7 +314,7 @@ function compareStatesAndGenerateNotifications(lastState, currentState) {
     }
   }
 
-  // Check for leg finish events
+  // Check for leg finish events with enhanced logic
   currentState.legs.forEach(currentLeg => {
     const lastLeg = lastState.legs.find(leg => leg.number === currentLeg.number);
     
@@ -298,7 +381,7 @@ function getBestNotificationBadge() {
   return '/icon-96.png'; // Default to 96x96 for badges
 }
 
-// Show a notification
+// Enhanced notification showing with better error handling
 async function showNotification(notification) {
   try {
     const icon = getBestNotificationIcon();
@@ -311,13 +394,24 @@ async function showNotification(notification) {
       data: notification.data,
       requireInteraction: false,
       silent: false,
-      tag: `relay-${notification.data.type}-${notification.data.legNumber || notification.data.finishedLegNumber}-${notification.data.runnerName || notification.data.finishedRunnerName}`
+      tag: `sw-${notification.data.type}-${notification.data.legNumber || notification.data.finishedLegNumber}-${notification.data.runnerName || notification.data.finishedRunnerName}`
     };
     
     await self.registration.showNotification(notification.title, options);
     console.log('[SW] Background notification sent:', notification.title);
   } catch (error) {
     console.error('[SW] Error showing notification:', error);
+    
+    // Try minimal notification as fallback
+    try {
+      await self.registration.showNotification(notification.title, {
+        body: notification.body,
+        tag: options.tag
+      });
+      console.log('[SW] Minimal fallback notification sent');
+    } catch (fallbackError) {
+      console.error('[SW] Fallback notification also failed:', fallbackError);
+    }
   }
 }
 
@@ -501,6 +595,18 @@ self.addEventListener('message', (event) => {
         silent: false
       })
     );
+  }
+  
+  // Handle team ID updates from main thread
+  if (event.data && event.data.type === 'UPDATE_TEAM_ID') {
+    currentTeamId = event.data.teamId;
+    console.log('[SW] Team ID updated:', currentTeamId);
+  }
+
+  // Handle Supabase URL updates from main thread
+  if (event.data && event.data.type === 'UPDATE_SUPABASE_URL') {
+    supabaseUrl = event.data.supabaseUrl;
+    console.log('[SW] Supabase URL updated:', supabaseUrl);
   }
   
   // Handle start background sync message

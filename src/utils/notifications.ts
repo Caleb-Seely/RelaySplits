@@ -10,6 +10,10 @@ export class NotificationManager {
   private registration: ServiceWorkerRegistration | null = null;
   private permission: NotificationPermission = 'default';
   private readonly STORAGE_KEY = 'relay_notifications_enabled';
+  private readonly DEDUP_STORAGE_KEY = 'relay_notification_dedup';
+  private isInitialized = false;
+  private pendingNotifications: Map<string, { message: NotificationMessage; timestamp: number }> = new Map();
+  private processingQueue = false;
 
   static getInstance(): NotificationManager {
     if (!NotificationManager.instance) {
@@ -19,6 +23,10 @@ export class NotificationManager {
   }
 
   async initialize(): Promise<boolean> {
+    if (this.isInitialized) {
+      return true;
+    }
+
     if (!('serviceWorker' in navigator) || !('Notification' in window)) {
       console.log('[Notifications] Service Worker or Notification API not supported');
       return false;
@@ -60,11 +68,70 @@ export class NotificationManager {
         }
       }
 
+      // Clean up old deduplication data
+      this.cleanupOldDedupData();
+
+      this.isInitialized = true;
       console.log('[Notifications] Initialized with permission:', this.permission);
       return true; // Return true if initialization succeeded, regardless of permission status
     } catch (error) {
       console.error('[Notifications] Initialization failed:', error);
       return false;
+    }
+  }
+
+  // Enhanced deduplication system
+  private isDuplicateNotification(message: NotificationMessage): boolean {
+    try {
+      const dedupKey = this.createNotificationTag(message);
+      const now = Date.now();
+      const dedupData = JSON.parse(localStorage.getItem(this.DEDUP_STORAGE_KEY) || '{}');
+      
+      // Clean up old entries (older than 10 minutes)
+      const cutoff = now - (10 * 60 * 1000);
+      Object.keys(dedupData).forEach(key => {
+        if (dedupData[key] < cutoff) {
+          delete dedupData[key];
+        }
+      });
+      
+      // Check if this notification was recently sent
+      if (dedupData[dedupKey] && (now - dedupData[dedupKey]) < (5 * 60 * 1000)) { // 5 minute window
+        console.log(`[Notifications] Duplicate notification detected: ${dedupKey}`);
+        return true;
+      }
+      
+      // Store this notification
+      dedupData[dedupKey] = now;
+      localStorage.setItem(this.DEDUP_STORAGE_KEY, JSON.stringify(dedupData));
+      
+      return false;
+    } catch (error) {
+      console.error('[Notifications] Error in deduplication check:', error);
+      return false;
+    }
+  }
+
+  private cleanupOldDedupData(): void {
+    try {
+      const dedupData = JSON.parse(localStorage.getItem(this.DEDUP_STORAGE_KEY) || '{}');
+      const now = Date.now();
+      const cutoff = now - (10 * 60 * 1000); // 10 minutes
+      
+      let cleaned = 0;
+      Object.keys(dedupData).forEach(key => {
+        if (dedupData[key] < cutoff) {
+          delete dedupData[key];
+          cleaned++;
+        }
+      });
+      
+      if (cleaned > 0) {
+        localStorage.setItem(this.DEDUP_STORAGE_KEY, JSON.stringify(dedupData));
+        console.log(`[Notifications] Cleaned up ${cleaned} old deduplication entries`);
+      }
+    } catch (error) {
+      console.error('[Notifications] Error cleaning up deduplication data:', error);
     }
   }
 
@@ -75,10 +142,59 @@ export class NotificationManager {
       return;
     }
 
+    // Check for duplicates
+    if (this.isDuplicateNotification(message)) {
+      console.log('[Notifications] Skipping duplicate notification');
+      return;
+    }
+
+    // Add to pending queue to prevent race conditions
+    const dedupKey = this.createNotificationTag(message);
+    this.pendingNotifications.set(dedupKey, {
+      message,
+      timestamp: Date.now()
+    });
+
+    // Process queue if not already processing
+    if (!this.processingQueue) {
+      this.processNotificationQueue();
+    }
+  }
+
+  private async processNotificationQueue(): Promise<void> {
+    if (this.processingQueue || this.pendingNotifications.size === 0) {
+      return;
+    }
+
+    this.processingQueue = true;
+
+    try {
+      for (const [dedupKey, { message }] of this.pendingNotifications) {
+        await this.sendNotification(message);
+        this.pendingNotifications.delete(dedupKey);
+        
+        // Small delay between notifications to prevent overwhelming the system
+        if (this.pendingNotifications.size > 0) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+    } catch (error) {
+      console.error('[Notifications] Error processing notification queue:', error);
+    } finally {
+      this.processingQueue = false;
+      
+      // Process any new notifications that were added while processing
+      if (this.pendingNotifications.size > 0) {
+        setTimeout(() => this.processNotificationQueue(), 100);
+      }
+    }
+  }
+
+  private async sendNotification(message: NotificationMessage): Promise<void> {
     try {
       console.log('[Notifications] Attempting to show notification:', message.title, message.body);
       console.log('[Notifications] Page visibility:', !document.hidden ? 'visible' : 'hidden');
-      console.log('[Notifications] Service worker state:', this.registration.active ? 'active' : 'inactive');
+      console.log('[Notifications] Service worker state:', this.registration?.active ? 'active' : 'inactive');
       
       // Create a unique tag for this specific notification to prevent duplicates
       const notificationTag = this.createNotificationTag(message);
@@ -100,8 +216,17 @@ export class NotificationManager {
       };
 
       console.log('[Notifications] Showing notification with options:', options);
-      const notification = await this.registration.showNotification(message.title, options);
-      console.log('[Notifications] Notification sent successfully:', notification);
+      
+      // Try service worker notification first
+      if (this.registration) {
+        try {
+          const notification = await this.registration.showNotification(message.title, options);
+          console.log('[Notifications] Service worker notification sent successfully:', notification);
+        } catch (swError) {
+          console.warn('[Notifications] Service worker notification failed, trying native:', swError);
+          throw swError; // Fall through to native notification
+        }
+      }
       
       // Also try to show a fallback notification using the browser's native API
       if (Notification.permission === 'granted') {
@@ -136,6 +261,19 @@ export class NotificationManager {
       }
     } catch (error) {
       console.error('[Notifications] Failed to show notification:', error);
+      
+      // If all methods failed, try one more time with minimal options
+      try {
+        if (Notification.permission === 'granted') {
+          const minimalNotification = new Notification(message.title, {
+            body: message.body,
+            tag: this.createNotificationTag(message)
+          });
+          console.log('[Notifications] Minimal fallback notification sent');
+        }
+      } catch (minimalError) {
+        console.error('[Notifications] All notification methods failed:', minimalError);
+      }
     }
   }
 
@@ -278,7 +416,6 @@ export class NotificationManager {
     try {
       const saved = localStorage.getItem(this.STORAGE_KEY);
       const isEnabled = saved === null ? true : saved === 'true';
-      console.log(`[Notifications] Preference check - saved: "${saved}", enabled: ${isEnabled}`);
       return isEnabled;
     } catch (error) {
       console.error('[Notifications] Failed to read preference:', error);
@@ -359,6 +496,20 @@ export class NotificationManager {
       body: "This notification should appear even when the app is in the background.",
       data: { type: 'background_test', timestamp: Date.now() }
     });
+  }
+
+  // Get queue status for debugging
+  getQueueStatus(): { pending: number; processing: boolean } {
+    return {
+      pending: this.pendingNotifications.size,
+      processing: this.processingQueue
+    };
+  }
+
+  // Clear all pending notifications
+  clearPendingNotifications(): void {
+    this.pendingNotifications.clear();
+    console.log('[Notifications] Cleared all pending notifications');
   }
 }
 

@@ -36,6 +36,15 @@ export const useRunnerSync = () => {
       return;
     }
 
+    // Add emergency brake to prevent infinite loops
+    const key = `${legId}:${field}`;
+    const now = Date.now();
+    const lastSync = lastLegFieldSyncRef.current.get(key) ?? 0;
+    if (now - lastSync < 5000) { // 5 second emergency brake
+      console.log(`[useRunnerSync] Emergency brake: skipping sync for ${key}`);
+      return;
+    }
+
     const store = useRaceStore.getState();
     const leg = store.legs.find(l => l.id === legId);
     
@@ -91,6 +100,14 @@ export const useRunnerSync = () => {
       return;
     }
 
+    // Add emergency brake to prevent infinite loops
+    const now = Date.now();
+    const lastSync = lastRunnerSyncRef.current.get(runnerId) ?? 0;
+    if (now - lastSync < 5000) { // 5 second emergency brake
+      console.log(`[useRunnerSync] Emergency brake: skipping runner sync for ${runnerId}`);
+      return;
+    }
+
     const store = useRaceStore.getState();
     const runner = store.runners.find(r => r.id === runnerId);
     
@@ -143,6 +160,15 @@ export const useRunnerSync = () => {
   ) => {
     if (!teamId) {
       console.warn('[useRunnerSync] No teamId available for sync');
+      return;
+    }
+
+    // Add emergency brake to prevent infinite loops
+    const key = `${legId}:assignment`;
+    const now = Date.now();
+    const lastSync = lastLegFieldSyncRef.current.get(key) ?? 0;
+    if (now - lastSync < 5000) { // 5 second emergency brake
+      console.log(`[useRunnerSync] Emergency brake: skipping leg assignment sync for ${key}`);
       return;
     }
 

@@ -25,7 +25,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
 
   // Debounce refetches triggered by broadcast to avoid loops/storms
   // and ignore broadcasts originating from this device.
-  let lastBroadcastRefetchAt = 0;
+  const lastBroadcastRefetchAt = useRef(0);
   const BROADCAST_REFETCH_COOLDOWN_MS = 1500;
 
   // In-flight guards and debounced broadcast timer
@@ -45,6 +45,13 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
   
   // Track if manual retry is in progress to prevent conflicts
   const isManualRetryInProgress = useRef(false);
+  
+  // Track if we're in a sync operation to prevent broadcast loops
+  const isInSyncOperation = useRef(false);
+  
+  // Track last update time to prevent rapid successive updates
+  const lastUpdateTime = useRef(0);
+  const UPDATE_DEBOUNCE_MS = 1000; // 1 second debounce
 
   // Lightweight local queue to avoid circular hook dependency
   const enqueueChange = (change: { table: 'runners' | 'legs'; remoteId: string; payload: any }) => {
@@ -170,6 +177,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       return 0;
     }
     isFetchingRunners.current = true;
+    isInSyncOperation.current = true;
     try {
       const deviceId = getDeviceId();
       const res = await invokeEdge<{ runners: Tables<'runners'>[] }>('runners-list', { teamId, deviceId });
@@ -201,6 +209,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       return remoteRunners.length;
     } finally {
       isFetchingRunners.current = false;
+      isInSyncOperation.current = false;
     }
   }, [merge, store.setRunners]);
 
@@ -210,6 +219,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       return 0;
     }
     isFetchingLegs.current = true;
+    isInSyncOperation.current = true;
     try {
       const deviceId = getDeviceId();
       console.log('[fetchAndMergeLegs] Fetching legs for team:', teamId, 'deviceId:', deviceId);
@@ -269,12 +279,21 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       
       merge(legs, useRaceStore.getState().legs, (items) => {
         console.log('[fetchAndMergeLegs] Setting', items.length, 'legs in store');
-        useRaceStore.getState().setRaceData({ legs: items });
-        // Recalculate projections after merging legs from remote
-        const storeState = useRaceStore.getState();
-        if (items.length > 0) {
-          const recalculatedLegs = recalculateProjections(items, 0, storeState.runners);
-          useRaceStore.getState().setRaceData({ legs: recalculatedLegs });
+        
+        // Temporarily disable broadcast to prevent infinite loops
+        const currentState = useRaceStore.getState();
+        const hasChanges = JSON.stringify(currentState.legs) !== JSON.stringify(items);
+        
+        if (hasChanges) {
+          useRaceStore.getState().setRaceData({ legs: items });
+          // Recalculate projections after merging legs from remote
+          const storeState = useRaceStore.getState();
+          if (items.length > 0) {
+            const recalculatedLegs = recalculateProjections(items, 0, storeState.runners);
+            useRaceStore.getState().setRaceData({ legs: recalculatedLegs });
+          }
+        } else {
+          console.log('[fetchAndMergeLegs] No changes detected, skipping update');
         }
       }, 'legs');
       return remoteLegs.length;
@@ -283,6 +302,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       return 0;
     } finally {
       isFetchingLegs.current = false;
+      isInSyncOperation.current = false;
     }
   }, [merge]);
 
@@ -308,6 +328,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
     }
     
     isFetchingInitialData.current = true;
+    isInSyncOperation.current = true;
     lastFetchTime.current = now;
     console.log('[fetchInitialData] Fetching via Edge Functions for team', teamId);
     
@@ -332,6 +353,7 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       console.log('[fetchInitialData] Merge complete');
     } finally {
       isFetchingInitialData.current = false;
+      isInSyncOperation.current = false;
     }
     
     // Ensure projections are recalculated after initial data fetch
@@ -363,6 +385,13 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       remoteId: string,
       payload: Partial<T>
     ) => {
+      // Add debounce to prevent rapid successive updates
+      const now = Date.now();
+      if (now - lastUpdateTime.current < UPDATE_DEBOUNCE_MS) {
+        console.log('[safeUpdate] Debouncing rapid successive updates');
+        return { data: null };
+      }
+      lastUpdateTime.current = now;
       const storeState = useRaceStore.getState();
       const localItem =
         table === 'runners'
@@ -444,20 +473,26 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
       // Optimistically merge local change since Edge Functions don't return rows
       const updatedItem = { ...(localItem as any), ...(payload as any) } as unknown as Syncable;
       (updatedItem as any).updated_at = new Date().toISOString();
-      merge(
-        [updatedItem],
-        table === 'runners' ? storeState.runners : storeState.legs,
-        table === 'runners'
-          ? storeState.setRunners
-          : (items) => {
-              storeState.setRaceData({ legs: items as Leg[] });
-              // Recalculate projections after leg updates
-              if (table === 'legs' && items.length > 0) {
-                const recalculatedLegs = recalculateProjections(items as Leg[], 0, storeState.runners);
-                storeState.setRaceData({ legs: recalculatedLegs });
+      
+      // Only merge if we're not in a sync operation to prevent loops
+      if (!isInSyncOperation.current) {
+        merge(
+          [updatedItem],
+          table === 'runners' ? storeState.runners : storeState.legs,
+          table === 'runners'
+            ? storeState.setRunners
+            : (items) => {
+                storeState.setRaceData({ legs: items as Leg[] });
+                // Recalculate projections after leg updates
+                if (table === 'legs' && items.length > 0) {
+                  const recalculatedLegs = recalculateProjections(items as Leg[], 0, storeState.runners);
+                  storeState.setRaceData({ legs: recalculatedLegs });
+                }
               }
-            }
-      );
+        );
+      } else {
+        console.log('[safeUpdate] Skipping merge during sync operation to prevent loops');
+      }
 
       return { data: updatedItem };
     },
@@ -771,8 +806,32 @@ export const useSyncManager = (onConflictDetected?: (conflict: any) => void) => 
           // Record this broadcast
           recentBroadcasts.current.set(dedupKey, now);
           console.log('[broadcast] Received data update:', payload);
-
+          
+          // Extract type early to avoid hoisting issues
           const type = payload?.type as 'runners' | 'legs' | undefined;
+          
+          // Additional guard: check if we're already processing this type of update
+          if (type === 'legs' && isFetchingLegs.current) {
+            console.log('[broadcast] Skipping legs broadcast - already fetching legs');
+            return;
+          }
+          if (type === 'runners' && isFetchingRunners.current) {
+            console.log('[broadcast] Skipping runners broadcast - already fetching runners');
+            return;
+          }
+          
+          // Prevent broadcast loops during sync operations
+          if (isInSyncOperation.current) {
+            console.log('[broadcast] Skipping broadcast - sync operation in progress');
+            return;
+          }
+          
+          // Add rate limiting to prevent infinite loops
+          if (now - lastBroadcastRefetchAt.current < BROADCAST_REFETCH_COOLDOWN_MS) {
+            console.log('[broadcast] Skipping broadcast refetch - too soon since last refetch');
+            return;
+          }
+          lastBroadcastRefetchAt.current = now;
           if (!type) {
             // Unknown type, fall back to full refetch
             pendingFetch.runners = true;

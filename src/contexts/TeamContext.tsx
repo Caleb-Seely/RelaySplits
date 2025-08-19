@@ -70,12 +70,60 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('relay_team_id', info.teamId);
       localStorage.setItem('relay_device_info', JSON.stringify(info));
       console.log('[TeamContext] Updated localStorage with team info');
+      
+      // Send team ID to service worker for background notifications
+      sendTeamIdToServiceWorker(info.teamId);
     } else {
       localStorage.removeItem('relay_team_id');
       localStorage.removeItem('relay_device_info');
       console.log('[TeamContext] Cleared localStorage team info');
+      
+      // Clear team ID in service worker
+      sendTeamIdToServiceWorker(null);
     }
   };
+
+  // Function to send team ID to service worker
+  const sendTeamIdToServiceWorker = (teamId: string | null) => {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      try {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'UPDATE_TEAM_ID',
+          teamId: teamId
+        });
+        console.log('[TeamContext] Sent team ID to service worker:', teamId);
+      } catch (error) {
+        console.log('[TeamContext] Failed to send team ID to service worker:', error);
+      }
+    }
+  };
+
+  // Function to send Supabase URL to service worker
+  const sendSupabaseUrlToServiceWorker = () => {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        if (supabaseUrl) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'UPDATE_SUPABASE_URL',
+            supabaseUrl: supabaseUrl
+          });
+          console.log('[TeamContext] Sent Supabase URL to service worker');
+        }
+      } catch (error) {
+        console.log('[TeamContext] Failed to send Supabase URL to service worker:', error);
+      }
+    }
+  };
+
+  // Send team ID to service worker on mount if we have one
+  useEffect(() => {
+    if (deviceInfo?.teamId) {
+      sendTeamIdToServiceWorker(deviceInfo.teamId);
+    }
+    // Also send Supabase URL
+    sendSupabaseUrlToServiceWorker();
+  }, [deviceInfo?.teamId]);
 
   const clearTeam = () => {
     setDeviceInfo(null);

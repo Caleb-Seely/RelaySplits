@@ -25,7 +25,7 @@ interface RaceStore extends RaceData {
   setSetupStep: (step: number) => void;
   completeSetup: () => void;
   initializeLegs: () => void;
-  setTeamId: (teamId: string) => void;
+  setTeamId: (teamId: string | undefined) => void;
   setRaceData: (data: Partial<{ runners: Runner[]; legs: Leg[]; startTime: number; isSetupComplete: boolean }>) => void;
   isDataConsistent: () => boolean;
   fixDataInconsistencies: () => boolean;
@@ -172,7 +172,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     return { legs: initialLegs };
   }),
 
-  setTeamId: (teamId) => {
+  setTeamId: (teamId: string | undefined) => {
     set({ teamId });
   },
 

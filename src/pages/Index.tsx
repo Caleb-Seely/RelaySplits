@@ -45,35 +45,19 @@ const Index = () => {
 
   try {
 
-  console.log('[Index] Component render - current state:', {
-    teamId,
-    deviceInfo,
-    teamSyncDeviceInfo,
-    isNewTeam,
-    isInTeam,
-    teamContextLoading,
-    teamLoading,
-    isAdmin,
-    isSetupComplete,
-    isSetupLocked
-  });
+  // Component render - removed excessive logging
 
   useEffect(() => {
-    console.log('[Index] Team context updated - team?.id:', team?.id, 'isNewTeam:', isNewTeam);
     // Ensure store knows current teamId so sync hooks can run
     if (team?.id) {
       const current = useRaceStore.getState().teamId;
       if (current !== team.id) {
-        console.log('[Index] Setting teamId in store from', current, 'to', team.id);
         useRaceStore.getState().setTeamId(team.id);
       }
       
       // If this is a new team and setup is complete, remove the flag
       if (isNewTeam && useRaceStore.getState().isSetupComplete) {
-        console.log('[Index] Team context loaded and setup complete, removing new team flag');
-        console.log('[Index] Flag before removal:', localStorage.getItem('relay_is_new_team'));
         localStorage.removeItem('relay_is_new_team');
-        console.log('[Index] Flag after removal:', localStorage.getItem('relay_is_new_team'));
         // Set isNewTeam to false after removing the flag to prevent further loops
         setIsNewTeam(false);
       }
@@ -86,16 +70,12 @@ const Index = () => {
     if (hasProcessedFlagRef.current) return; // Prevent re-processing
     
     const flag = localStorage.getItem('relay_is_new_team');
-    console.log('[Index] Checking for new team flag:', flag);
-    console.log('[Index] Current team context state - teamId:', teamId, 'deviceInfo:', deviceInfo);
     if (flag) {
-      console.log('[Index] Setting isNewTeam to true');
       setIsNewTeam(true);
       hasProcessedFlagRef.current = true;
       // Don't remove the flag yet - wait until SetupWizard completes the save
     } else {
       // If no flag is found, explicitly set to false to indicate this is not a new team
-      console.log('[Index] No new team flag found, setting isNewTeam to false');
       setIsNewTeam(false);
       hasProcessedFlagRef.current = true;
     }
@@ -113,7 +93,6 @@ const Index = () => {
       // Check for setup lock first
       const setupLocked = localStorage.getItem(`relay_setup_locked_${teamId}`) === '1';
       if (setupLocked) {
-        console.log('[Index] Setup is locked, marking as complete');
         useRaceStore.getState().markSetupComplete();
         hasRestoredSetupStateRef.current = true;
         return;
@@ -124,7 +103,6 @@ const Index = () => {
       if (offlineSetup) {
         const setupData = JSON.parse(offlineSetup);
         if (setupData.isSetupComplete) {
-          console.log('[Index] Restoring setup completion state from offline storage');
           useRaceStore.getState().markSetupComplete();
           hasRestoredSetupStateRef.current = true;
         }
@@ -137,11 +115,9 @@ const Index = () => {
   const hasFetchedInitialDataRef = useRef(false);
   useEffect(() => {
     // Only fetch initial data if we have a teamId, user is not a viewer, and we've determined it's not a new team
-    console.log('[Index] fetchInitialData useEffect - teamId:', teamId, 'isNewTeam:', isNewTeam, 'deviceInfo?.role:', deviceInfo?.role);
     
     // Prevent multiple fetches for the same team
     if (hasFetchedInitialDataRef.current && teamId === useRaceStore.getState().teamId) {
-      console.log('[Index] Skipping fetchInitialData - already fetched for this team');
       return;
     }
     
@@ -285,9 +261,8 @@ const Index = () => {
       {/* Main content */}
       <main className="container mx-auto px-2 sm:px-4 py-2">
         {(() => {
-          console.log('[Index] Rendering decision - isSetupComplete:', isSetupComplete, 'isSetupLocked:', isSetupLocked, 'isAdmin:', isAdmin, 'isNewTeam:', isNewTeam);
-          if (isSetupComplete || isSetupLocked || !isAdmin) {
-            console.log('[Index] Showing Dashboard');
+          // Rendering decision - removed excessive logging
+                      if (isSetupComplete || isSetupLocked || !isAdmin) {
             return <Dashboard />;
           } else {
             console.log('[Index] Showing SetupWizard with isNewTeam:', isNewTeam);

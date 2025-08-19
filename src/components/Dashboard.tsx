@@ -106,7 +106,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     notificationManager,
     isNotificationPreferenceEnabled,
     clearNotificationPreference,
-    setNotificationPreference
+    setNotificationPreference,
+    getPendingNotificationsCount,
+    getNotificationState
   } = useNotifications();
 
   // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
@@ -751,29 +753,17 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                         </div>
                       </div>
                       
-                      <div className="flex flex-col items-center gap-2 mt-4">
+                      <div className="flex flex-col items-center gap-2 mt-6">
                         <Button
                           onClick={() => {
                             console.log('Triggering confetti for celebrate');
                             triggerConfetti({ particleCount: 150, spread: 80 });
                             toast(getRandomCelebrationMessage());
                           }}
-                          size="sm"
-                          className="bg-green-500 hover:bg-green-600 text-white"
+                          size="lg"
+                          className="bg-green-500 hover:bg-green-600 text-white px-6 py-3"
                         >
                           🎉 Celebrate
-                        </Button>
-                        
-                        <Button
-                          onClick={() => {
-                            // Export functionality would go here
-                            toast.success('Export feature coming soon!');
-                          }}
-                          size="sm"
-                          className="bg-blue-500 hover:bg-blue-600 text-white"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Export Results
                         </Button>
                       </div>
                     </div>
@@ -929,7 +919,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                     triggerConfetti({ particleCount: 200, spread: 100 });
                                   }}
                                   size="sm"
-                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white"
+                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
                                 >
                                   <Trophy className="h-4 w-4" />
                                   Finish Race
@@ -971,7 +961,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                     triggerConfetti({ particleCount: 200, spread: 100 });
                                   }}
                                   size="sm"
-                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white"
+                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
                                 >
                                   <Trophy className="h-4 w-4" />
                                   Finish Race
@@ -1158,7 +1148,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     size="sm"
                     onClick={() => {
                       const teamName = team?.name || 'Team';
-                      const copyText = `Join ${teamName}\nJoin Token: ${team.invite_token}`;
+                      const copyText = `
+                      ${teamName}Join Token:\n ${team.invite_token}`;
                       navigator.clipboard.writeText(copyText);
                       toast.success('Team invite copied to clipboard');
                     }}
@@ -1281,6 +1272,53 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     >
                       <Bell className="h-4 w-4 mr-1" />
                       Background Test
+                    </Button>
+                  )}
+
+                  {/* Notification Debug Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const queueStatus = notificationManager.getQueueStatus();
+                        const pendingCount = getPendingNotificationsCount?.() || 0;
+                        const notificationStateData = getNotificationState?.() || {};
+                        
+                        const debugInfo = {
+                          permission: notificationPermission(),
+                          preference: isNotificationPreferenceEnabled(),
+                          queueStatus,
+                          pendingCount,
+                          notificationState: notificationStateData,
+                          pageVisible: !document.hidden,
+                          serviceWorker: !!navigator.serviceWorker?.controller,
+                          timestamp: new Date().toISOString()
+                        };
+                        
+                        console.log('Notification Debug Info:', debugInfo);
+                        alert(`Notification Debug Info:\n${JSON.stringify(debugInfo, null, 2)}`);
+                      }}
+                      title="Debug notification system"
+                    >
+                      <HelpCircle className="h-4 w-4 mr-1" />
+                      Debug
+                    </Button>
+                  )}
+
+                  {/* Clear Notification Queue Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        notificationManager.clearPendingNotifications();
+                        toast.success('Notification queue cleared');
+                      }}
+                      title="Clear pending notifications"
+                    >
+                      <Undo className="h-4 w-4 mr-1" />
+                      Clear Queue
                     </Button>
                   )}
 

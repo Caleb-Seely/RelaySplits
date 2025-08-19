@@ -11,6 +11,21 @@ interface NotificationRecord {
   nextRunnerName?: string;
   timestamp: number; // When the event actually happened
   sentAt: number; // When we sent the notification
+  deviceId?: string; // Track which device sent the notification
+}
+
+// Enhanced notification state tracking
+interface NotificationState {
+  lastProcessedLegs: Map<number, { actualStart?: number; actualFinish?: number }>;
+  lastProcessedTime: number;
+  isProcessing: boolean;
+  pendingNotifications: Array<{
+    type: 'first_leg_start' | 'finish' | 'handoff';
+    legId: number;
+    runnerName: string;
+    nextRunnerName?: string;
+    timestamp: number;
+  }>;
 }
 
 export const useNotifications = () => {
@@ -20,16 +35,39 @@ export const useNotifications = () => {
   const isInitialized = useRef(false);
   const isPageVisible = useRef(true);
   
+  // Enhanced state tracking
+  const notificationState = useRef<NotificationState>({
+    lastProcessedLegs: new Map(),
+    lastProcessedTime: 0,
+    isProcessing: false,
+    pendingNotifications: []
+  });
+  
   // Persistent storage key for notification history
   const getNotificationHistoryKey = useCallback(() => {
     return `relay_notifications_${teamId || 'no-team'}`;
   }, [teamId]);
 
-  // Monitor page visibility changes
+  // Enhanced deduplication with device tracking
+  const getNotificationDeduplicationKey = useCallback((
+    type: 'first_leg_start' | 'finish' | 'handoff',
+    legId: number,
+    runnerName: string,
+    nextRunnerName?: string
+  ): string => {
+    return `${type}-${legId}-${runnerName}-${nextRunnerName || ''}`;
+  }, []);
+
+  // Monitor page visibility changes with enhanced logging
   useEffect(() => {
     const handleVisibilityChange = () => {
+      const wasVisible = isPageVisible.current;
       isPageVisible.current = !document.hidden;
-      console.log(`[useNotifications] Page visibility changed: ${isPageVisible.current ? 'visible' : 'hidden'}`);
+      
+      // Process any pending notifications when page becomes hidden
+      if (!isPageVisible.current && notificationState.current.pendingNotifications.length > 0) {
+        processPendingNotifications();
+      }
     };
 
     // Set initial visibility state
@@ -42,7 +80,7 @@ export const useNotifications = () => {
     };
   }, []);
 
-  // Load notification history from localStorage
+  // Load notification history from localStorage with enhanced error handling
   const loadNotificationHistory = useCallback((): NotificationRecord[] => {
     if (!teamId) return [];
     
@@ -57,6 +95,7 @@ export const useNotifications = () => {
         // Update storage with cleaned data
         if (filtered.length !== history.length) {
           localStorage.setItem(getNotificationHistoryKey(), JSON.stringify(filtered));
+          console.log(`[useNotifications] Cleaned up ${history.length - filtered.length} old notification records`);
         }
         
         return filtered;
@@ -67,13 +106,17 @@ export const useNotifications = () => {
     return [];
   }, [teamId, getNotificationHistoryKey]);
 
-  // Save notification record to localStorage
+  // Save notification record to localStorage with device tracking
   const saveNotificationRecord = useCallback((record: NotificationRecord) => {
     if (!teamId) return;
     
     try {
       const history = loadNotificationHistory();
-      history.push(record);
+      const enhancedRecord = {
+        ...record,
+        deviceId: deviceInfo?.deviceId || 'unknown'
+      };
+      history.push(enhancedRecord);
       
       // Keep only the last 100 records to prevent localStorage bloat
       if (history.length > 100) {
@@ -81,12 +124,13 @@ export const useNotifications = () => {
       }
       
       localStorage.setItem(getNotificationHistoryKey(), JSON.stringify(history));
+      console.log(`[useNotifications] Saved notification record: ${enhancedRecord.type} for leg ${enhancedRecord.legId}`);
     } catch (error) {
       console.error('[useNotifications] Error saving notification record:', error);
     }
-  }, [teamId, loadNotificationHistory, getNotificationHistoryKey]);
+  }, [teamId, loadNotificationHistory, getNotificationHistoryKey, deviceInfo?.deviceId]);
 
-  // Check if notification was already sent for this event
+  // Enhanced duplicate detection with time window and device tracking
   const wasNotificationSent = useCallback((
     type: 'first_leg_start' | 'finish' | 'handoff',
     legId: number,
@@ -94,32 +138,98 @@ export const useNotifications = () => {
     nextRunnerName?: string
   ): boolean => {
     const history = loadNotificationHistory();
+    const dedupKey = getNotificationDeduplicationKey(type, legId, runnerName, nextRunnerName);
     
     // Look for a recent notification for this exact event
-    // Use a 5-minute window to allow for slight timing differences
-    const cutoff = Date.now() - (5 * 60 * 1000);
+    // Use a 10-minute window to allow for slight timing differences and retries
+    const cutoff = Date.now() - (10 * 60 * 1000);
     
-    return history.some(record => 
-      record.type === type &&
-      record.legId === legId &&
-      record.runnerName === runnerName &&
-      record.nextRunnerName === nextRunnerName &&
+    const recentNotification = history.find(record => 
+      getNotificationDeduplicationKey(record.type, record.legId, record.runnerName, record.nextRunnerName) === dedupKey &&
       record.sentAt > cutoff
     );
-  }, [loadNotificationHistory]);
+    
+    if (recentNotification) {
+      console.log(`[useNotifications] Duplicate notification detected: ${dedupKey} (sent ${Math.round((Date.now() - recentNotification.sentAt) / 1000)}s ago)`);
+    }
+    
+    return !!recentNotification;
+  }, [loadNotificationHistory, getNotificationDeduplicationKey]);
 
-  // Check if we should skip notification based on event age
-  const shouldSkipOldEvent = useCallback((eventTimestamp: number): boolean => {
-    // Skip events older than 10 minutes to prevent spam after refresh
-    const cutoff = Date.now() - (10 * 60 * 1000);
+  // Enhanced old event detection with configurable threshold
+  const shouldSkipOldEvent = useCallback((eventTimestamp: number, thresholdMinutes: number = 15): boolean => {
+    // Skip events older than threshold to prevent spam after refresh
+    const cutoff = Date.now() - (thresholdMinutes * 60 * 1000);
     const shouldSkip = eventTimestamp < cutoff;
     
     if (shouldSkip) {
-      console.log(`[useNotifications] Skipping old event: ${new Date(eventTimestamp).toISOString()} (${Math.round((Date.now() - eventTimestamp) / 1000)}s old)`);
+      console.log(`[useNotifications] Skipping old event: ${new Date(eventTimestamp).toISOString()} (${Math.round((Date.now() - eventTimestamp) / 1000)}s old, threshold: ${thresholdMinutes}m)`);
     }
     
     return shouldSkip;
   }, []);
+
+  // Process pending notifications with rate limiting
+  const processPendingNotifications = useCallback(async () => {
+    if (notificationState.current.isProcessing) {
+      console.log('[useNotifications] Already processing notifications, skipping');
+      return;
+    }
+    
+    if (notificationState.current.pendingNotifications.length === 0) {
+      return;
+    }
+    
+    notificationState.current.isProcessing = true;
+    
+    try {
+      // Process notifications with a small delay between each to prevent overwhelming the system
+      for (const pending of notificationState.current.pendingNotifications) {
+        if (!wasNotificationSent(pending.type, pending.legId, pending.runnerName, pending.nextRunnerName)) {
+          let notification;
+          
+          if (pending.type === 'first_leg_start') {
+            notification = generateFirstLegStartNotification(pending.runnerName);
+          } else if (pending.type === 'finish') {
+            notification = generateFinishNotification(
+              pending.runnerName,
+              pending.legId,
+              undefined,
+              undefined,
+              true
+            );
+          } else if (pending.type === 'handoff') {
+            notification = generateFinishNotification(
+              pending.runnerName,
+              pending.legId,
+              pending.nextRunnerName!,
+              pending.legId + 1,
+              false
+            );
+          }
+          
+          if (notification) {
+            await notificationManager.showNotification(notification);
+            saveNotificationRecord({
+              type: pending.type,
+              legId: pending.legId,
+              runnerName: pending.runnerName,
+              nextRunnerName: pending.nextRunnerName,
+              timestamp: pending.timestamp,
+              sentAt: Date.now()
+            });
+            console.log(`[useNotifications] Sent ${pending.type} notification for leg ${pending.legId}`);
+          }
+          
+          // Small delay between notifications
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+    } finally {
+      notificationState.current.pendingNotifications = [];
+      notificationState.current.isProcessing = false;
+    }
+  }, [wasNotificationSent, saveNotificationRecord]);
 
   // Get notification history for debugging
   const getNotificationHistory = useCallback((): NotificationRecord[] => {
@@ -150,12 +260,12 @@ export const useNotifications = () => {
       
       if (filtered.length !== history.length) {
         localStorage.setItem(getNotificationHistoryKey(), JSON.stringify(filtered));
-        console.log(`[useNotifications] Cleaned up ${history.length - filtered.length} old notification records`);
+        console.log(`[useNotifications] Cleaned up ${history.length - filtered.length} old notification records for team change`);
       }
     }
   }, [teamId, loadNotificationHistory, getNotificationHistoryKey]);
 
-  // Save current state for background sync
+  // Save current state for background sync with enhanced data
   const saveCurrentStateForBackgroundSync = useCallback(() => {
     if (!teamId || legs.length === 0) return;
     
@@ -174,38 +284,41 @@ export const useNotifications = () => {
           pace: runner.pace,
           van: runner.van
         })),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        deviceId: deviceInfo?.deviceId || 'unknown'
       };
       
       localStorage.setItem('relay_last_known_state', JSON.stringify(currentState));
-      console.log('[useNotifications] Saved current state for background sync');
+      // Removed frequent logging - only log on errors
     } catch (error) {
       console.error('[useNotifications] Error saving state for background sync:', error);
     }
-  }, [teamId, legs, runners]);
+  }, [teamId, legs, runners, deviceInfo?.deviceId]);
 
   // Save state whenever legs or runners change
   useEffect(() => {
     saveCurrentStateForBackgroundSync();
   }, [saveCurrentStateForBackgroundSync]);
 
-  // Monitor leg changes and trigger notifications
+  // Enhanced leg change monitoring with better state tracking
   useEffect(() => {
     if (!isInitialized.current || legs.length === 0 || !teamId) {
-      console.log('[useNotifications] Skipping notification check - not initialized, no legs, or no team');
       return;
     }
     
     // Only send notifications if user has enabled them
     if (!notificationManager.isNotificationPreferenceEnabled()) {
-      console.log('[useNotifications] Notifications disabled by user preference');
       return;
     }
 
-    console.log(`[useNotifications] Checking for notifications - Page visible: ${isPageVisible.current}, Legs: ${legs.length}`);
-
     const prevLegs = prevLegsRef.current;
     const currentLegs = legs;
+    const currentTime = Date.now();
+
+    // Prevent processing the same leg changes multiple times
+    if (currentTime - notificationState.current.lastProcessedTime < 1000) {
+      return;
+    }
 
     // Check for start and finish time changes
     currentLegs.forEach((currentLeg) => {
@@ -218,7 +331,6 @@ export const useNotifications = () => {
         if (runner) {
           // Skip notification if the current user is the one who performed this action
           if (deviceInfo?.displayName && runner.name === deviceInfo.displayName) {
-            console.log(`[useNotifications] Skipping notification for current user's action: ${runner.name}`);
             return;
           }
 
@@ -226,33 +338,19 @@ export const useNotifications = () => {
           const eventTimestamp = currentLeg.actualStart;
           
           // Skip old events to prevent spam after refresh
-          if (shouldSkipOldEvent(eventTimestamp)) {
-            console.log(`[useNotifications] Skipping old event for leg ${currentLeg.id} (${runner.name})`);
+          if (shouldSkipOldEvent(eventTimestamp, 15)) {
             return;
           }
 
-          // Only send notifications when the page is NOT visible (app is in background)
-          if (isPageVisible.current) {
-            console.log(`[useNotifications] Page is visible, skipping notification for leg ${currentLeg.id} (${runner.name})`);
-            return;
-          }
-
-          // Send start notification for first leg only
-          if (!wasNotificationSent('first_leg_start', currentLeg.id, runner.name)) {
-            const notification = generateFirstLegStartNotification(runner.name);
-            notificationManager.showNotification(notification).then(() => {
-              console.log(`[useNotifications] Sent first leg start notification for ${runner.name}`);
-              saveNotificationRecord({
-                type: 'first_leg_start',
-                legId: currentLeg.id,
-                runnerName: runner.name,
-                timestamp: eventTimestamp,
-                sentAt: Date.now()
-              });
-            });
-          } else {
-            console.log(`[useNotifications] First leg start notification already sent for leg ${currentLeg.id} (${runner.name})`);
-          }
+          // Add to pending notifications instead of sending immediately
+          notificationState.current.pendingNotifications.push({
+            type: 'first_leg_start',
+            legId: currentLeg.id,
+            runnerName: runner.name,
+            timestamp: eventTimestamp
+          });
+          
+          // Queued first leg start notification
         }
       }
 
@@ -262,7 +360,6 @@ export const useNotifications = () => {
         if (runner) {
           // Skip notification if the current user is the one who performed this action
           if (deviceInfo?.displayName && runner.name === deviceInfo.displayName) {
-            console.log(`[useNotifications] Skipping notification for current user's action: ${runner.name}`);
             return;
           }
 
@@ -270,14 +367,7 @@ export const useNotifications = () => {
           const eventTimestamp = currentLeg.actualFinish;
           
           // Skip old events to prevent spam after refresh
-          if (shouldSkipOldEvent(eventTimestamp)) {
-            console.log(`[useNotifications] Skipping old event for leg ${currentLeg.id} (${runner.name})`);
-            return;
-          }
-
-          // Only send notifications when the page is NOT visible (app is in background)
-          if (isPageVisible.current) {
-            console.log(`[useNotifications] Page is visible, skipping notification for leg ${currentLeg.id} (${runner.name})`);
+          if (shouldSkipOldEvent(eventTimestamp, 15)) {
             return;
           }
 
@@ -285,27 +375,13 @@ export const useNotifications = () => {
           
           // For final leg, send a finish notification (special case)
           if (isFinalLeg) {
-            if (!wasNotificationSent('finish', currentLeg.id, runner.name)) {
-              const notification = generateFinishNotification(
-                runner.name,
-                currentLeg.id,
-                undefined,
-                undefined,
-                true
-              );
-              notificationManager.showNotification(notification).then(() => {
-                console.log(`[useNotifications] Sent final leg finish notification for ${runner.name}`);
-                saveNotificationRecord({
-                  type: 'finish',
-                  legId: currentLeg.id,
-                  runnerName: runner.name,
-                  timestamp: eventTimestamp,
-                  sentAt: Date.now()
-                });
-              });
-            } else {
-              console.log(`[useNotifications] Finish notification already sent for leg ${currentLeg.id} (${runner.name})`);
-            }
+            notificationState.current.pendingNotifications.push({
+              type: 'finish',
+              legId: currentLeg.id,
+              runnerName: runner.name,
+              timestamp: eventTimestamp
+            });
+            // Queued final leg finish notification
           }
           // For all other legs, send a handoff notification (combines finish + start)
           else {
@@ -313,36 +389,38 @@ export const useNotifications = () => {
             const nextLeg = currentLegs.find(l => l.id === currentLeg.id + 1);
             const nextRunner = nextLeg ? runners.find(r => r.id === nextLeg.runnerId) : null;
             
-            if (nextRunner && nextLeg && !wasNotificationSent('handoff', currentLeg.id, runner.name, nextRunner.name)) {
-              const notification = generateFinishNotification(
-                runner.name,
-                currentLeg.id,
-                nextRunner.name,
-                nextLeg.id,
-                false // Not the final leg
-              );
-              notificationManager.showNotification(notification).then(() => {
-                console.log(`[useNotifications] Sent handoff notification: ${runner.name} → ${nextRunner.name}`);
-                saveNotificationRecord({
-                  type: 'handoff',
-                  legId: currentLeg.id,
-                  runnerName: runner.name,
-                  nextRunnerName: nextRunner.name,
-                  timestamp: eventTimestamp,
-                  sentAt: Date.now()
-                });
+            if (nextRunner) {
+              notificationState.current.pendingNotifications.push({
+                type: 'handoff',
+                legId: currentLeg.id,
+                runnerName: runner.name,
+                nextRunnerName: nextRunner.name,
+                timestamp: eventTimestamp
               });
-            } else if (nextRunner) {
-              console.log(`[useNotifications] Handoff notification already sent for leg ${currentLeg.id} (${runner.name} → ${nextRunner.name})`);
+              // Queued handoff notification
             }
           }
         }
       }
     });
 
+    // Update tracking state
+    notificationState.current.lastProcessedTime = currentTime;
+    currentLegs.forEach(leg => {
+      notificationState.current.lastProcessedLegs.set(leg.id, {
+        actualStart: leg.actualStart,
+        actualFinish: leg.actualFinish
+      });
+    });
+
+    // Process pending notifications if page is not visible
+    if (!isPageVisible.current && notificationState.current.pendingNotifications.length > 0) {
+      processPendingNotifications();
+    }
+
     // Update ref for next comparison
     prevLegsRef.current = currentLegs;
-  }, [legs, runners, teamId, deviceInfo?.displayName, wasNotificationSent, shouldSkipOldEvent, saveNotificationRecord]);
+  }, [legs, runners, teamId, deviceInfo?.displayName, shouldSkipOldEvent, processPendingNotifications]);
 
   // Clear notification history for current team
   const clearNotificationHistory = useCallback(() => {
@@ -368,6 +446,10 @@ export const useNotifications = () => {
     getNotificationPreferenceValue: notificationManager.getNotificationPreferenceValue.bind(notificationManager),
     resetNotificationPreference: notificationManager.resetNotificationPreference.bind(notificationManager),
     clearNotificationHistory,
-    getNotificationHistory
+    getNotificationHistory,
+    // New methods for debugging and control
+    getPendingNotificationsCount: () => notificationState.current.pendingNotifications.length,
+    forceProcessPendingNotifications: processPendingNotifications,
+    getNotificationState: () => ({ ...notificationState.current })
   };
 };
