@@ -103,7 +103,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     notificationManager,
     isNotificationPreferenceEnabled,
     clearNotificationPreference,
-    setNotificationPreference
+    setNotificationPreference,
+    clearNotificationHistory,
+    getNotificationHistory
   } = useNotifications();
 
   // Ensure realtime subscriptions are active when Dashboard is mounted (but not in view-only mode)
@@ -1125,28 +1127,55 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
                   {/* Test Notification Button - Only show in development */}
                   {process.env.NODE_ENV === 'development' && notificationPermission() === 'granted' && isNotificationPreferenceEnabled() && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await notificationManager.showTestNotification();
-                          toast.success('Test notification sent!');
-                          
-                          // Also show a browser alert as a fallback for testing
-                          setTimeout(() => {
-                            alert('Test notification should have appeared! Check your browser notifications.');
-                          }, 1000);
-                        } catch (error) {
-                          console.error('Test notification failed:', error);
-                          toast.error('Test notification failed');
-                        }
-                      }}
-                      title="Send test notification"
-                    >
-                      <Bell className="h-4 w-4 mr-1" />
-                      Test
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            await notificationManager.showTestNotification();
+                            toast.success('Test notification sent!');
+                            
+                            // Also show a browser alert as a fallback for testing
+                            setTimeout(() => {
+                              alert('Test notification should have appeared! Check your browser notifications.');
+                            }, 1000);
+                          } catch (error) {
+                            console.error('Test notification failed:', error);
+                            toast.error('Test notification failed');
+                          }
+                        }}
+                        title="Send test notification"
+                      >
+                        <Bell className="h-4 w-4 mr-1" />
+                        Test
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const history = getNotificationHistory();
+                          console.log('📋 Notification History:', history);
+                          toast.success(`Notification history: ${history.length} records`);
+                        }}
+                        title="View notification history"
+                      >
+                        📋 History
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          clearNotificationHistory();
+                          toast.success('Notification history cleared');
+                        }}
+                        title="Clear notification history"
+                      >
+                        🧹 Clear
+                      </Button>
+                    </div>
                   )}
 
                   {/* PWA Install Button */}

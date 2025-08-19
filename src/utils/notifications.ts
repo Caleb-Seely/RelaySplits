@@ -64,6 +64,9 @@ export class NotificationManager {
     try {
       console.log('[Notifications] Attempting to show notification:', message.title, message.body);
       
+      // Create a unique tag for this specific notification to prevent duplicates
+      const notificationTag = this.createNotificationTag(message);
+      
       const options: NotificationOptions = {
         body: message.body,
         icon: '/favicon.ico',
@@ -71,7 +74,7 @@ export class NotificationManager {
         data: message.data,
         requireInteraction: true, // Make notifications require interaction to ensure they're visible
         silent: false,
-        tag: 'relay-notification' // Group notifications
+        tag: notificationTag // Use unique tag for deduplication
       };
 
       const notification = await this.registration.showNotification(message.title, options);
@@ -83,7 +86,8 @@ export class NotificationManager {
           const fallbackNotification = new Notification(message.title, {
             body: message.body,
             icon: '/favicon.ico',
-            requireInteraction: true
+            requireInteraction: true,
+            tag: notificationTag // Use same tag for native notifications
           });
           console.log('[Notifications] Fallback notification also sent');
         } catch (fallbackError) {
@@ -93,6 +97,25 @@ export class NotificationManager {
     } catch (error) {
       console.error('[Notifications] Failed to show notification:', error);
     }
+  }
+
+  // Create a unique tag for notification deduplication
+  private createNotificationTag(message: NotificationMessage): string {
+    const data = message.data;
+    if (data?.type && data?.legNumber && data?.runnerName) {
+      // For race events, create a specific tag based on the event
+      return `relay-${data.type}-${data.legNumber}-${data.runnerName}`;
+    }
+    
+    // For other notifications, use a hash of the title and body
+    const content = `${message.title}-${message.body}`;
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return `relay-${Math.abs(hash)}`;
   }
 
   isSupported(): boolean {
