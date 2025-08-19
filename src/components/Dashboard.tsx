@@ -381,6 +381,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   }, [legs.length, isSetupComplete, validateAndFixRaceState]);
 
   // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
+  // Prioritize team start time over race store start time to avoid showing default 1pm time
   const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
     ? legs[0].actualStart
     : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
@@ -416,10 +417,29 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     }
   }, [teamId, team?.start_time, startTime]);
 
+  // Sync race store start time with team start time when team data becomes available
+  useEffect(() => {
+    if (team?.start_time && teamId) {
+      const teamStartTime = new Date(team.start_time).getTime();
+      const raceStoreTime = startTime;
+      
+      // If the times differ significantly, update the race store
+      if (Math.abs(teamStartTime - raceStoreTime) > 1000) {
+        console.log('[Dashboard] Syncing race store start time with team start time');
+        console.log('  Team start time:', new Date(teamStartTime).toString());
+        console.log('  Race store start time:', new Date(raceStoreTime).toString());
+        
+        // Update the race store's start time to match the team's start time
+        const { setStartTime } = useRaceStore.getState();
+        setStartTime(teamStartTime);
+      }
+    }
+  }, [team?.start_time, teamId, startTime]);
+
 
 
   const currentRunner = getCurrentRunner(legs, currentTime);
-  const nextRunner = getNextRunner(legs, currentTime, startTime);
+  const nextRunner = getNextRunner(legs, currentTime, actualRaceStartTime);
   
   // Enhanced loading state for current runner card that prevents skeleton when we have runner data
   const isCurrentRunnerLoading = isDataLoading && !currentRunner;
@@ -443,7 +463,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
   const getCountdownToNext = () => {
     if (!nextRunner) return null;
-    const countdownMs = getCountdownTime(nextRunner, currentTime, legs, startTime);
+    const countdownMs = getCountdownTime(nextRunner, currentTime, legs, actualRaceStartTime);
     return formatCountdown(countdownMs);
   };
 

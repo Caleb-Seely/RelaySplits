@@ -31,6 +31,9 @@ export const useEnhancedSyncManager = () => {
   // Debounce tracking to prevent duplicate API calls
   const pendingSyncs = useRef(new Set<string>());
   
+  // Debounce real-time update data fetching
+  const realtimeUpdateTimeout = useRef<NodeJS.Timeout | null>(null);
+  
   // Store refs for stable access to frequently changing values
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -819,6 +822,19 @@ export const useEnhancedSyncManager = () => {
           // Mark that we need a full data fetch on next sync
           if (payload.payload.type === 'legs' || payload.payload.type === 'runners') {
             needsFullDataFetch.current = true;
+            
+            // Debounce real-time update data fetching to prevent rapid successive fetches
+            if (realtimeUpdateTimeout.current) {
+              clearTimeout(realtimeUpdateTimeout.current);
+            }
+            
+            realtimeUpdateTimeout.current = setTimeout(() => {
+              if (navigator.onLine && storeRef.current.teamId) {
+                console.log('[useEnhancedSyncManager] Triggering immediate data fetch after real-time update');
+                fetchLatestData();
+              }
+              realtimeUpdateTimeout.current = null;
+            }, 500); // 500ms delay to prevent rapid successive fetches
           }
         }
       })
@@ -856,6 +872,10 @@ export const useEnhancedSyncManager = () => {
     
     return () => {
       clearInterval(syncInterval);
+      if (realtimeUpdateTimeout.current) {
+        clearTimeout(realtimeUpdateTimeout.current);
+        realtimeUpdateTimeout.current = null;
+      }
       if (realtimeSubscription.current) {
         syncLogger.sync('Cleaning up real-time subscription');
         supabase.removeChannel(realtimeSubscription.current);
