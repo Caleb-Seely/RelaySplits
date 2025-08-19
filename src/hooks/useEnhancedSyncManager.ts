@@ -619,8 +619,8 @@ export const useEnhancedSyncManager = () => {
             id: l.number,
             runnerId: mappedRunnerId,
             distance: l.distance,
-            projectedStart: 0,
-            projectedFinish: 0,
+            projectedStart: 0, // Will be recalculated below
+            projectedFinish: 0, // Will be recalculated below
             actualStart: l.start_time ? new Date(l.start_time).getTime() : undefined,
             actualFinish: l.finish_time ? new Date(l.finish_time).getTime() : undefined,
             remoteId: l.id,
@@ -633,7 +633,7 @@ export const useEnhancedSyncManager = () => {
           console.log('[useEnhancedSyncManager] Updating legs with new data:', items.length);
           storeRef.current.setRaceData({ legs: items });
           if (items.length > 0) {
-            const recalculatedLegs = recalculateProjections(items, 0, storeRef.current.runners);
+            const recalculatedLegs = recalculateProjections(items, 0, storeRef.current.runners, storeRef.current.startTime);
             storeRef.current.setRaceData({ legs: recalculatedLegs });
             console.log('[useEnhancedSyncManager] Legs updated and projections recalculated');
           }
@@ -960,17 +960,11 @@ export const useEnhancedSyncManager = () => {
       store.setRunners(updatedRunners);
 
       // Update legs with remote IDs (keep existing runnerId relationships)
-      const updatedLegs = store.legs.map((leg, index) => {
-        const legPayload = legPayloads[index];
-        
-        console.log(`[useEnhancedSyncManager] Updating leg ${leg.id}: runnerId ${leg.runnerId}, remoteId: ${legPayload.id}`);
-        
-        return {
-          ...leg,
-          remoteId: legPayload.id
-          // Keep the existing runnerId - it should already be correct from initializeLegs
-        };
-      });
+      const updatedLegs = store.legs.map((leg, index) => ({
+        ...leg,
+        remoteId: legPayloads[index].id
+        // Keep the existing runnerId - it should already be correct from initializeLegs
+      }));
       store.setRaceData({ legs: updatedLegs });
 
       console.log('[useEnhancedSyncManager] Initial data saved successfully');

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useRaceStore } from '@/store/useRaceStore';
+import { useRaceStore } from '@/store/raceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
@@ -98,11 +98,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     assignRunnerToLegs,
     isSetupComplete,
     didInitFromTeam,
-    validateAndFixRaceState
+    validateAndFixRaceState,
+    initializeLegs
   } = useRaceStore();
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
-  const { performSmartSync, getQueueStatus, isProcessingSync, setupRealtimeSubscriptions, manualRetry } = useEnhancedSyncManager();
+  const { performSmartSync, getQueueStatus, isProcessingSync, setupRealtimeSubscriptions, manualRetry, fetchLatestData } = useEnhancedSyncManager();
   const { 
     isSupported: notificationsSupported, 
     getPermission: notificationPermission, 
@@ -143,6 +144,152 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     };
   }, [teamId, setupRealtimeSubscriptions, isViewOnly]);
 
+
+
+  // Data loading effect - ensure legs data is loaded when dashboard mounts
+  useEffect(() => {
+    if (!teamId || isViewOnly) return;
+    
+    const loadDataIfNeeded = async () => {
+      console.log('[Dashboard] Checking if data needs to be loaded...');
+      console.log('[Dashboard] Current state - legs:', legs.length, 'runners:', runners.length, 'isSetupComplete:', isSetupComplete, 'teamId:', teamId);
+      
+
+      
+      // If we have no legs but have a teamId, we need to load data
+      if (legs.length === 0 && teamId) {
+        // Check if this is a fresh team that just completed setup
+        // In this case, we should initialize legs locally instead of fetching from server
+        if (isSetupComplete && runners.length > 0) {
+          console.log('[Dashboard] Fresh team after setup - initializing legs locally...');
+          initializeLegs();
+          
+          // Check state after initialization
+          const stateAfterInit = useRaceStore.getState();
+          console.log('[Dashboard] State after local init - legs:', stateAfterInit.legs.length, 'runners:', stateAfterInit.runners.length);
+          
+          // Verify that legs were created with proper projected times
+          if (stateAfterInit.legs.length > 0) {
+            const firstLeg = stateAfterInit.legs[0];
+            console.log('[Dashboard] First leg after init:', {
+              id: firstLeg.id,
+              runnerId: firstLeg.runnerId,
+              projectedStart: firstLeg.projectedStart,
+              projectedFinish: firstLeg.projectedFinish,
+              actualStart: firstLeg.actualStart
+            });
+          }
+        } else if (isSetupComplete && runners.length === 0) {
+          // Setup is complete but no data - fetch from server
+          console.log('[Dashboard] Setup complete but no data - fetching from server...');
+          
+          try {
+            // Fetch latest data from server
+            console.log('[Dashboard] Calling fetchLatestData...');
+            await fetchLatestData();
+            console.log('[Dashboard] fetchLatestData completed');
+            
+            // Check if data was loaded
+            const currentState = useRaceStore.getState();
+            console.log('[Dashboard] State after fetch - legs:', currentState.legs.length, 'runners:', currentState.runners.length);
+            
+            if (currentState.legs.length === 0) {
+              console.log('[Dashboard] Still no legs after fetch, initializing legs...');
+              initializeLegs();
+            }
+          } catch (error) {
+            console.error('[Dashboard] Error fetching data:', error);
+            // Fallback: initialize legs if fetch fails
+            console.log('[Dashboard] Fallback: initializing legs after fetch error');
+            initializeLegs();
+          }
+        } else {
+          console.log('[Dashboard] No legs data found, attempting to load from server...');
+          
+          try {
+            // First try to fetch latest data from server
+            console.log('[Dashboard] Calling fetchLatestData...');
+            await fetchLatestData();
+            console.log('[Dashboard] fetchLatestData completed');
+            
+            // If still no legs after fetch, initialize them
+            const currentState = useRaceStore.getState();
+            console.log('[Dashboard] State after fetch - legs:', currentState.legs.length, 'runners:', currentState.runners.length);
+            
+            if (currentState.legs.length === 0) {
+              console.log('[Dashboard] Still no legs after fetch, initializing legs...');
+              initializeLegs();
+              
+              // Check state after initialization
+              const stateAfterInit = useRaceStore.getState();
+              console.log('[Dashboard] State after init - legs:', stateAfterInit.legs.length, 'runners:', stateAfterInit.runners.length);
+            } else {
+              // Log fetched data for debugging
+              console.log('[Dashboard] Fetched legs from server:', currentState.legs.length);
+              console.log('[Dashboard] Sample leg data:', currentState.legs[0]);
+              
+              // Check if fetched legs have proper projected times
+              if (currentState.legs.length > 0) {
+                const firstLeg = currentState.legs[0];
+                console.log('[Dashboard] First leg from server:', {
+                  id: firstLeg.id,
+                  runnerId: firstLeg.runnerId,
+                  projectedStart: firstLeg.projectedStart,
+                  projectedFinish: firstLeg.projectedFinish,
+                  actualStart: firstLeg.actualStart
+                });
+              }
+            }
+          } catch (error) {
+            console.error('[Dashboard] Error loading data:', error);
+            // Fallback: initialize legs if fetch fails
+            if (legs.length === 0) {
+              console.log('[Dashboard] Fallback: initializing legs after fetch error');
+              initializeLegs();
+            }
+          }
+        }
+      } else if (legs.length === 0 && runners.length > 0) {
+        // If we have runners but no legs, initialize legs
+        console.log('[Dashboard] Have runners but no legs, initializing legs...');
+        initializeLegs();
+      } else if (legs.length > 0) {
+        console.log('[Dashboard] Data already loaded - legs:', legs.length, 'runners:', runners.length);
+        
+        // Log current leg state for debugging
+        if (legs.length > 0) {
+          const firstLeg = legs[0];
+          console.log('[Dashboard] Current first leg:', {
+            id: firstLeg.id,
+            runnerId: firstLeg.runnerId,
+            projectedStart: firstLeg.projectedStart,
+            projectedFinish: firstLeg.projectedFinish,
+            actualStart: firstLeg.actualStart
+          });
+        }
+      }
+    };
+    
+    // Add a small delay to ensure all other initialization is complete
+    const timeoutId = setTimeout(loadDataIfNeeded, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [teamId, legs.length, runners.length, isSetupComplete, isViewOnly, fetchLatestData, initializeLegs]);
+
+  // Fallback mechanism to ensure legs are initialized if they're still missing after a delay
+  useEffect(() => {
+    if (!teamId || isViewOnly || legs.length > 0) return;
+    
+    const fallbackTimer = setTimeout(() => {
+      console.log('[Dashboard] Fallback: Initializing legs after timeout');
+      initializeLegs();
+    }, 3000); // Wait 3 seconds before fallback initialization
+    
+    return () => clearTimeout(fallbackTimer);
+  }, [teamId, legs.length, isViewOnly, initializeLegs]);
+
+
+
   // Listen for real-time updates
   useEffect(() => {
     let lastNotificationTime = 0;
@@ -168,14 +315,14 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     return unsubscribe;
   }, []);
 
-  const { team, updateTeamStartTime, loading } = useTeamSync();
+  const { team, updateTeamStartTime, loading, refreshTeamData } = useTeamSync();
   const { deviceInfo } = useTeam();
 
   // Determine if user can edit (not in view-only mode and has edit permissions)
   const canEdit = !isViewOnly && (deviceInfo?.role === 'admin' || deviceInfo?.role === 'member');
 
   // Comprehensive loading condition that includes team loading and race data initialization
-  const isDataLoading = loading || legs.length === 0;
+  const isDataLoading = loading || (legs.length === 0 && teamId && !isViewOnly);
 
   // Quick help popup for new team members
   const { shouldShowHelp, dismissHelp } = useQuickHelp();
@@ -231,10 +378,46 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     ? legs[0].actualStart
     : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
 
+  // Check for team context mismatch (only log warnings, not every calculation)
+  if (team?.start_time && Math.abs(new Date(team.start_time).getTime() - startTime) > 1000) {
+    console.warn('[Dashboard] WARNING: Team context and race store start times differ by more than 1 second!');
+    console.warn('  Team context:', new Date(team.start_time).toString());
+    console.warn('  Race store:', new Date(startTime).toString());
+  }
+
+  // Refresh team data if it's missing but we have a teamId
+  useEffect(() => {
+    if (teamId && !team?.start_time && !loading) {
+      refreshTeamData();
+    }
+  }, [teamId, team?.start_time, loading, refreshTeamData]);
+
+  // Check localStorage for team start time and sync if needed (only log warnings)
+  useEffect(() => {
+    if (teamId && !team?.start_time) {
+      const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+      if (storedTeamStartTime) {
+        const storedTime = new Date(storedTeamStartTime).getTime();
+        const raceStoreTime = startTime;
+        
+        if (Math.abs(storedTime - raceStoreTime) > 1000) {
+          console.warn('[Dashboard] localStorage and race store times differ significantly!');
+          console.warn('  localStorage:', new Date(storedTime).toString());
+          console.warn('  race store:', new Date(raceStoreTime).toString());
+        }
+      }
+    }
+  }, [teamId, team?.start_time, startTime]);
+
 
 
   const currentRunner = getCurrentRunner(legs, currentTime);
-  const nextRunner = getNextRunner(legs, currentTime);
+  const nextRunner = getNextRunner(legs, currentTime, startTime);
+  
+  // Debug logging for current and next runner
+  if (process.env.NODE_ENV === 'development') {
+    
+  }
 
   const currentRunnerInfo = currentRunner
     ? runners.find(r => r.id === currentRunner.runnerId)
@@ -244,14 +427,22 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     ? runners.find(r => r.id === nextRunner.runnerId)
     : null;
 
+  // Debug effect to log current state (after currentRunner and nextRunner are declared)
+
+
   const getCountdownToNext = () => {
     if (!nextRunner) return null;
-    const countdownMs = getCountdownTime(nextRunner, currentTime, legs, actualRaceStartTime);
+    const countdownMs = getCountdownTime(nextRunner, currentTime, legs, startTime);
     return formatCountdown(countdownMs);
   };
 
   const getNextRunnerPrefix = () => {
     if (!nextRunner || !legs.length) return "Starts in:";
+    
+    // Special case for leg 1 before race starts
+    if (nextRunner.id === 1 && !nextRunner.actualStart) {
+      return "Race starts in:";
+    }
     
     const nextLegIndex = legs.findIndex(leg => leg.id === nextRunner.id);
     if (nextLegIndex <= 0) return "Starts in:";
@@ -279,6 +470,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       currentLegId = totalLegs;
     } else if (currentRunner) {
       currentLegId = currentRunner.id;
+    } else if (nextRunner) {
+      // If no current runner but we have a next runner, show the next leg as current
+      currentLegId = nextRunner.id;
+    } else if (totalLegs > 0) {
+      // If we have legs but no current or next runner, show leg 1 as current
+      currentLegId = 1;
     } else {
       currentLegId = 0;
     }
@@ -335,7 +532,13 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const isRaceComplete = () => {
     if (legs.length === 0) return false;
     const lastLeg = legs[legs.length - 1];
-    return lastLeg && lastLeg.actualFinish !== undefined;
+    // Only consider race complete if the last leg has both start and finish times,
+    // and the finish time is valid (after start time and not in the future)
+    return lastLeg && 
+           lastLeg.actualFinish !== undefined && 
+           lastLeg.actualStart !== undefined &&
+           lastLeg.actualFinish > lastLeg.actualStart &&
+           lastLeg.actualFinish <= Date.now();
   };
 
   const getFinalRaceTime = () => {
@@ -717,8 +920,15 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     return false; // This will trigger the else block with race completed content
                   }
                   
-                  // Show next runner content if there is a next runner OR if leg 36 is currently running
-                  return (nextRunner && nextRunnerInfo) || (leg36?.actualStart && !leg36?.actualFinish);
+                  // Show next runner content if:
+                  // 1. We have a next runner with valid runner info, OR
+                  // 2. Leg 36 is currently running, OR
+                  // 3. We have legs but no next runner (race hasn't started yet), OR
+                  // 4. We have legs and a next runner but no runner info (data loading issue)
+                  return (nextRunner && nextRunnerInfo) || 
+                         (leg36?.actualStart && !leg36?.actualFinish) ||
+                         (legs.length > 0 && !nextRunner) ||
+                         (legs.length > 0 && nextRunner && !nextRunnerInfo);
                 })() ? (
                   <div className="space-y-4">
                     {(() => {
@@ -896,15 +1106,28 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                   
                   // Check if race is completed (leg 36 has actual finish time)
                   const leg36 = legs.find(leg => leg.id === 36);
-                  const isRaceCompleted = leg36?.actualFinish;
+                  const isRaceCompleted = leg36?.actualFinish && leg36?.actualStart;
                   
-                  // Show race completed content only if leg 36 is finished
-                  if (isRaceCompleted) {
+                  // Additional validation: ensure the finish time is valid and not in the future
+                  const isValidCompletion = isRaceCompleted && 
+                    leg36 && leg36.actualFinish && leg36.actualStart &&
+                    leg36.actualFinish > leg36.actualStart && 
+                    leg36.actualFinish <= Date.now();
+                  
+                  // Show race completed content only if leg 36 is properly finished
+                  if (isValidCompletion) {
                     return false; // This will trigger the else block with race completed content
                   }
                   
-                  // Show next runner content if there is a next runner OR if leg 36 is currently running
-                  return (nextRunner && nextRunnerInfo) || (leg36?.actualStart && !leg36?.actualFinish);
+                  // Show next runner content if:
+                  // 1. We have a next runner with valid runner info, OR
+                  // 2. Leg 36 is currently running, OR
+                  // 3. We have legs but no next runner (race hasn't started yet), OR
+                  // 4. We have legs and a next runner but no runner info (data loading issue)
+                  return (nextRunner && nextRunnerInfo) || 
+                         (leg36?.actualStart && !leg36?.actualFinish) ||
+                         (legs.length > 0 && !nextRunner) ||
+                         (legs.length > 0 && nextRunner && !nextRunnerInfo);
                 })() ? (
                   <div className="space-y-4">
                     {(() => {
@@ -1379,6 +1602,53 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     >
                       <HelpCircle className="h-4 w-4 mr-1" />
                       Test Sync
+                    </Button>
+                  )}
+
+                  {/* Data Loading Debug Button - Only show in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        console.log('[Dashboard] Debug: Current state:', {
+                          teamId,
+                          legs: legs.length,
+                          runners: runners.length,
+                          isSetupComplete,
+                          isViewOnly,
+                          loading,
+                          currentRunner: currentRunner?.id,
+                          nextRunner: nextRunner?.id,
+                          currentRunnerInfo: currentRunnerInfo?.name,
+                          nextRunnerInfo: nextRunnerInfo?.name
+                        });
+                        
+                        if (teamId && legs.length === 0) {
+                          console.log('[Dashboard] Debug: Attempting to load data...');
+                          try {
+                            await fetchLatestData();
+                            console.log('[Dashboard] Debug: fetchLatestData completed');
+                            
+                            const currentState = useRaceStore.getState();
+                            console.log('[Dashboard] Debug: State after fetch:', {
+                              legs: currentState.legs.length,
+                              runners: currentState.runners.length
+                            });
+                            
+                            if (currentState.legs.length === 0) {
+                              console.log('[Dashboard] Debug: Still no legs, initializing...');
+                              initializeLegs();
+                            }
+                          } catch (error) {
+                            console.error('[Dashboard] Debug: Error loading data:', error);
+                          }
+                        }
+                      }}
+                      title="Debug data loading"
+                    >
+                      <HelpCircle className="h-4 w-4 mr-1" />
+                      Debug Data
                     </Button>
                   )}
 

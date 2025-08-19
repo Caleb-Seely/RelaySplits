@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -210,33 +210,39 @@ const DemoLanding = () => {
 
 
 
-  // Demo calculations
-  const currentRunner = getCurrentRunner(demoLegs, currentTime);
-  const nextRunner = getNextRunner(demoLegs, currentTime);
-  const currentRunnerInfo = currentRunner ? getDemoRunners().find(r => r.id === currentRunner.runnerId) : null;
-  const nextRunnerInfo = nextRunner ? getDemoRunners().find(r => r.id === nextRunner.runnerId) : null;
+  // Demo calculations - memoized to prevent unnecessary recalculations
+  const { currentRunner, nextRunner, currentRunnerInfo, nextRunnerInfo } = useMemo(() => {
+    const currentRunner = getCurrentRunner(demoLegs, currentTime);
+    const nextRunner = getNextRunner(demoLegs, currentTime);
+    const currentRunnerInfo = currentRunner ? getDemoRunners().find(r => r.id === currentRunner.runnerId) : null;
+    const nextRunnerInfo = nextRunner ? getDemoRunners().find(r => r.id === nextRunner.runnerId) : null;
+    
+    return { currentRunner, nextRunner, currentRunnerInfo, nextRunnerInfo };
+  }, [demoLegs, currentTime]);
   
-  const getRaceProgress = () => {
+  // Memoize other expensive calculations
+  const { progress, demoStartTime, majorExchanges, filteredLegs } = useMemo(() => {
     const totalLegs = demoLegs.length;
     const completedLegs = demoLegs.filter(leg => leg.actualFinish).length;
     const currentLegId = currentRunner ? currentRunner.id : completedLegs;
     
-    return {
+    const progress = {
       completed: completedLegs,
       total: totalLegs,
       current: currentLegId,
       percentage: totalLegs > 0 ? (completedLegs / totalLegs) * 100 : 0
     };
-  };
-
-  const progress = getRaceProgress();
-  const demoStartTime = getDemoStartTime();
-  const majorExchanges = getMajorExchangeTimes(demoLegs);
-
-  // Filter legs by current van
-  const vanRunners = getDemoRunners().filter(r => r.van === currentVan);
-  const vanRunnerIds = new Set(vanRunners.map(r => r.id));
-  const filteredLegs = demoLegs.filter(leg => vanRunnerIds.has(leg.runnerId));
+    
+    const demoStartTime = getDemoStartTime();
+    const majorExchanges = getMajorExchangeTimes(demoLegs);
+    
+    // Filter legs by current van
+    const vanRunners = getDemoRunners().filter(r => r.van === currentVan);
+    const vanRunnerIds = new Set(vanRunners.map(r => r.id));
+    const filteredLegs = demoLegs.filter(leg => vanRunnerIds.has(leg.runnerId));
+    
+    return { progress, demoStartTime, majorExchanges, filteredLegs };
+  }, [demoLegs, currentVan, currentRunner]);
 
   // Helper functions
   function getCountdownToNext() {

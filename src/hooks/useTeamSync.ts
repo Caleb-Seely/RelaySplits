@@ -145,7 +145,8 @@ export const useTeamSync = () => {
         
         // Sync race store start time with team start time
         const race = useRaceStore.getState();
-        race.setStartTime(new Date(teamData.start_time).getTime());
+        const raceStoreTime = new Date(teamData.start_time).getTime();
+        race.setStartTime(raceStoreTime);
         
         // Initialize legs if they don't exist yet (with delay to ensure sync tracking is ready)
         if (race.legs.length === 0) {
@@ -428,16 +429,16 @@ export const useTeamSync = () => {
 
   const refreshTeamData = async () => {
     const currentTeamId = deviceInfo?.teamId || localStorage.getItem('relay_team_id') || null;
-    console.log('[refreshTeamData] Refreshing team data for teamId:', currentTeamId);
     if (currentTeamId) {
       await fetchTeamDetails(currentTeamId);
-    } else {
-      console.log('[refreshTeamData] No teamId available');
     }
   };
 
   const updateTeamStartTime = async (newStartTime: Date) => {
-    if (!team || !deviceInfo) return { error: 'Not ready' };
+    if (!team || !deviceInfo) {
+      console.error('[useTeamSync] Not ready - team:', !!team, 'deviceInfo:', !!deviceInfo);
+      return { error: 'Not ready' };
+    }
     
     try {
       // For now, just update locally since we don't have a teams-update Edge Function
@@ -474,6 +475,7 @@ export const useTeamSync = () => {
       toast.success('Team start time updated');
       return { success: true };
     } catch (e) {
+      console.error('[useTeamSync] Failed to update team start time:', e);
       toast.error('Failed to update team start time');
       return { error: 'Unexpected error' };
     }

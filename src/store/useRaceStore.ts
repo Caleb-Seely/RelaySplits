@@ -89,6 +89,11 @@ export const useRaceStore = () => {
     reset: () => {
       dataStore.clearData();
       uiStore.resetSetup();
+    },
+
+    // Clean up invalid data
+    cleanupInvalidData: () => {
+      dataStore.cleanupInvalidData();
     }
   };
 };

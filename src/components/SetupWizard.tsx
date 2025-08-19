@@ -129,7 +129,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   const handleDateTimeChange = (newValue: Dayjs | null) => {
     setSelectedDateTime(newValue);
     if (newValue) {
-      setStartTime(newValue.valueOf());
+      const newStartTime = newValue.valueOf();
+      setStartTime(newStartTime);
     }
   };
 
@@ -158,28 +159,33 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     try {
       // Save start time to team if this is a new team
       if (isNewTeam && team?.id) {
-        console.log('[SetupWizard] Updating team start time');
         const deviceId = getDeviceId();
+        const teamUpdateISO = new Date(startTime).toISOString();
+        
         const result = await invokeEdge('teams-update', {
           teamId: team.id,
           deviceId,
-          start_time: new Date(startTime).toISOString()
+          start_time: teamUpdateISO
         });
         
         // Update local storage with the new start time
         if (result && !('error' in result)) {
           const updatedTeam = (result as any).data?.team;
           if (updatedTeam?.start_time) {
-            console.log('[SetupWizard] Updating local storage with new start time:', updatedTeam.start_time);
             localStorage.setItem('relay_team_start_time', updatedTeam.start_time);
             
             // Also update the race store's start time to match
             const race = useRaceStore.getState();
-            race.setStartTime(new Date(updatedTeam.start_time).getTime());
+            const raceStoreTime = new Date(updatedTeam.start_time).getTime();
+            race.setStartTime(raceStoreTime);
             
             // Refresh team data to update the team context
             await refreshTeamData();
+          } else {
+            console.error('[SetupWizard] No start_time in updated team data:', updatedTeam);
           }
+        } else {
+          console.error('[SetupWizard] teams-update failed:', result);
         }
       }
 
@@ -228,6 +234,16 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
              // Complete local setup
        completeSetup();
+       
+       // Log the final store state after setup completion
+       const finalStoreState = useRaceStore.getState();
+       console.log('[SetupWizard] Final store state after setup completion:', {
+         runners: finalStoreState.runners.length,
+         legs: finalStoreState.legs.length,
+         isSetupComplete: finalStoreState.isSetupComplete,
+         teamId: finalStoreState.teamId,
+         startTime: finalStoreState.startTime
+       });
        
        console.log('[SetupWizard] Finish flow complete');
        toast.success('Your team is ready!', { id: toastId });

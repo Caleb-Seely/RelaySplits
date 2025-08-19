@@ -24,6 +24,18 @@ let currentTeamId = null;
 let supabaseUrl = null;
 let supabaseAnonKey = null;
 
+// Helper function to track check count for reduced logging
+async function getCheckCount() {
+  try {
+    const count = parseInt(localStorage.getItem('sw_check_count') || '0');
+    const newCount = count + 1;
+    localStorage.setItem('sw_check_count', newCount.toString());
+    return newCount;
+  } catch (error) {
+    return 1; // Fallback if localStorage fails
+  }
+}
+
 // Install event - cache static files
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker...');
@@ -147,19 +159,29 @@ self.addEventListener('periodicsync', (event) => {
 // Enhanced race update checking with better error handling
 async function checkForRaceUpdates() {
   try {
-    console.log('[SW] Checking for race updates...');
+    // Only log every 10th check to reduce noise
+    const checkCount = await getCheckCount();
+    const shouldLog = checkCount % 10 === 0;
+    
+    if (shouldLog) {
+      console.log('[SW] Checking for race updates... (check #' + checkCount + ')');
+    }
     
     // Get the team ID from storage
     const teamId = await getTeamIdFromStorage();
     if (!teamId) {
-      console.log('[SW] No team ID found, skipping race update check');
+      if (shouldLog) {
+        console.log('[SW] No team ID found, skipping race update check');
+      }
       return;
     }
 
     // Check if notifications are enabled
     const notificationsEnabled = await getNotificationPreference();
     if (!notificationsEnabled) {
-      console.log('[SW] Notifications disabled, skipping race update check');
+      if (shouldLog) {
+        console.log('[SW] Notifications disabled, skipping race update check');
+      }
       return;
     }
 
@@ -169,7 +191,9 @@ async function checkForRaceUpdates() {
     // Fetch current race data with retry logic
     const currentState = await fetchRaceDataWithRetry(teamId);
     if (!currentState) {
-      console.log('[SW] Failed to fetch current race data after retries');
+      if (shouldLog) {
+        console.log('[SW] Failed to fetch current race data after retries');
+      }
       return;
     }
 
@@ -189,7 +213,9 @@ async function checkForRaceUpdates() {
     // Update the last known state
     await saveLastKnownState(currentState);
     
-    console.log('[SW] Race update check completed, sent', notifications.length, 'notifications');
+    if (shouldLog) {
+      console.log('[SW] Race update check completed, sent', notifications.length, 'notifications');
+    }
     
     // Schedule next check
     setTimeout(checkForRaceUpdates, BACKGROUND_SYNC_INTERVAL);
@@ -210,7 +236,10 @@ async function fetchRaceDataWithRetry(teamId, maxRetries = 3) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[SW] Fetching race data, attempt ${attempt}/${maxRetries}`);
+      // Only log retry attempts if they're not the first attempt
+      if (attempt > 1) {
+        console.log(`[SW] Fetching race data, attempt ${attempt}/${maxRetries}`);
+      }
       
       // Use POST with proper authentication headers
       const legsResponse = await fetch(`${supabaseUrl}/functions/v1/legs-list`, {

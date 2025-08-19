@@ -32,6 +32,7 @@ interface RaceDataStore extends RaceData {
   getLeg: (id: number) => Leg | undefined;
   hasData: () => boolean;
   clearData: () => void;
+  cleanupInvalidData: () => void;
 }
 
 export const useRaceDataStore = create<RaceDataStore>((set, get) => ({
@@ -125,5 +126,29 @@ export const useRaceDataStore = create<RaceDataStore>((set, get) => ({
     legs: [],
     startTime: new Date('2025-08-22T13:00').getTime(),
     teamId: undefined
+  }),
+
+  // Clean up invalid data (legs with finish times but no start times, or future finish times)
+  cleanupInvalidData: () => set((state) => {
+    const cleanedLegs = state.legs.map(leg => {
+      // Remove finish times that don't have start times
+      if (leg.actualFinish && !leg.actualStart) {
+        console.warn('[RaceDataStore] Cleaning up leg with finish time but no start time:', leg);
+        return { ...leg, actualFinish: undefined };
+      }
+      // Remove finish times that are in the future
+      if (leg.actualFinish && leg.actualFinish > Date.now()) {
+        console.warn('[RaceDataStore] Cleaning up leg with future finish time:', leg);
+        return { ...leg, actualFinish: undefined };
+      }
+      // Remove finish times that are before start times
+      if (leg.actualFinish && leg.actualStart && leg.actualFinish <= leg.actualStart) {
+        console.warn('[RaceDataStore] Cleaning up leg with invalid finish time:', leg);
+        return { ...leg, actualFinish: undefined };
+      }
+      return leg;
+    });
+
+    return { legs: cleanedLegs };
   })
 }));

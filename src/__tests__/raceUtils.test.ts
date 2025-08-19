@@ -202,7 +202,7 @@ describe('Race Utilities', () => {
   describe('getNextRunner', () => {
     it('should return next runner to start', () => {
       const now = new Date('2025-08-22T13:31:00');
-      const nextRunner = getNextRunner(mockLegs, now);
+      const nextRunner = getNextRunner(mockLegs, now, 1000000000000);
       
       expect(nextRunner).toBe(mockLegs[1]);
     });
@@ -210,7 +210,7 @@ describe('Race Utilities', () => {
     it('should return null when all legs have started', () => {
       const legs = mockLegs.map(leg => ({ ...leg, actualStart: 1000000000000 }));
       const now = new Date('2025-08-22T13:31:00');
-      const nextRunner = getNextRunner(legs, now);
+      const nextRunner = getNextRunner(legs, now, 1000000000000);
       
       expect(nextRunner).toBeNull();
     });

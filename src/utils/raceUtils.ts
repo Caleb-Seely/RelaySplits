@@ -214,8 +214,30 @@ export function recalculateProjections(legs: Leg[], updatedIndex: number, runner
   return updatedLegs;
 }
 
+// Cache for getCurrentRunner results
+let currentRunnerCache: {
+  legsHash: string | null;
+  currentTime: number | null;
+  result: Leg | null;
+} = {
+  legsHash: null,
+  currentTime: null,
+  result: null
+};
+
 export function getCurrentRunner(legs: Leg[], now: Date): Leg | null {
   const currentTime = now.getTime();
+  
+  // Check if we can use cached result
+  const legsHash = hashLegs(legs);
+  const timeDiff = Math.abs(currentTime - (currentRunnerCache.currentTime || 0));
+  
+  // Use cache if:
+  // 1. Legs haven't changed
+  // 2. Time difference is less than 5 seconds (for countdown accuracy)
+  if (currentRunnerCache.legsHash === legsHash && timeDiff < 5000) {
+    return currentRunnerCache.result;
+  }
   
   // Sort legs by ID to ensure we check in order
   const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
@@ -224,27 +246,118 @@ export function getCurrentRunner(legs: Leg[], now: Date): Leg | null {
     // Only consider a leg as current if it has actually started but not finished
     // Don't auto-transition based on projected finish times
     if (leg.actualStart && leg.actualStart <= currentTime && !leg.actualFinish) {
-      return leg;
+      const result = leg;
+      // Update cache
+      currentRunnerCache = { legsHash, currentTime, result };
+      return result;
     }
   }
   
-  return null;
+  const result = null;
+  // Update cache
+  currentRunnerCache = { legsHash, currentTime, result };
+  return result;
 }
 
-export function getNextRunner(legs: Leg[], now: Date): Leg | null {
+// Cache for getNextRunner results to avoid unnecessary recalculations
+let nextRunnerCache: {
+  legsHash: string | null;
+  currentTime: number | null;
+  raceStartTime: number | undefined | null;
+  result: Leg | null;
+} = {
+  legsHash: null,
+  currentTime: null,
+  raceStartTime: null,
+  result: null
+};
+
+// Simple hash function for legs array
+function hashLegs(legs: Leg[]): string {
+  if (!legs || legs.length === 0) return 'empty';
+  
+  // Create a hash based on leg IDs and their key timestamps
+  const hashParts = legs.map(leg => 
+    `${leg.id}:${leg.actualStart || 'null'}:${leg.actualFinish || 'null'}`
+  );
+  return hashParts.join('|');
+}
+
+export function getNextRunner(legs: Leg[], now: Date, raceStartTime?: number): Leg | null {
   const currentTime = now.getTime();
+  
+  // Check if we can use cached result
+  const legsHash = hashLegs(legs);
+  const timeDiff = Math.abs(currentTime - (nextRunnerCache.currentTime || 0));
+  
+  // Use cache if:
+  // 1. Legs haven't changed
+  // 2. Time difference is less than 5 seconds (for countdown accuracy)
+  // 3. Race start time hasn't changed
+  if (nextRunnerCache.legsHash === legsHash && 
+      timeDiff < 5000 && 
+      nextRunnerCache.raceStartTime === raceStartTime) {
+    return nextRunnerCache.result;
+  }
   
   // Sort legs by ID to ensure we check in order
   const sortedLegs = [...legs].sort((a, b) => a.id - b.id);
   
-  for (const leg of sortedLegs) {
-    // If this leg hasn't started yet, it's the next runner
-    if (!leg.actualStart) {
-      return leg;
+  // Only log in development and only when there's a significant change or error
+  const shouldLog = process.env.NODE_ENV === 'development' && 
+    (sortedLegs.length === 0 || !raceStartTime || currentTime < raceStartTime - 60000); // Log if race hasn't started or is more than 1 minute away
+  
+  if (shouldLog) {
+    console.log('[getNextRunner] Checking', sortedLegs.length, 'legs for next runner');
+    console.log('[getNextRunner] Current time:', new Date(currentTime).toISOString());
+    console.log('[getNextRunner] Race start time:', raceStartTime ? new Date(raceStartTime).toISOString() : 'undefined');
+    if (sortedLegs.length > 0) {
+      console.log('[getNextRunner] First leg:', {
+        id: sortedLegs[0].id,
+        runnerId: sortedLegs[0].runnerId,
+        projectedStart: sortedLegs[0].projectedStart,
+        actualStart: sortedLegs[0].actualStart,
+        actualFinish: sortedLegs[0].actualFinish
+      });
     }
   }
   
-  return null;
+  for (const leg of sortedLegs) {
+    // If this leg hasn't started yet, it's the next runner
+    if (!leg.actualStart) {
+      // Special case for leg 1: if race hasn't started yet, treat race start time as effective start
+      if (leg.id === 1 && raceStartTime && currentTime < raceStartTime) {
+        if (shouldLog) {
+          console.log('[getNextRunner] Found next runner: leg 1 (race not started yet)');
+        }
+        const result = leg;
+        // Update cache
+        nextRunnerCache = { legsHash, currentTime, raceStartTime, result };
+        return result;
+      }
+      
+      // For other legs or if race has started, check if this leg should be next
+      const effectiveStartTime = leg.projectedStart || raceStartTime;
+      if (effectiveStartTime && currentTime < effectiveStartTime) {
+        if (shouldLog) {
+          console.log('[getNextRunner] Found next runner: leg', leg.id, 'runner', leg.runnerId);
+        }
+        const result = leg;
+        // Update cache
+        nextRunnerCache = { legsHash, currentTime, raceStartTime, result };
+        return result;
+      }
+    }
+  }
+  
+  if (shouldLog) {
+    console.log('[getNextRunner] No next runner found - all legs have started or are in progress');
+  }
+  
+  const result = null;
+  // Update cache
+  nextRunnerCache = { legsHash, currentTime, raceStartTime, result };
+  return result;
 }
 
 export function getLegStatus(leg: Leg, now: Date): RaceStatus {
@@ -321,6 +434,11 @@ export function getEffectiveStartTime(leg: Leg, allLegs: Leg[], officialRaceStar
 }
 
 export function getCountdownTime(leg: Leg, now: Date, allLegs?: Leg[], officialRaceStartTime?: number): number {
+  // Special case for leg 1 before race starts: use official race start time
+  if (leg.id === 1 && !leg.actualStart && officialRaceStartTime) {
+    return Math.max(0, officialRaceStartTime - now.getTime());
+  }
+  
   // Use effective start time for countdown if we have all legs data
   const startTime = allLegs 
     ? getEffectiveStartTime(leg, allLegs, officialRaceStartTime)
