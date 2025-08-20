@@ -44,6 +44,7 @@ export interface LeaderboardUpdatePayload {
   current_leg: number;
   projected_finish_time: number;
   current_leg_projected_finish: number;
+  team_start_time?: number; // Optional: actual race start time from dashboard
 }
 
 /**

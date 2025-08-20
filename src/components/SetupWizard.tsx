@@ -296,7 +296,6 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     <div className="space-y-4">
       <div className="text-center">
         <p className="text-gray-600">Set your race start time and configure your runners</p>
-        <p className="text-gray-500 text-sm mt-1">You can edit this later from the Dashboard</p>
       </div>
 
       {/* Race Start Time Section */}

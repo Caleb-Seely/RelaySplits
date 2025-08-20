@@ -269,10 +269,12 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
 
     // Special case: Update leaderboard when leg 36 finishes (race completion)
     if (field === 'actualFinish' && time !== null && state.teamId && id === 36) {
+      console.log('[RaceStore] Race completion detected! Leg 36 finished at:', new Date(time).toISOString());
       // Trigger leaderboard update to mark race as finished
       import('@/services/leaderboard').then(async ({ triggerLeaderboardUpdateOnLegStart }) => {
         try {
           // Pass leg 37 to indicate race completion
+          console.log('[RaceStore] Triggering leaderboard update for race completion with time:', new Date(time).toISOString());
           const success = await triggerLeaderboardUpdateOnLegStart(state.teamId!, 37, time);
           if (success) {
             console.log('[RaceStore] Race completion leaderboard update successful');

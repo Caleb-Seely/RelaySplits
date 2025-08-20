@@ -548,6 +548,7 @@ export function calculateLeaderboardData(
     // Race is finished - use the actual finish time (lastLegCompletedAt is the race finish time)
     projectedFinishTime = lastLegCompletedAt;
     console.log('[calculateLeaderboardData] Race finished - using actual finish time:', new Date(projectedFinishTime).toISOString());
+    console.log('[calculateLeaderboardData] Race finished - lastLegCompletedAt:', lastLegCompletedAt, 'teamStartTime:', teamStartTime, 'difference:', lastLegCompletedAt - teamStartTime);
   } else {
     // Get the last leg's projected finish time from the dashboard calculation
     const lastLeg = legs.find(leg => leg.id === 36);
@@ -597,7 +598,8 @@ export function calculateLeaderboardData(
     team_id: teamId,
     current_leg: currentLeg,
     projected_finish_time: projectedFinishTime,
-    current_leg_projected_finish: currentLegProjectedFinish
+    current_leg_projected_finish: currentLegProjectedFinish,
+    team_start_time: teamStartTime // Pass the actual race start time
   };
   
   console.log('[calculateLeaderboardData] Calculated leaderboard data:', {
@@ -859,7 +861,8 @@ export async function createInitialLeaderboardEntry(teamId: string, startTime: n
       team_id: teamId,
       current_leg: 1,
       projected_finish_time: validStartTime + (36 * 30 * 60 * 1000), // 30 min per leg estimate
-      current_leg_projected_finish: validStartTime + (30 * 60 * 1000) // 30 min for first leg
+      current_leg_projected_finish: validStartTime + (30 * 60 * 1000), // 30 min for first leg
+      team_start_time: validStartTime // Pass the actual race start time
     };
 
     // Validate payload before sending

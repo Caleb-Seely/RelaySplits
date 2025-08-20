@@ -11,6 +11,7 @@ interface LeaderboardUpdatePayload {
   current_leg: number;
   projected_finish_time: number;
   current_leg_projected_finish: number;
+  team_start_time?: number; // Add optional team start time field
 }
 
 serve(async (req) => {
@@ -71,8 +72,21 @@ serve(async (req) => {
 
     // Calculate the actual team start time
     let teamStartTime: number;
-    if (team.start_time) {
-      teamStartTime = new Date(team.start_time).getTime();
+    if (payload.team_start_time) {
+      // Use the provided race start time (this is the actual race start time from the dashboard)
+      teamStartTime = payload.team_start_time;
+    } else if (team.start_time) {
+      // Fallback to team.start_time, but check if it's not the placeholder
+      const teamStartTimeDate = new Date(team.start_time);
+      const placeholderDate = new Date('2099-12-31T23:59:59Z');
+      
+      if (Math.abs(teamStartTimeDate.getTime() - placeholderDate.getTime()) < 1000) {
+        // This is the placeholder date, use fallback calculation
+        teamStartTime = payload.current_leg_projected_finish - (payload.current_leg - 1) * 30 * 60 * 1000;
+      } else {
+        // This is a real start time
+        teamStartTime = teamStartTimeDate.getTime();
+      }
     } else {
       // Fallback: estimate based on current leg if no actual start time
       teamStartTime = payload.current_leg_projected_finish - (payload.current_leg - 1) * 30 * 60 * 1000;

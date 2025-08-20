@@ -25,6 +25,18 @@ const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; posi
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatDate = (timestamp: number) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    
+    // Only show date if it's different from today
+    if (date.toDateString() !== now.toDateString()) {
+      return date.toLocaleDateString([], { month: 'numeric', day: '2-digit' });
+    }
+    return '';
+  };
+
   return (
     <div className="flex flex-col items-center">
       <div className={`relative ${podiumHeight} w-20 ${bgGradient} rounded-t-xl border-2 ${borderColor} shadow-lg ${glowColor} flex items-end justify-center pb-3 transition-all duration-300 hover:shadow-xl hover:scale-105`}>
@@ -47,6 +59,11 @@ const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; posi
         <p className="text-xs font-medium text-gray-700 mt-1">
           ETA: {formatTime(team.projected_finish_time)}
         </p>
+        {formatDate(team.projected_finish_time) && (
+          <p className="text-[10px] text-gray-500 mt-0.5 hidden sm:block">
+            {formatDate(team.projected_finish_time)}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -59,6 +76,18 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
     if (!timestamp) return '--:--';
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDate = (timestamp: number) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    
+    // Only show date if it's different from today
+    if (date.toDateString() !== now.toDateString()) {
+      return date.toLocaleDateString([], { month: 'numeric', day: '2-digit' });
+    }
+    return '';
   };
 
   const getProgressPercentage = (currentLeg: number, totalLegs = 36) => {
@@ -264,18 +293,31 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
       </div>
 
              {/* Bottom Row - Start Time and Projected Finish */}
-       <div className="flex justify-between items-center text-xs text-gray-400">
+       <div className="flex justify-between items-start text-xs text-gray-400">
         {/* Start Time */}
-        <div className="flex items-center min-w-0">
+        <div className="flex flex-col items-start min-w-0">
           <span className="truncate">Start: {formatTime(team.team_start_time)}</span>
+          {formatDate(team.team_start_time) && (
+            <span className="text-[10px] text-gray-500 truncate hidden sm:block">{formatDate(team.team_start_time)}</span>
+          )}
         </div>
         
         {/* Projected Finish or Finish Time */}
-        <div className="flex items-center min-w-0 ml-2">
+        <div className="flex flex-col items-end min-w-0 ml-2">
           {isFinished ? (
-            <span className="text-green-400 font-medium truncate">Finish: {formatTime(team.projected_finish_time)}</span>
+            <>
+              <span className="text-green-400 font-medium truncate">Finish: {formatTime(team.projected_finish_time)}</span>
+              {formatDate(team.projected_finish_time) && (
+                <span className="text-[10px] text-gray-500 truncate hidden sm:block">{formatDate(team.projected_finish_time)}</span>
+              )}
+            </>
           ) : (
-            <span className="truncate">Proj. Finish: {formatTime(team.projected_finish_time)}</span>
+            <>
+              <span className="truncate">Proj. Finish: {formatTime(team.projected_finish_time)}</span>
+              {formatDate(team.projected_finish_time) && (
+                <span className="text-[10px] text-gray-500 truncate hidden sm:block">{formatDate(team.projected_finish_time)}</span>
+              )}
+            </>
           )}
         </div>
       </div>
