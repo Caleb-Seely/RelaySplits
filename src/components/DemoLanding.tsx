@@ -125,8 +125,8 @@ const DemoLanding = () => {
       if (isFormVisible && !showAdminSecret) {
         const target = event.target as Element;
         
-        // Check if click is inside the actual card content (the Card component)
-        const cardContent = target.closest('.form-card .bg-gray-100');
+        // Check if click is inside the form card content
+        const cardContent = target.closest('.form-card');
         
         // Check if click is inside the tab buttons (to prevent closing when clicking tabs)
         const tabButtons = target.closest('button[data-tab]');
