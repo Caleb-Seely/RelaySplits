@@ -8,6 +8,7 @@ import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Zap, Trophy, Users, Clock, MapPin, Flame, Star, Play, Bug } from 'lucide-react';
 import { leaderboardDebugger } from '@/utils/leaderboardDebug';
+import { formatDuration } from '@/utils/raceUtils';
 
 const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; position: number; isCurrentTeam?: boolean }) => {
   const podiumHeight = position === 1 ? 'h-32' : position === 2 ? 'h-24' : 'h-20';
@@ -56,9 +57,9 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const formatTime = (timestamp: number) => {
-    if (!timestamp) return '--:--:--';
+    if (!timestamp) return '--:--';
     const date = new Date(timestamp);
-    return date.toLocaleTimeString();
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const getProgressPercentage = (currentLeg: number, totalLegs = 36) => {
@@ -93,6 +94,15 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
     return Math.min(remainingMinutes, 240);
   };
 
+  // Calculate total race time for finished teams
+  const getTotalRaceTime = () => {
+    if (!team.team_start_time || !team.projected_finish_time) return null;
+    return team.projected_finish_time - team.team_start_time;
+  };
+
+  // Check if team is finished (on leg 37)
+  const isFinished = team.current_leg === 37;
+
   // Update current time every minute
   useEffect(() => {
     const interval = setInterval(() => {
@@ -103,6 +113,7 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
   }, []);
 
   const minutesToFinish = getMinutesToFinishLeg();
+  const totalRaceTime = getTotalRaceTime();
 
     return (
     <div className="flex items-center space-x-2 w-full">
@@ -127,22 +138,31 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
              </h3>
            </div>
            
-           {/* Next Leg with Time Badge */}
+           {/* Next Leg with Time Badge or Total Race Time for finished teams */}
            <div className="flex items-center flex-shrink-0">
-             {minutesToFinish !== null && (
-               <div className={`flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm ${
-                 minutesToFinish === 0
-                   ? 'bg-gray-500' // Finished or should be finished
-                   : minutesToFinish <= 10 
-                   ? 'bg-red-500 animate-pulse' 
-                   : minutesToFinish <= 30 
-                   ? 'bg-orange-500' 
-                   : 'bg-blue-500'
-               }`}>
-                 <Play className="h-3 w-3 text-white" />
-                 <span>Leg {(team.current_leg || 0) + 1}:</span>
-                 <span>{minutesToFinish === 0 ? 'now' : `${minutesToFinish}m`}</span>
+             {isFinished ? (
+               // Show total race time for finished teams
+               <div className="flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm bg-green-600">
+                 <Trophy className="h-3 w-3 text-white" />
+                 <span>Total: {totalRaceTime ? formatDuration(totalRaceTime) : '--:--'}</span>
                </div>
+             ) : (
+               // Show leg badge for active teams
+               minutesToFinish !== null && (
+                 <div className={`flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm ${
+                   minutesToFinish === 0
+                     ? 'bg-gray-500' // Finished or should be finished
+                     : minutesToFinish <= 10 
+                     ? 'bg-red-500 animate-pulse' 
+                     : minutesToFinish <= 30 
+                     ? 'bg-orange-500' 
+                     : 'bg-blue-500'
+                 }`}>
+                   <Play className="h-3 w-3 text-white" />
+                   <span>Leg {(team.current_leg || 0) + 1}:</span>
+                   <span>{minutesToFinish === 0 ? 'now' : `${minutesToFinish}m`}</span>
+                 </div>
+               )
              )}
            </div>
          </div>
@@ -166,9 +186,13 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
           <span>Start: {formatTime(team.team_start_time)}</span>
         </div>
         
-        {/* Projected Finish */}
+        {/* Projected Finish or Finish Time */}
         <div className="flex items-center">
-          <span>Proj. Finish: {formatTime(team.projected_finish_time)}</span>
+          {isFinished ? (
+            <span className="text-green-400 font-medium">Finish: {formatTime(team.projected_finish_time)}</span>
+          ) : (
+            <span>Proj. Finish: {formatTime(team.projected_finish_time)}</span>
+          )}
         </div>
       </div>
 

@@ -50,7 +50,7 @@ import { usePWA } from '@/hooks/usePWA';
 import { toast } from 'sonner';
 import { useRaceStore } from '@/store/raceStore';
 import AdminSecretDisplay from './AdminSecretDisplay';
-import { PWADebugInfo } from './PWADebugInfo';
+
 
 
 
@@ -78,7 +78,7 @@ const DemoLanding = () => {
   const [adminSecret, setAdminSecret] = useState('');
   const [createdTeamName, setCreatedTeamName] = useState('');
   const [showLearnMore, setShowLearnMore] = useState(false);
-  const [showPWADebug, setShowPWADebug] = useState(false);
+
 
   // Update current time every second for live demo
   useEffect(() => {
@@ -703,74 +703,107 @@ const DemoLanding = () => {
 
       {/* Learn More and Download Buttons */}
       <div className="container mx-auto px-4 py-4">
-        <div className="flex justify-center gap-4">
-          <Button
-            onClick={() => setShowLearnMore(true)}
-            className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
-          >
-            <Info className="h-5 w-5" />
-            Learn More
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-          
-          {/* Download App Button */}
-          <Button
-            onClick={canInstall ? handleInstallApp : () => {
-              const { browser, isMobile, isIOS, isAndroid } = getBrowserInfo();
-              
-              if (isMobile) {
-                if (isIOS) {
-                  toast.info('On iOS Safari: Tap the Share button (square with arrow) and select "Add to Home Screen"');
-                } else if (isAndroid) {
-                  if (browser === 'Chrome') {
-                    toast.info('On Android Chrome: Tap the menu (⋮) and select "Add to Home Screen" or look for the install icon in the address bar');
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex justify-center gap-4">
+            <Button
+              onClick={() => setShowLearnMore(true)}
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+            >
+              <Info className="h-5 w-5" />
+              Learn More
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            
+            {/* Download App Button */}
+            <Button
+              onClick={canInstall ? handleInstallApp : () => {
+                const { browser, isMobile, isIOS, isAndroid } = getBrowserInfo();
+                
+                if (isMobile) {
+                  if (isIOS) {
+                    toast.info('On iOS Safari: Tap the Share button (square with arrow) and select "Add to Home Screen"');
+                  } else if (isAndroid) {
+                    if (browser === 'Chrome') {
+                      toast.info('On Android Chrome: Tap the menu (⋮) and select "Add to Home Screen" or look for the install icon in the address bar');
+                    } else {
+                      toast.info('On Android: Tap the menu and look for "Add to Home Screen" or "Install App"');
+                    }
                   } else {
-                    toast.info('On Android: Tap the menu and look for "Add to Home Screen" or "Install App"');
+                    toast.info('Tap your browser menu and look for "Add to Home Screen" or "Install App"');
                   }
                 } else {
-                  toast.info('Tap your browser menu and look for "Add to Home Screen" or "Install App"');
+                  if (browser === 'Chrome') {
+                    toast.info('In Chrome: Look for the install icon (📱) in the address bar on the right side');
+                  } else if (browser === 'Edge') {
+                    toast.info('In Edge: Look for the install icon (📱) in the address bar on the right side');
+                  } else if (browser === 'Firefox') {
+                    toast.info('In Firefox: Look for the install icon in the address bar or menu');
+                  } else {
+                    toast.info('Look for an install icon in your browser address bar or menu');
+                  }
                 }
-              } else {
-                if (browser === 'Chrome') {
-                  toast.info('In Chrome: Look for the install icon (📱) in the address bar on the right side');
-                } else if (browser === 'Edge') {
-                  toast.info('In Edge: Look for the install icon (📱) in the address bar on the right side');
-                } else if (browser === 'Firefox') {
-                  toast.info('In Firefox: Look for the install icon in the address bar or menu');
-                } else {
-                  toast.info('Look for an install icon in your browser address bar or menu');
-                }
-              }
-            }}
-            disabled={isInstalling}
-            className={`font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2 ${
-              canInstall 
-                ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' 
-                : 'bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white'
-            }`}
-          >
-            {isInstalling ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Installing...
-              </>
-            ) : (
-              <>
-                <Download className="h-5 w-5" />
-                Download App
-              </>
-            )}
-          </Button>
+              }}
+              disabled={isInstalling}
+              className={`font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2 ${
+                canInstall 
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' 
+                  : 'bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white'
+              }`}
+            >
+              {isInstalling ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Installing...
+                </>
+              ) : (
+                <>
+                  <Download className="h-5 w-5" />
+                  Download App
+                </>
+              )}
+            </Button>
+          </div>
           
-          {/* Debug Button for Android Chrome */}
-          <Button
-            onClick={() => setShowPWADebug(true)}
-            variant="outline"
-            className="font-semibold px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
-          >
-            <Info className="h-5 w-5" />
-            Debug PWA
-          </Button>
+          {/* Installation Instructions */}
+          {!canInstall && !isInstalling && (
+            <div className="text-center max-w-md">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Info className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-800">Installation Instructions</span>
+                </div>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  {(() => {
+                    const { browser, isMobile, isIOS, isAndroid } = getBrowserInfo();
+                    
+                    if (isMobile) {
+                      if (isIOS) {
+                        return 'Tap the Share button (square with arrow) and select "Add to Home Screen"';
+                      } else if (isAndroid) {
+                        if (browser === 'Chrome') {
+                          return 'Tap the menu (⋮) and select "Add to Home Screen" or look for the install icon in the address bar';
+                        } else {
+                          return 'Tap the menu and look for "Add to Home Screen" or "Install App"';
+                        }
+                      } else {
+                        return 'Tap your browser menu and look for "Add to Home Screen" or "Install App"';
+                      }
+                    } else {
+                      if (browser === 'Chrome') {
+                        return 'Look for the install icon (📱) in the address bar on the right side';
+                      } else if (browser === 'Edge') {
+                        return 'Look for the install icon (📱) in the address bar on the right side';
+                      } else if (browser === 'Firefox') {
+                        return 'Look for the install icon in the address bar or menu';
+                      } else {
+                        return 'Look for an install icon in your browser address bar or menu';
+                      }
+                    }
+                  })()}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1348,11 +1381,7 @@ const DemoLanding = () => {
                 </div>
       </div>
 
-      {/* PWA Debug Info */}
-      <PWADebugInfo 
-        isVisible={showPWADebug} 
-        onClose={() => setShowPWADebug(false)} 
-      />
+
     </div>
   );
 };

@@ -1,6 +1,6 @@
 {
-  "name": "RelaySplits - Race Tracker",
-  "short_name": "RelaySplits",
+  "name": "TeamSplits - Race Tracker",
+  "short_name": "TeamSplits",
   "description": "Professional relay race tracking with real-time updates, offline support, and team collaboration",
   "start_url": "/",
   "display": "standalone",
