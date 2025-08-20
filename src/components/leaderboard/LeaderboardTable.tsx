@@ -22,10 +22,31 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ teams }) => 
 
   // Helper function to calculate projected finish time of current leg
   const getCurrentLegProjectedFinish = (team: LeaderboardTeam): string => {
+    // If race is finished (leg 36 completed), show "Finished"
+    if (team.current_leg > 36) {
+      return 'Finished';
+    }
+    
     if (!team.current_leg_projected_finish) {
       return 'N/A';
     }
     return formatFinishTime(team.current_leg_projected_finish);
+  };
+
+  // Helper function to get current leg display
+  const getCurrentLegDisplay = (team: LeaderboardTeam): string => {
+    if (team.current_leg > 36) {
+      return 'Finished';
+    }
+    return `Leg ${team.current_leg}`;
+  };
+
+  // Helper function to get projected finish display
+  const getProjectedFinishDisplay = (team: LeaderboardTeam): string => {
+    if (team.current_leg > 36) {
+      return 'Finished';
+    }
+    return formatFinishTime(team.projected_finish_time);
   };
 
   return (
@@ -66,13 +87,13 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ teams }) => 
                 {formatStartTime(team.team_start_time)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {team.current_leg}
+                {getCurrentLegDisplay(team)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {getCurrentLegProjectedFinish(team)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatFinishTime(team.projected_finish_time)}
+                {getProjectedFinishDisplay(team)}
               </td>
             </tr>
           ))}

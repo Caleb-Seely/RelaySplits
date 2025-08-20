@@ -13,7 +13,7 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
   const [showSecret, setShowSecret] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
 
-  console.log('[AdminSecretDisplay] Component rendered with onClose:', !!onClose);
+  // Component logging reduced for cleaner console
 
   const copyToClipboard = async () => {
     try {
@@ -26,15 +26,8 @@ const AdminSecretDisplay: React.FC<AdminSecretDisplayProps> = ({ adminSecret, te
   };
 
   const handleClose = () => {
-    console.log('[AdminSecretDisplay] handleClose called');
-    console.log('[AdminSecretDisplay] onClose prop:', onClose);
-    console.log('[AdminSecretDisplay] typeof onClose:', typeof onClose);
     if (onClose) {
-      console.log('[AdminSecretDisplay] Calling onClose function');
       onClose();
-      console.log('[AdminSecretDisplay] onClose function called');
-    } else {
-      console.log('[AdminSecretDisplay] onClose is not a function');
     }
   };
 

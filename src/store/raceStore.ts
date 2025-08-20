@@ -12,6 +12,42 @@ eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event) => {
   // The actual data fetching is handled by useEnhancedSyncManager
 });
 
+// Helper function to trigger leaderboard update after projections are recalculated
+async function triggerLeaderboardUpdateAfterRecalculation(teamId: string | undefined, legs: Leg[], currentLeg: number) {
+  if (!teamId) return;
+  
+  try {
+    // Find the current leg that's running or the next leg to start
+    const currentLegData = legs.find(leg => leg.id === currentLeg);
+    const lastCompletedLeg = legs.filter(leg => leg.actualFinish).sort((a, b) => b.id - a.id)[0];
+    
+    const lastLegCompletedAt = lastCompletedLeg?.actualFinish || Date.now();
+    
+    // Import and call the leaderboard update function
+    const { triggerLeaderboardUpdateOnLegStart } = await import('@/services/leaderboard');
+    await triggerLeaderboardUpdateOnLegStart(teamId, currentLeg, lastLegCompletedAt);
+  } catch (error) {
+    console.warn('[RaceStore] Failed to trigger leaderboard update after recalculation:', error);
+  }
+}
+
+// Helper function to get the current leg number
+function getCurrentLegNumber(legs: Leg[]): number {
+  // Find the leg that's currently running (has start time but no finish time)
+  const runningLeg = legs.find(leg => leg.actualStart && !leg.actualFinish);
+  if (runningLeg) {
+    return runningLeg.id;
+  }
+  
+  // If no leg is running, find the next leg to start
+  const lastCompletedLeg = legs.filter(leg => leg.actualFinish).sort((a, b) => b.id - a.id)[0];
+  if (lastCompletedLeg) {
+    return lastCompletedLeg.id + 1;
+  }
+  
+  // If no legs have been completed, start with leg 1
+  return 1;
+}
 
 
 interface RaceStore extends RaceData {
@@ -97,6 +133,7 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       // The previous logic was causing the dashboard to show current time instead of saved start time
 
       const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, time);
+      
       return { startTime: time, legs: finalLegs };
     }
     return { startTime: time };
@@ -129,6 +166,12 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         priority: 'high',
         source: 'raceStore'
       });
+      
+      // Trigger leaderboard update when pace changes affect projected finish time
+      if (updates.pace !== currentRunner.pace && state.teamId) {
+        const currentLeg = getCurrentLegNumber(updatedLegs);
+        triggerLeaderboardUpdateAfterRecalculation(state.teamId, updatedLegs, currentLeg);
+      }
       
       return { runners: updatedRunners, legs: updatedLegs };
     }
@@ -209,13 +252,21 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       source: 'raceStore'
     });
 
-    // Update leaderboard when a leg is completed
-    if (field === 'actualFinish' && time !== null && state.teamId) {
-      // Trigger leaderboard update asynchronously
-      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegComplete }) => {
-        triggerLeaderboardUpdateOnLegComplete(state.teamId!, id, time);
+    // Update leaderboard when projections are recalculated (leg started, finished, or pace changed)
+    if ((field === 'actualStart' || field === 'actualFinish') && time !== null && state.teamId) {
+      // Trigger leaderboard update with the updated projections
+      const currentLeg = getCurrentLegNumber(finalLegs);
+      triggerLeaderboardUpdateAfterRecalculation(state.teamId, finalLegs, currentLeg);
+    }
+
+    // Special case: Update leaderboard when leg 36 finishes (race completion)
+    if (field === 'actualFinish' && time !== null && state.teamId && id === 36) {
+      // Trigger leaderboard update to mark race as finished
+      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
+        // Pass leg 37 to indicate race completion
+        triggerLeaderboardUpdateOnLegStart(state.teamId!, 37, time);
       }).catch(error => {
-        console.error('Failed to trigger leaderboard update:', error);
+        console.error('Failed to trigger leaderboard update on race completion:', error);
       });
     }
 
@@ -280,6 +331,16 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       priority: 'high',
       source: 'raceStore'
     });
+
+    // Update leaderboard when a new leg starts
+    if (state.teamId) {
+      // Trigger leaderboard update asynchronously
+      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
+        triggerLeaderboardUpdateOnLegStart(state.teamId!, nextLegId, now);
+      }).catch(error => {
+        console.error('Failed to trigger leaderboard update on leg start:', error);
+      });
+    }
 
     return { legs: finalLegs, lastSyncedAt: Date.now() };
   }),

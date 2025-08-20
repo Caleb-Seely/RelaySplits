@@ -289,6 +289,15 @@ export const useEnhancedSyncManager = () => {
           console.log(`[useEnhancedSyncManager] Successfully synced first leg start`);
           // Update last synced timestamp without triggering a full data fetch
           storeRef.current.setLastSyncedAt(Date.now());
+          
+          // Trigger leaderboard update after successful sync
+          if (storeRef.current.teamId) {
+            import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
+              triggerLeaderboardUpdateOnLegStart(storeRef.current.teamId!, nextLegId, startTime);
+            }).catch(error => {
+              console.error('Failed to trigger leaderboard update on first leg start:', error);
+            });
+          }
         }
       } catch (error) {
         console.error(`[useEnhancedSyncManager] Error syncing first leg start:`, error);
@@ -414,6 +423,15 @@ export const useEnhancedSyncManager = () => {
         console.log(`[useEnhancedSyncManager] Successfully synced start runner`);
         // Update last synced timestamp without triggering a full data fetch
         storeRef.current.setLastSyncedAt(Date.now());
+        
+        // Trigger leaderboard update after successful sync
+        if (storeRef.current.teamId) {
+          import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
+            triggerLeaderboardUpdateOnLegStart(storeRef.current.teamId!, nextLegId, startTime);
+          }).catch(error => {
+            console.error('Failed to trigger leaderboard update on leg start:', error);
+          });
+        }
       }
     } catch (error) {
       console.error(`[useEnhancedSyncManager] Error syncing start runner:`, error);

@@ -138,12 +138,7 @@ const DemoLanding = () => {
       return;
     }
 
-    console.log('[DemoLanding] Starting team creation for:', teamName.trim());
-    console.log('[DemoLanding] Current localStorage before creation:', {
-      relay_team_id: localStorage.getItem('relay_team_id'),
-      relay_is_new_team: localStorage.getItem('relay_is_new_team'),
-      relay_device_info: localStorage.getItem('relay_device_info')
-    });
+    // Team creation logging reduced for cleaner console
     
     const result = await createTeam(
       teamName.trim(),
@@ -152,12 +147,7 @@ const DemoLanding = () => {
     );
 
     if (result.success) {
-      console.log('[DemoLanding] Team creation successful, showing admin secret dialog');
-      console.log('[DemoLanding] localStorage after creation:', {
-        relay_team_id: localStorage.getItem('relay_team_id'),
-        relay_is_new_team: localStorage.getItem('relay_is_new_team'),
-        relay_device_info: localStorage.getItem('relay_device_info')
-      });
+      // Team creation successful - showing admin secret dialog
       // Show admin secret dialog
       setAdminSecret(result.adminSecret);
       setCreatedTeamName(teamName.trim());
@@ -165,7 +155,7 @@ const DemoLanding = () => {
       // Close the form so the dialog can show properly
       setIsFormVisible(false);
     } else {
-      console.log('[DemoLanding] Team creation failed:', result.error);
+      console.error('[DemoLanding] Team creation failed:', result.error);
       toast.error(result.error || 'Failed to create team');
     }
   };
@@ -335,10 +325,7 @@ const DemoLanding = () => {
             adminSecret={adminSecret}
             teamName={createdTeamName}
             onClose={() => {
-              console.log('[DemoLanding] AdminSecretDisplay onClose called');
-              console.log('[DemoLanding] showAdminSecret before set:', showAdminSecret);
               setShowAdminSecret(false);
-              console.log('[DemoLanding] showAdminSecret after set:', false);
               
               // Clear the form state
               setFirstName('');
@@ -346,18 +333,6 @@ const DemoLanding = () => {
               setTeamName('');
               setAdminSecret('');
               setCreatedTeamName('');
-              
-              console.log('[DemoLanding] About to navigate to /');
-              console.log('[DemoLanding] Current localStorage relay_is_new_team:', localStorage.getItem('relay_is_new_team'));
-              console.log('[DemoLanding] Current localStorage relay_team_id:', localStorage.getItem('relay_team_id'));
-              console.log('[DemoLanding] Complete localStorage state:', {
-                relay_team_id: localStorage.getItem('relay_team_id'),
-                relay_is_new_team: localStorage.getItem('relay_is_new_team'),
-                relay_device_info: localStorage.getItem('relay_device_info'),
-                relay_team_name: localStorage.getItem('relay_team_name'),
-                relay_team_start_time: localStorage.getItem('relay_team_start_time'),
-                relay_team_join_code: localStorage.getItem('relay_team_join_code')
-              });
               
               // Now set the team context since the admin secret dialog is closed
               const teamId = localStorage.getItem('relay_team_id');
@@ -368,26 +343,16 @@ const DemoLanding = () => {
               
               if (teamId && teamName && teamStartTime && joinCode && deviceInfoStr) {
                 const deviceInfo = JSON.parse(deviceInfoStr);
-                console.log('[DemoLanding] Setting team context after admin secret dialog');
-                console.log('[DemoLanding] Device info to set:', deviceInfo);
                 
                 // Update the device info in the team context
                 setDeviceInfo(deviceInfo);
-                console.log('[DemoLanding] Device info updated');
               } else {
-                console.log('[DemoLanding] Missing required localStorage data:', {
-                  teamId: !!teamId,
-                  teamName: !!teamName,
-                  teamStartTime: !!teamStartTime,
-                  joinCode: !!joinCode,
-                  deviceInfoStr: !!deviceInfoStr
-                });
+                console.warn('[DemoLanding] Missing required localStorage data for team setup');
               }
               
               // The relay_is_new_team flag is already set by createTeam()
               // Navigate to the main app - let Index.tsx handle the team setup
               navigate('/');
-              console.log('[DemoLanding] navigate("/") called');
             }}
           />
         </div>

@@ -322,7 +322,12 @@ export function getNextRunner(legs: Leg[], now: Date, raceStartTime?: number): L
   const shouldLog = process.env.NODE_ENV === 'development' && 
     (sortedLegs.length === 0 || !raceStartTime || currentTime < raceStartTime - 60000); // Log if race hasn't started or is more than 1 minute away
   
-  if (shouldLog) {
+  // Only log once per minute to reduce noise
+  const logKey = `getNextRunner_${Math.floor(currentTime / 60000)}`;
+  const hasLoggedThisMinute = sessionStorage.getItem(logKey);
+  
+  if (shouldLog && !hasLoggedThisMinute) {
+    sessionStorage.setItem(logKey, 'true');
     console.log('[getNextRunner] Checking', sortedLegs.length, 'legs for next runner');
     console.log('[getNextRunner] Current time:', new Date(currentTime).toISOString());
     console.log('[getNextRunner] Race start time:', raceStartTime ? new Date(raceStartTime).toISOString() : 'undefined');
@@ -342,7 +347,7 @@ export function getNextRunner(legs: Leg[], now: Date, raceStartTime?: number): L
     if (!leg.actualStart) {
       // Special case for leg 1: if race hasn't started yet, treat race start time as effective start
       if (leg.id === 1 && raceStartTime && currentTime < raceStartTime) {
-        if (shouldLog) {
+        if (shouldLog && !hasLoggedThisMinute) {
           console.log('[getNextRunner] Found next runner: leg 1 (race not started yet)');
         }
         const result = leg;
@@ -354,7 +359,7 @@ export function getNextRunner(legs: Leg[], now: Date, raceStartTime?: number): L
       // For other legs or if race has started, check if this leg should be next
       const effectiveStartTime = leg.projectedStart || raceStartTime;
       if (effectiveStartTime && currentTime < effectiveStartTime) {
-        if (shouldLog) {
+        if (shouldLog && !hasLoggedThisMinute) {
           console.log('[getNextRunner] Found next runner: leg', leg.id, 'runner', leg.runnerId);
         }
         const result = leg;
@@ -365,7 +370,7 @@ export function getNextRunner(legs: Leg[], now: Date, raceStartTime?: number): L
     }
   }
   
-  if (shouldLog) {
+  if (shouldLog && !hasLoggedThisMinute) {
     console.log('[getNextRunner] No next runner found - all legs have started or are in progress');
   }
   

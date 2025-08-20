@@ -293,35 +293,54 @@ export async function updateTeamLeaderboard(payload: LeaderboardUpdatePayload): 
 }
 
 /**
- * Triggers leaderboard update when a leg is completed
- * This should be called whenever a leg's actualFinish time is set
+ * Triggers leaderboard update when a leg starts
+ * This handles all scenarios: first leg, regular leg transitions, and race end
  */
-export async function triggerLeaderboardUpdateOnLegComplete(
+export async function triggerLeaderboardUpdateOnLegStart(
   teamId: string,
-  completedLegId: number,
-  finishTime: number
+  startedLegId: number,
+  startTime: number
 ): Promise<boolean> {
   try {
     const state = useRaceStore.getState();
-    const { runners, legs, startTime } = state;
+    const { runners, legs, startTime: raceStartTime } = state;
     
-    // Find the completed leg
-    const completedLeg = legs.find(leg => leg.id === completedLegId);
-    if (!completedLeg) {
-      console.error('Completed leg not found:', completedLegId);
+    // Handle race completion case (leg 37 indicates race is finished)
+    if (startedLegId === 37) {
+      const currentLeg = 37; // Race finished
+      
+      // Calculate leaderboard data for race completion
+      const leaderboardData = calculateLeaderboardData(
+        teamId,
+        '', // Team name will be fetched by the Edge Function
+        raceStartTime,
+        currentLeg,
+        startTime, // Use the finish time as the last completion time
+        runners,
+        legs
+      );
+
+      // Update leaderboard
+      return await updateTeamLeaderboard(leaderboardData);
+    }
+
+    // Find the started leg
+    const startedLeg = legs.find(leg => leg.id === startedLegId);
+    if (!startedLeg) {
+      console.error('Started leg not found:', startedLegId);
       return false;
     }
 
-    // Calculate current leg (next leg to run)
-    const currentLeg = completedLegId + 1;
+    // Calculate current leg (the leg that just started)
+    const currentLeg = startedLegId;
     
     // Calculate leaderboard data
     const leaderboardData = calculateLeaderboardData(
       teamId,
       '', // Team name will be fetched by the Edge Function
-      startTime,
+      raceStartTime,
       currentLeg,
-      finishTime,
+      startTime, // Use the start time as the last completion time for projections
       runners,
       legs
     );
@@ -329,13 +348,14 @@ export async function triggerLeaderboardUpdateOnLegComplete(
     // Update leaderboard
     return await updateTeamLeaderboard(leaderboardData);
   } catch (error) {
-    console.error('Error triggering leaderboard update:', error);
+    console.error('Error triggering leaderboard update on leg start:', error);
     return false;
   }
 }
 
 /**
  * Calculates leaderboard data for a team based on current race state
+ * Uses the dashboard's calculated projected finish time for consistency
  */
 export function calculateLeaderboardData(
   teamId: string,
@@ -346,29 +366,48 @@ export function calculateLeaderboardData(
   runners: any[],
   legs: any[]
 ): LeaderboardUpdatePayload {
-  // Calculate progress percentage (assuming 36 total legs)
-  const progressPercentage = Math.round((currentLeg - 1) / 36 * 100 * 100) / 100;
+  // Use the dashboard's calculated projected finish time from the last leg
+  // This ensures consistency between dashboard and leaderboard
+  let projectedFinishTime: number;
   
-  // Calculate projected finish time based on completed legs and average pace
-  const projectedFinishTime = calculateProjectedFinishTime(
-    teamStartTime,
-    currentLeg,
-    lastLegCompletedAt,
-    runners,
-    legs
-  );
+  if (currentLeg > 36) {
+    // Race is finished - use the actual finish time
+    projectedFinishTime = lastLegCompletedAt;
+  } else {
+    // Get the last leg's projected finish time from the dashboard calculation
+    const lastLeg = legs.find(leg => leg.id === 36);
+    if (lastLeg && lastLeg.projectedFinish) {
+      projectedFinishTime = lastLeg.projectedFinish;
+    } else {
+      // Fallback: calculate based on current progress
+      projectedFinishTime = calculateProjectedFinishTimeFallback(
+        teamStartTime,
+        currentLeg,
+        lastLegCompletedAt,
+        runners,
+        legs
+      );
+    }
+  }
 
-  // Calculate average pace from completed legs
-  const averagePace = calculateAveragePace(legs, currentLeg);
-
-  // Determine status
-  const status = determineTeamStatus(currentLeg, lastLegCompletedAt);
-
-  // Get current runner name
-  const currentRunner = getCurrentRunner(runners, legs, currentLeg);
-
-  // Calculate current leg projected finish time
-  const currentLegProjectedFinish = lastLegCompletedAt + (30 * 60 * 1000); // 30 min estimate for current leg
+  // Calculate current leg projected finish time based on current leg's distance and runner's pace
+  let currentLegProjectedFinish: number;
+  
+  if (currentLeg === 37) {
+    // Race is finished - use the actual finish time
+    currentLegProjectedFinish = lastLegCompletedAt;
+  } else {
+    const currentLegData = legs.find(leg => leg.id === currentLeg);
+    if (currentLegData) {
+      const currentRunner = runners.find(r => r.id === currentLegData.runnerId);
+      const legPace = currentLegData.paceOverride ?? (currentRunner?.pace || 30 * 60); // 30 min default
+      const legDuration = (currentLegData.distance * legPace * 1000); // Convert to milliseconds
+      currentLegProjectedFinish = lastLegCompletedAt + legDuration;
+    } else {
+      // Fallback to 30 min estimate
+      currentLegProjectedFinish = lastLegCompletedAt + (30 * 60 * 1000);
+    }
+  }
   
   return {
     team_id: teamId,
@@ -379,9 +418,10 @@ export function calculateLeaderboardData(
 }
 
 /**
- * Calculates projected finish time based on race progress
+ * Fallback calculation for projected finish time when dashboard data is not available
+ * This is the original calculation method, kept as a fallback
  */
-function calculateProjectedFinishTime(
+function calculateProjectedFinishTimeFallback(
   teamStartTime: number,
   currentLeg: number,
   lastLegCompletedAt: number,
@@ -396,7 +436,7 @@ function calculateProjectedFinishTime(
   }
 
   // Calculate average pace from completed legs
-  const completedLegs = legs.filter(leg => leg.number < currentLeg && leg.actualFinish);
+  const completedLegs = legs.filter(leg => leg.id < currentLeg && leg.actualFinish);
   if (completedLegs.length === 0) {
     return lastLegCompletedAt + (36 - currentLeg + 1) * 30 * 60 * 1000; // 30 min per remaining leg
   }
@@ -409,7 +449,7 @@ function calculateProjectedFinishTime(
   const avgPaceSecondsPerMile = totalCompletedTime / totalCompletedDistance;
 
   // Calculate remaining distance
-  const remainingLegs = legs.filter(leg => leg.number >= currentLeg);
+  const remainingLegs = legs.filter(leg => leg.id >= currentLeg);
   const remainingDistance = remainingLegs.reduce((sum, leg) => sum + leg.distance, 0);
 
   return lastLegCompletedAt + (remainingDistance * avgPaceSecondsPerMile * 1000);

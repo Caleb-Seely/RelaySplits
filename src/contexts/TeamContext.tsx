@@ -32,6 +32,7 @@ export const useTeam = () => {
 export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [deviceInfo, setDeviceInfoState] = useState<DeviceInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  let lastLoggedTeamId: string | null = null; // Track last logged team ID to reduce noise
 
   useEffect(() => {
     // Load stored team/device info on mount
@@ -91,7 +92,11 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           type: 'UPDATE_TEAM_ID',
           teamId: teamId
         });
-        console.log('[TeamContext] Sent team ID to service worker:', teamId);
+        // Only log team ID changes, not every update
+        if (teamId !== lastLoggedTeamId) {
+          console.log('[TeamContext] Sent team ID to service worker:', teamId);
+          lastLoggedTeamId = teamId;
+        }
       } catch (error) {
         console.log('[TeamContext] Failed to send team ID to service worker:', error);
       }

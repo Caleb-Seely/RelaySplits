@@ -23,6 +23,7 @@ const NOTIFICATION_DEDUP_WINDOW = 5 * 60 * 1000; // 5 minutes
 let currentTeamId = null;
 let supabaseUrl = null;
 let supabaseAnonKey = null;
+let lastLoggedTeamId = null; // Track last logged team ID to reduce noise
 
 // Helper function to track check count for reduced logging
 async function getCheckCount() {
@@ -624,7 +625,10 @@ self.addEventListener('push', (event) => {
 
 // Handle messages from the main app
 self.addEventListener('message', (event) => {
-  console.log('[SW] Message received:', event.data);
+  // Only log non-routine messages to reduce noise
+  if (event.data && event.data.type !== 'UPDATE_TEAM_ID' && event.data.type !== 'UPDATE_SUPABASE_CONFIG') {
+    console.log('[SW] Message received:', event.data);
+  }
   
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, body, data } = event.data;
@@ -647,14 +651,23 @@ self.addEventListener('message', (event) => {
   // Handle team ID updates from main thread
   if (event.data && event.data.type === 'UPDATE_TEAM_ID') {
     currentTeamId = event.data.teamId;
-    console.log('[SW] Team ID updated:', currentTeamId);
+    // Only log team ID changes, not every update
+    if (currentTeamId !== lastLoggedTeamId) {
+      console.log('[SW] Team ID updated:', currentTeamId);
+      lastLoggedTeamId = currentTeamId;
+    }
   }
 
   // Handle Supabase config updates from main thread
   if (event.data && event.data.type === 'UPDATE_SUPABASE_CONFIG') {
-    supabaseUrl = event.data.supabaseUrl;
-    supabaseAnonKey = event.data.supabaseAnonKey;
-    console.log('[SW] Supabase config updated:', { supabaseUrl, hasAnonKey: !!supabaseAnonKey });
+    const newUrl = event.data.supabaseUrl;
+    const newKey = event.data.supabaseAnonKey;
+    // Only log if config actually changed
+    if (newUrl !== supabaseUrl || newKey !== supabaseAnonKey) {
+      supabaseUrl = newUrl;
+      supabaseAnonKey = newKey;
+      console.log('[SW] Supabase config updated:', { supabaseUrl, hasAnonKey: !!supabaseAnonKey });
+    }
   }
   
   // Handle start background sync message

@@ -148,7 +148,10 @@ function validateTeam(body: any): { success: boolean; data?: any; error?: string
 }
 
 export async function invokeEdge<T = any>(name: string, body: Record<string, any>) {
-  console.log(`[invokeEdge] Calling ${name} with body:`, body);
+  // Only log API calls in development and not for routine operations
+  if (process.env.NODE_ENV === 'development' && !name.includes('ping')) {
+    console.log(`[invokeEdge] Calling ${name} with body:`, body);
+  }
   
   try {
     // Validate input data based on the function being called
@@ -168,7 +171,10 @@ export async function invokeEdge<T = any>(name: string, body: Record<string, any
       body: JSON.stringify(validationResult.data)
     });
 
-    console.log(`[invokeEdge] ${name} response status:`, response.status);
+    // Only log response status for non-routine operations
+    if (process.env.NODE_ENV === 'development' && !name.includes('ping')) {
+      console.log(`[invokeEdge] ${name} response status:`, response.status);
+    }
 
     // Handle rate limiting
     if (isRateLimited(response)) {
@@ -184,7 +190,10 @@ export async function invokeEdge<T = any>(name: string, body: Record<string, any
     }
 
     const data = await response.json();
-    console.log(`[invokeEdge] ${name} success:`, data);
+    // Only log success for non-routine operations
+    if (process.env.NODE_ENV === 'development' && !name.includes('ping')) {
+      console.log(`[invokeEdge] ${name} success:`, data);
+    }
     return { data: data as T };
 
   } catch (e) {
