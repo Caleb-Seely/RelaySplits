@@ -45,15 +45,26 @@ export const useEnhancedSyncManager = () => {
     const unsubscribeLegUpdates = eventBus.subscribe(EVENT_TYPES.LEG_UPDATE, async (event) => {
       const { legId, field, value, previousValue, runnerId, timestamp } = event.payload;
       
+      console.log('[useEnhancedSyncManager] Received LEG_UPDATE event for leg:', legId, 'field:', field);
+      
       // Skip if no actual change
-      if (value === previousValue) return;
+      if (value === previousValue) {
+        console.log('[useEnhancedSyncManager] Skipping LEG_UPDATE - no actual change');
+        return;
+      }
       
       // Skip if we're processing a sync operation
-      if (isProcessingSync.current) return;
+      if (isProcessingSync.current) {
+        console.log('[useEnhancedSyncManager] Skipping LEG_UPDATE - sync already in progress');
+        return;
+      }
       
       // Rate limiting
       const now = Date.now();
-      if (now - lastSyncAttempt.current < SYNC_COOLDOWN_MS) return;
+      if (now - lastSyncAttempt.current < SYNC_COOLDOWN_MS) {
+        console.log('[useEnhancedSyncManager] Skipping LEG_UPDATE - rate limited');
+        return;
+      }
       lastSyncAttempt.current = now;
       
       await handleLegSync(legId, field, value, previousValue, runnerId);
@@ -107,11 +118,94 @@ export const useEnhancedSyncManager = () => {
     previousValue: number | null,
     runnerId: number
   ) => {
-    if (!storeRef.current.teamId) return;
+    console.log('[useEnhancedSyncManager] Syncing leg:', legId, 'field:', field);
+
+    if (!storeRef.current.teamId) {
+      console.log('[useEnhancedSyncManager] No teamId, skipping sync');
+      return;
+    }
 
     const leg = storeRef.current.legs.find(l => l.id === legId);
-    if (!leg?.remoteId) return;
+    
+    if (!leg) {
+      console.error('[useEnhancedSyncManager] Leg not found:', legId);
+      return;
+    }
+    
+    // If leg doesn't have a remoteId, we need to create it in the database first
+    if (!leg.remoteId) {
+      console.log('[useEnhancedSyncManager] Leg has no remoteId, creating in database first');
+      
+      try {
+        // Find the runner to get their remoteId
+        const runner = storeRef.current.runners.find(r => r.id === runnerId);
+        if (!runner?.remoteId) {
+          console.error('[useEnhancedSyncManager] Runner has no remoteId, cannot create leg');
+          return;
+        }
+        
+        // Create the leg in the database
+        const deviceId = getDeviceId();
+        const legPayload = {
+          id: crypto.randomUUID(),
+          number: legId,
+          distance: leg.distance,
+          runner_id: runner.remoteId,
+          start_time: leg.actualStart ? new Date(leg.actualStart).toISOString() : null,
+          finish_time: leg.actualFinish ? new Date(leg.actualFinish).toISOString() : null
+        };
+        
+        console.log('[useEnhancedSyncManager] Creating leg in database:', legPayload);
+        
+        const result = await invokeEdge('legs-upsert', {
+          teamId: storeRef.current.teamId,
+          deviceId,
+          legs: [legPayload],
+          action: 'upsert'
+        });
+        
+        if ((result as any).error) {
+          console.error('[useEnhancedSyncManager] Failed to create leg:', (result as any).error);
+          return;
+        }
+        
+        // Update the leg with the remoteId
+        const updatedLegs = storeRef.current.legs.map(l => 
+          l.id === legId ? { ...l, remoteId: legPayload.id } : l
+        );
+        storeRef.current.setRaceData({ legs: updatedLegs });
+        
+        console.log('[useEnhancedSyncManager] Successfully created leg with remoteId:', legPayload.id);
+        
+        // Now proceed with the normal sync process
+        const updatedLeg = updatedLegs.find(l => l.id === legId);
+        if (!updatedLeg) {
+          console.error('[useEnhancedSyncManager] Failed to find updated leg');
+          return;
+        }
+        
+        // Continue with the normal sync process using the updated leg
+        await handleLegSyncWithRemoteId(updatedLeg, field, value, previousValue, runnerId);
+        return;
+        
+      } catch (error) {
+        console.error('[useEnhancedSyncManager] Error creating leg:', error);
+        return;
+      }
+    }
+    
+    // Normal sync process for legs with remoteId
+    await handleLegSyncWithRemoteId(leg, field, value, previousValue, runnerId);
+  }, []);
 
+  // Helper function to handle leg sync when remoteId is available
+  const handleLegSyncWithRemoteId = useCallback(async (
+    leg: any,
+    field: 'actualStart' | 'actualFinish',
+    value: number | null,
+    previousValue: number | null,
+    runnerId: number
+  ) => {
     // Validate before sync
     if (!validateLegDataIntegrity(leg, 'pre-sync')) {
       console.error('Pre-sync validation failed, aborting sync');
@@ -119,7 +213,7 @@ export const useEnhancedSyncManager = () => {
     }
 
     // Create a unique key for this sync operation
-    const syncKey = `${legId}-${field}-${value}`;
+    const syncKey = `${leg.id}-${field}-${value}`;
     
     // Check if this exact sync is already pending
     if (pendingSyncs.current.has(syncKey)) {
@@ -159,7 +253,7 @@ export const useEnhancedSyncManager = () => {
         // Include any other fields that should be preserved
       };
 
-      console.log(`[useEnhancedSyncManager] Syncing leg ${legId} ${field}:`, payload);
+      console.log(`[useEnhancedSyncManager] Syncing leg ${leg.id} ${field}:`, payload);
 
       const deviceId = getDeviceId();
       const result = await invokeEdge('legs-upsert', {
@@ -170,7 +264,7 @@ export const useEnhancedSyncManager = () => {
       });
       
       if ((result as any).error) {
-        console.error(`[useEnhancedSyncManager] Failed to sync leg ${legId}:`, (result as any).error);
+        console.error(`[useEnhancedSyncManager] Failed to sync leg ${leg.id}:`, (result as any).error);
         // Queue the change for retry
         queueChange({
           table: 'legs',
@@ -182,10 +276,10 @@ export const useEnhancedSyncManager = () => {
           }
         });
       } else {
-        console.log(`[useEnhancedSyncManager] Successfully synced leg ${legId} ${field}`);
+        console.log(`[useEnhancedSyncManager] Successfully synced leg ${leg.id} ${field}`);
         
         // Validate after sync
-        const updatedLeg = storeRef.current.legs.find(l => l.id === legId);
+        const updatedLeg = storeRef.current.legs.find(l => l.id === leg.id);
         if (updatedLeg && !validateLegDataIntegrity(updatedLeg, 'post-sync')) {
           console.error('Post-sync validation failed, data may be corrupted');
           // Could trigger recovery mechanism here
@@ -195,10 +289,9 @@ export const useEnhancedSyncManager = () => {
         storeRef.current.setLastSyncedAt(Date.now());
       }
     } catch (error) {
-      console.error(`[useEnhancedSyncManager] Error syncing leg ${legId}:`, error);
+      console.error(`[useEnhancedSyncManager] Error syncing leg ${leg.id}:`, error);
       trackSyncError(error as Error, {
-        sync_method: 'leg_update',
-        field: field
+        sync_method: 'leg_update'
       });
       // Queue the change for retry
       queueChange({

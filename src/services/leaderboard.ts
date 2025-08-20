@@ -230,7 +230,7 @@ export async function fetchLeaderboardData(params?: LeaderboardRequest): Promise
       return {
         id: team.team_id,
         team_name: getTeamName(team.team_id),
-        team_start_time: team.team_start_time || Date.now(),
+        team_start_time: team.team_start_time, // Use actual team start time, don't fallback to current time
         current_leg: team.current_leg || 1,
         projected_finish_time: team.projected_finish_time,
         current_leg_projected_finish: team.projected_finish_time || (Date.now() + 30 * 60 * 1000),
@@ -370,7 +370,7 @@ export async function fetchTeamLeaderboardData(teamId: string): Promise<any> {
     const result = {
       id: typedTeamData.team_id,
       team_name: getTeamName(typedTeamData.team_id),
-      team_start_time: typedTeamData.team_start_time || Date.now(),
+      team_start_time: typedTeamData.team_start_time, // Use actual team start time, don't fallback to current time
       current_leg: typedTeamData.current_leg || 1,
       projected_finish_time: typedTeamData.projected_finish_time,
       current_leg_projected_finish: typedTeamData.projected_finish_time || (Date.now() + 30 * 60 * 1000),
@@ -545,8 +545,9 @@ export function calculateLeaderboardData(
   let projectedFinishTime: number;
   
   if (currentLeg > 36) {
-    // Race is finished - use the actual finish time
+    // Race is finished - use the actual finish time (lastLegCompletedAt is the race finish time)
     projectedFinishTime = lastLegCompletedAt;
+    console.log('[calculateLeaderboardData] Race finished - using actual finish time:', new Date(projectedFinishTime).toISOString());
   } else {
     // Get the last leg's projected finish time from the dashboard calculation
     const lastLeg = legs.find(leg => leg.id === 36);
@@ -570,6 +571,7 @@ export function calculateLeaderboardData(
   if (currentLeg === 37) {
     // Race is finished - use the actual finish time
     currentLegProjectedFinish = lastLegCompletedAt;
+    console.log('[calculateLeaderboardData] Race finished - current leg projected finish:', new Date(currentLegProjectedFinish).toISOString());
   } else {
     const currentLegData = legs.find(leg => leg.id === currentLeg);
     if (currentLegData && currentLegData.projectedFinish) {
@@ -591,12 +593,23 @@ export function calculateLeaderboardData(
     }
   }
   
-  return {
+  const result = {
     team_id: teamId,
     current_leg: currentLeg,
     projected_finish_time: projectedFinishTime,
     current_leg_projected_finish: currentLegProjectedFinish
   };
+  
+  console.log('[calculateLeaderboardData] Calculated leaderboard data:', {
+    teamId,
+    currentLeg,
+    projectedFinishTime: new Date(projectedFinishTime).toISOString(),
+    currentLegProjectedFinish: new Date(currentLegProjectedFinish).toISOString(),
+    teamStartTime: new Date(teamStartTime).toISOString(),
+    lastLegCompletedAt: new Date(lastLegCompletedAt).toISOString()
+  });
+  
+  return result;
 }
 
 /**

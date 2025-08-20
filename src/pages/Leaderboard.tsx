@@ -5,10 +5,9 @@ import { LoadingSpinner } from '@/components/ui/loading-states';
 import LeaderboardErrorBoundary from '@/components/ErrorBoundary';
 import { useTeam } from '@/contexts/TeamContext';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
-import { Button } from '@/components/ui/button';
-import { RefreshCw, Zap, Trophy, Users, Clock, MapPin, Flame, Star, Play, Bug } from 'lucide-react';
-import { leaderboardDebugger } from '@/utils/leaderboardDebug';
+import { RefreshCw, Trophy, Flame, Star, Play, Home } from 'lucide-react';
 import { formatDuration } from '@/utils/raceUtils';
+import { useNavigate } from 'react-router-dom';
 
 const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; position: number; isCurrentTeam?: boolean }) => {
   const podiumHeight = position === 1 ? 'h-32' : position === 2 ? 'h-24' : 'h-20';
@@ -38,10 +37,10 @@ const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; posi
           {position === 3 && <Flame className="h-6 w-6 text-orange-500 mx-auto" />}
         </div>
       </div>
-      <div className="mt-2 text-center bg-white rounded-lg p-3 shadow-md border border-gray-100 min-w-[140px] max-w-[200px]">
-        <h3 className={`font-bold text-sm truncate w-full ${isCurrentTeam ? 'text-blue-600' : 'text-gray-800'}`}>
-          {team.team_name || `Team ${team.id}`}
-        </h3>
+             <div className="mt-2 text-center bg-white rounded-lg p-3 shadow-md border border-gray-100 w-[200px]">
+         <h3 className={`font-bold text-sm truncate w-full ${isCurrentTeam ? 'text-blue-600' : 'text-gray-800'}`}>
+           {team.team_name || `Team ${team.id}`}
+         </h3>
         <p className="text-xs text-gray-500 mt-1">
           Current: Leg {team.current_leg || 0}
         </p>
@@ -96,8 +95,90 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
 
   // Calculate total race time for finished teams
   const getTotalRaceTime = () => {
-    if (!team.team_start_time || !team.projected_finish_time) return null;
-    return team.projected_finish_time - team.team_start_time;
+    if (!team.team_start_time || !team.projected_finish_time) {
+      console.warn('Missing timestamps for race time calculation:', {
+        teamId: team.id,
+        team_start_time: team.team_start_time,
+        projected_finish_time: team.projected_finish_time
+      });
+      return null;
+    }
+    
+    // Ensure both timestamps are valid numbers and handle potential string timestamps
+    let startTime: number;
+    let finishTime: number;
+    
+    try {
+      // Handle different timestamp formats
+      if (typeof team.team_start_time === 'number') {
+        startTime = team.team_start_time;
+      } else if (typeof team.team_start_time === 'string') {
+        startTime = new Date(team.team_start_time).getTime();
+      } else {
+        console.warn('Invalid team_start_time format:', team.team_start_time);
+        return null;
+      }
+      
+      if (typeof team.projected_finish_time === 'number') {
+        finishTime = team.projected_finish_time;
+      } else if (typeof team.projected_finish_time === 'string') {
+        finishTime = new Date(team.projected_finish_time).getTime();
+      } else {
+        console.warn('Invalid projected_finish_time format:', team.projected_finish_time);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error parsing timestamps:', error);
+      return null;
+    }
+    
+    // Check if timestamps are valid and finish time is after start time
+    if (isNaN(startTime) || isNaN(finishTime)) {
+      console.warn('NaN timestamps detected:', { 
+        teamId: team.id, 
+        team_start_time: team.team_start_time, 
+        projected_finish_time: team.projected_finish_time,
+        startTime,
+        finishTime
+      });
+      return null;
+    }
+    
+    if (finishTime <= startTime) {
+      console.warn('Finish time is not after start time:', { 
+        teamId: team.id, 
+        startTime: new Date(startTime).toISOString(),
+        finishTime: new Date(finishTime).toISOString(),
+        difference: finishTime - startTime
+      });
+      return null;
+    }
+    
+    // Calculate race time with overflow protection
+    const raceTime = finishTime - startTime;
+    
+    // Check for unreasonable race times (more than 48 hours or negative)
+    if (raceTime < 0 || raceTime > 48 * 60 * 60 * 1000) {
+      console.warn('Unreasonable race time calculated:', {
+        teamId: team.id,
+        startTime: new Date(startTime).toISOString(),
+        finishTime: new Date(finishTime).toISOString(),
+        raceTimeMs: raceTime,
+        raceTimeHours: raceTime / (1000 * 60 * 60)
+      });
+      return null;
+    }
+    
+    console.log('Race time calculation successful:', {
+      teamId: team.id,
+      startTime: new Date(startTime).toISOString(),
+      finishTime: new Date(finishTime).toISOString(),
+      raceTimeMs: raceTime,
+      raceTimeFormatted: formatDuration(raceTime),
+      raceTimeHours: raceTime / (1000 * 60 * 60)
+    });
+    
+    return raceTime;
   };
 
   // Check if team is finished (on leg 37)
@@ -116,40 +197,43 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
   const totalRaceTime = getTotalRaceTime();
 
     return (
-    <div className="flex items-center space-x-2 w-full">
-      {/* Rank Badge - More inline with team name */}
-      <div className="w-6 h-6 bg-gradient-to-br from-gray-700 to-gray-800 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg flex-shrink-0">
-        {position}
-      </div>
-      
+    <div className="flex items-center space-x-2 w-full max-w-full overflow-hidden">
       {/* Main Card */}
-      <div className={`group relative bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-gray-700/50 hover:shadow-xl hover:border-gray-600/50 transition-all duration-300 flex-1 ${isCurrentTeam ? 'ring-2 ring-blue-500/50 ring-opacity-50 bg-gradient-to-r from-blue-900/20 to-indigo-900/20' : ''}`}>
+      <div className={`group relative bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-gray-700/50 hover:shadow-xl hover:border-gray-600/50 transition-all duration-300 w-full max-w-full overflow-hidden ${isCurrentTeam ? 'ring-2 ring-blue-500/50 ring-opacity-50 bg-gradient-to-r from-blue-900/20 to-indigo-900/20' : ''}`}>
         {/* Current Team Indicator */}
         {isCurrentTeam && (
           <div className="absolute top-2 right-2 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
         )}
 
                  {/* Header Row - Team Name and Leg Info */}
-         <div className="flex items-center justify-between mb-3 gap-3">
-           {/* Team Name */}
-           <div className="min-w-0 flex-1 max-w-full">
-             <h3 className="text-base font-bold text-gray-100 group-hover:text-blue-400 transition-colors truncate w-full">
-               {team.team_name || `Team ${team.id}`}
-             </h3>
+         <div className="flex items-center justify-between mb-3 gap-3 min-w-0">
+           {/* Team Name with Position */}
+           <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
+             {/* Position Badge - Now inside the card */}
+             <div className="w-7 h-7 bg-gradient-to-br from-gray-700 to-gray-800 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg flex-shrink-0">
+               {position}
+             </div>
+             
+             {/* Team Name */}
+             <div className="min-w-0 flex-1 overflow-hidden">
+               <h3 className="text-sm font-bold text-gray-100 group-hover:text-blue-400 transition-colors truncate">
+                 {team.team_name || `Team ${team.id}`}
+               </h3>
+             </div>
            </div>
            
            {/* Next Leg with Time Badge or Total Race Time for finished teams */}
-           <div className="flex items-center flex-shrink-0">
+           <div className="flex items-center flex-shrink-0 min-w-0">
              {isFinished ? (
                // Show total race time for finished teams
                <div className="flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm bg-green-600">
                  <Trophy className="h-3 w-3 text-white" />
-                 <span>Total: {totalRaceTime ? formatDuration(totalRaceTime) : '--:--'}</span>
+                 <span className="whitespace-nowrap">Total: {totalRaceTime ? formatDuration(totalRaceTime) : '--:--'}</span>
                </div>
              ) : (
                // Show leg badge for active teams
                minutesToFinish !== null && (
-                 <div className={`flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm ${
+                 <div className={`flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm whitespace-nowrap ${
                    minutesToFinish === 0
                      ? 'bg-gray-500' // Finished or should be finished
                      : minutesToFinish <= 10 
@@ -179,19 +263,19 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
         </div>
       </div>
 
-      {/* Bottom Row - Start Time and Projected Finish */}
-      <div className="flex justify-between items-center text-xs text-gray-400">
+             {/* Bottom Row - Start Time and Projected Finish */}
+       <div className="flex justify-between items-center text-xs text-gray-400">
         {/* Start Time */}
-        <div className="flex items-center">
-          <span>Start: {formatTime(team.team_start_time)}</span>
+        <div className="flex items-center min-w-0">
+          <span className="truncate">Start: {formatTime(team.team_start_time)}</span>
         </div>
         
         {/* Projected Finish or Finish Time */}
-        <div className="flex items-center">
+        <div className="flex items-center min-w-0 ml-2">
           {isFinished ? (
-            <span className="text-green-400 font-medium">Finish: {formatTime(team.projected_finish_time)}</span>
+            <span className="text-green-400 font-medium truncate">Finish: {formatTime(team.projected_finish_time)}</span>
           ) : (
-            <span>Proj. Finish: {formatTime(team.projected_finish_time)}</span>
+            <span className="truncate">Proj. Finish: {formatTime(team.projected_finish_time)}</span>
           )}
         </div>
       </div>
@@ -206,6 +290,7 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
 export const LeaderboardPage = () => {
   const queryClient = useQueryClient();
   const { deviceInfo } = useTeam();
+  const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
 
@@ -236,71 +321,9 @@ export const LeaderboardPage = () => {
     }
   }, [refetch]);
 
-  const forceRefresh = useCallback(async () => {
-    console.log('[LeaderboardPage] Force refreshing leaderboard...');
-    
-    // Clear all caches
-    clearAllLeaderboardCache();
-    
-    // Invalidate the query to force a fresh fetch
-    queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
-    
-    // Trigger a refetch
-    await refetch();
-    setLastUpdateTime(new Date());
-  }, [queryClient, refetch]);
-
-  const handleTestRealtime = useCallback(() => {
-    console.log('[LeaderboardPage] Testing real-time update...');
-    console.log('[LeaderboardPage] Current device info:', deviceInfo);
-    
-    const testEvent = {
-      type: EVENT_TYPES.REALTIME_UPDATE,
-      payload: {
-        type: 'leaderboard',
-        action: 'updated',
-        team_id: deviceInfo?.teamId,
-        current_leg: 5,
-        projected_finish_time: Date.now() + 3600000,
-        device_id: 'test-device',
-        timestamp: new Date().toISOString()
-      },
-      priority: 'high' as const,
-      source: 'test'
-    };
-    
-    console.log('[LeaderboardPage] Publishing test event:', testEvent);
-    eventBus.publish(testEvent);
-  }, [deviceInfo?.teamId]);
-
-  const handleDebugTest = useCallback(async () => {
-    if (!deviceInfo?.teamId) {
-      console.warn('[LeaderboardPage] No team ID available for debug test');
-      return;
-    }
-    
-    console.log('[LeaderboardPage] Running debug test for team:', deviceInfo.teamId);
-    
-    try {
-      // Enable debug mode
-      leaderboardDebugger.enable();
-      
-      // Run comprehensive test
-      const result = await leaderboardDebugger.runComprehensiveTest(deviceInfo.teamId);
-      
-      console.log('[LeaderboardPage] Debug test completed:', result);
-      
-      // Refresh the leaderboard after test
-      await refetch();
-      setLastUpdateTime(new Date());
-      
-    } catch (error) {
-      console.error('[LeaderboardPage] Debug test failed:', error);
-    } finally {
-      // Disable debug mode after test
-      leaderboardDebugger.disable();
-    }
-  }, [deviceInfo?.teamId, refetch]);
+  const handleNavigateToDashboard = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
 
   const updateTeamInCache = useCallback(async (teamId: string) => {
     console.log('[LeaderboardPage] Updating team in cache:', teamId);
@@ -442,20 +465,11 @@ export const LeaderboardPage = () => {
              </div>
                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button 
-                  onClick={handleTestRealtime} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  onClick={handleNavigateToDashboard} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-blue-600 text-blue-300 bg-transparent hover:bg-blue-800 hover:border-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                 >
-                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Test RT</span>
-                  <span className="sm:hidden">RT</span>
-                </button>
-                <button 
-                  onClick={forceRefresh} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                >
-                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Force Refresh</span>
-                  <span className="sm:hidden">Force</span>
+                  <Home className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Dashboard
                 </button>
                 <button 
                   onClick={handleManualRefresh} 
@@ -494,27 +508,11 @@ export const LeaderboardPage = () => {
              </div>
                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button 
-                  onClick={handleTestRealtime} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  onClick={handleNavigateToDashboard} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-blue-600 text-blue-300 bg-transparent hover:bg-blue-800 hover:border-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                 >
-                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Test RT</span>
-                  <span className="sm:hidden">RT</span>
-                </button>
-                <button 
-                  onClick={handleDebugTest} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-purple-600 text-purple-300 bg-transparent hover:bg-purple-800 hover:border-purple-500 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                >
-                  <Bug className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Debug
-                </button>
-                <button 
-                  onClick={forceRefresh} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                >
-                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Force Refresh</span>
-                  <span className="sm:hidden">Force</span>
+                  <Home className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Dashboard
                 </button>
                 <button 
                   onClick={handleManualRefresh} 
@@ -558,27 +556,11 @@ export const LeaderboardPage = () => {
               )}
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button 
-                  onClick={handleTestRealtime} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  onClick={handleNavigateToDashboard} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-blue-600 text-blue-300 bg-transparent hover:bg-blue-800 hover:border-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                 >
-                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Test RT</span>
-                  <span className="sm:hidden">RT</span>
-                </button>
-                <button 
-                  onClick={handleDebugTest} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-purple-600 text-purple-300 bg-transparent hover:bg-purple-800 hover:border-purple-500 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                >
-                  <Bug className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Debug
-                </button>
-                <button 
-                  onClick={forceRefresh} 
-                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                >
-                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Force Refresh</span>
-                  <span className="sm:hidden">Force</span>
+                  <Home className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Dashboard
                 </button>
                 <button 
                   onClick={handleManualRefresh} 
@@ -600,16 +582,16 @@ export const LeaderboardPage = () => {
                 {teams.length} teams competing
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4">
-              {teams.map((team, index) => (
-                <TeamCard
-                  key={team.id || index}
-                  team={team}
-                  position={index + 1}
-                  isCurrentTeam={team.id === deviceInfo?.teamId}
-                />
-              ))}
-            </div>
+                         <div className="grid grid-cols-1 gap-4 w-full max-w-full overflow-hidden">
+               {teams.map((team, index) => (
+                 <TeamCard
+                   key={team.id || index}
+                   team={team}
+                   position={index + 1}
+                   isCurrentTeam={team.id === deviceInfo?.teamId}
+                 />
+               ))}
+             </div>
           </div>
 
           {teams.length === 0 && (

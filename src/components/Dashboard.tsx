@@ -353,7 +353,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         const now = Date.now();
         if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
           lastNotificationTime = now;
-          toast.success(`Updated from another device`, {
+          toast.success(`Updated`, {
             duration: 2000,
             position: 'top-right'
           });
@@ -686,6 +686,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       } else {
         toast.success(`Transitioned from ${currentRunnerInfo?.name || `Runner ${currentRunner.runnerId}`} to ${nextRunnerInfo?.name || `Runner ${nextRunner.runnerId}`}`);
       }
+      
+      // Add sync confirmation
+      toast.success('Runner action synced to database...');
     } catch (error) {
       console.error('[handleStartRunner] Error:', error);
       toast.error('Failed to start runner. Please try again.');
@@ -880,74 +883,79 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
           </div>
 
           {/* Enhanced Current Status Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
-            {/* Current Runner Card */}
-            <Card className="group relative overflow-hidden border-border shadow-2xl bg-card">
-              <div className="absolute inset-0 bg-green-500 h-1"></div>
+          <div className={`grid gap-3 md:gap-6 ${
+            isRaceComplete() 
+              ? 'grid-cols-1 lg:grid-cols-1 lg:max-w-2xl lg:mx-auto' 
+              : 'grid-cols-1 lg:grid-cols-2'
+          }`}>
+            {/* Current Runner Card - Hide when race is complete */}
+            {!isRaceComplete() && (
+              <Card className="group relative overflow-hidden border-border shadow-2xl bg-card">
+                <div className="absolute inset-0 bg-green-500 h-1"></div>
 
-              <div className="p-2 sm:p-3 md:p-4 bg-green-500/10 rounded-b-none rounded-lg">
-                <div className="space-y-4">
-                  {isCurrentRunnerLoading ? (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Skeleton className="h-8 w-32 mb-2" />
-                        <div className="flex items-center gap-1">
-                          <Skeleton className="h-4 w-4" />
-                          <Skeleton className="h-4 w-16" />
+                <div className="p-2 sm:p-3 md:p-4 bg-green-500/10 rounded-b-none rounded-lg">
+                  <div className="space-y-4">
+                    {isCurrentRunnerLoading ? (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Skeleton className="h-8 w-32 mb-2" />
+                          <div className="flex items-center gap-1">
+                            <Skeleton className="h-4 w-4" />
+                            <Skeleton className="h-4 w-16" />
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <Skeleton className="h-6 w-20 mb-2" />
+                          <div className="flex items-center justify-center gap-1">
+                            <Skeleton className="h-4 w-4" />
+                            <Skeleton className="h-4 w-12" />
+                          </div>
                         </div>
                       </div>
-                      <div className="text-center">
-                        <Skeleton className="h-6 w-20 mb-2" />
-                        <div className="flex items-center justify-center gap-1">
-                          <Skeleton className="h-4 w-4" />
-                          <Skeleton className="h-4 w-12" />
+                    ) : currentRunner && currentRunnerInfo ? (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-2xl font-bold text-foreground">
+                            {currentRunnerInfo.name}
+                          </h3>
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                            <Users className="h-4 w-4" />
+                            <span>Van {currentRunnerInfo.van}</span>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <Badge className="bg-green-500 animate-pulse text-white text-sm px-3 py-1 font-semibold mb-2">
+                            Leg {currentRunner.id}
+                          </Badge>
+                          <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                            <Target className="h-4 w-4" />
+                            <span>{formatPace((currentRunner as any).paceOverride ?? currentRunnerInfo.pace)}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ) : currentRunner && currentRunnerInfo ? (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground">
-                          {currentRunnerInfo.name}
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                          <Users className="h-4 w-4" />
-                          <span>Van {currentRunnerInfo.van}</span>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-2xl font-bold text-muted-foreground">
+                            No Active Runner
+                          </h3>
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                            <Clock className="h-4 w-4" />
+                            <span>Waiting for next leg</span>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="w-12 h-8 rounded flex items-center justify-center mb-2">
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                            <span>--</span>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-center">
-                        <Badge className="bg-green-500 animate-pulse text-white text-sm px-3 py-1 font-semibold mb-2">
-                          Leg {currentRunner.id}
-                        </Badge>
-                        <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
-                          <Target className="h-4 w-4" />
-                          <span>{formatPace((currentRunner as any).paceOverride ?? currentRunnerInfo.pace)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-2xl font-bold text-muted-foreground">
-                          No Active Runner
-                        </h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                          <Clock className="h-4 w-4" />
-                          <span>Waiting for next leg</span>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="w-12 h-8 rounded flex items-center justify-center mb-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
-                          <span>--</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
 
               <CardContent className="pt-4">
                 <div className="space-y-4">
@@ -1059,6 +1067,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Next Runner Card - Restored blue styling */}
             <Card className="group relative overflow-hidden border-border shadow-2xl bg-card">
@@ -1129,7 +1138,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                               </div>
                             </div>
                             <div className="text-center">
-                              <Badge className="bg-red-500 text-white text-sm px-3 py-1 font-semibold mb-2">
+                              <Badge className="bg-blue-500 text-white text-sm px-3 py-1 font-semibold mb-2">
                                 <Trophy className="h-4 w-4 mr-0.5" />
                                 Finish
                               </Badge>
@@ -1228,7 +1237,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                         </div>
                       </div>
                       
-                      <div className="flex flex-col items-center gap-2 mt-6">
+                      <div className="flex flex-col items-center gap-2">
                         <Button
                           onClick={() => {
                             console.log('Triggering confetti for celebrate');
@@ -1239,7 +1248,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                             toast(getRandomCelebrationMessage());
                           }}
                           size="lg"
-                          className="bg-green-500 hover:bg-green-600 text-white px-6 py-3"
+                          className="bg-green-500 hover:bg-green-600 text-white mt-8 px-6 py-3"
                         >
                           🎉 Celebrate
                         </Button>
@@ -1408,19 +1417,23 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                               <div className="flex gap-2">
                                 <Button
                                   onClick={() => {
+                                    const leg36 = legs.find(leg => leg.id === 36);
+                                    console.log('[Dashboard] Finish Race button clicked for leg 36');
                                     updateLegActualTime(36, 'actualFinish', Date.now());
                                     console.log('Triggering confetti for finish race');
                                     triggerConfetti({ particleCount: 200, spread: 100 });
                                     trackCelebrationButtonClicked({
                                       team_id: teamId
                                     });
+                                    toast.success('Race finished! 🎉');
                                   }}
-                                  size="sm"
-                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
+                                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
                                 >
-                                  <Trophy className="h-4 w-4" />
                                   Finish Race
                                 </Button>
+                                
+                                {/* Debug button - only show in development */}
+
                               </div>
                             );
                           }
@@ -1451,21 +1464,25 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                 const leg36 = legs.find(leg => leg.id === 36);
                                 return leg36?.actualStart && !leg36?.actualFinish && canEdit;
                               })() && (
-                                <Button
-                                  onClick={() => {
-                                    updateLegActualTime(36, 'actualFinish', Date.now());
-                                    console.log('Triggering confetti for finish race');
-                                    triggerConfetti({ particleCount: 200, spread: 100 });
-                                    trackCelebrationButtonClicked({
-                                      team_id: teamId
-                                    });
-                                  }}
-                                  size="sm"
-                                  className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
-                                >
-                                  <Trophy className="h-4 w-4" />
-                                  Finish Race
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button
+                                    onClick={() => {
+                                      console.log('[Dashboard] Finish Race button clicked for leg 36');
+                                      updateLegActualTime(36, 'actualFinish', Date.now());
+                                      console.log('Triggering confetti for finish race');
+                                      triggerConfetti({ particleCount: 200, spread: 100 });
+                                      trackCelebrationButtonClicked({
+                                        team_id: teamId
+                                      });
+                                      toast.success('Race finished! 🎉');
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+                                  >
+                                    Finish Race
+                                  </Button>
+                                  
+
+                                </div>
                               )}
                             </div>
                           );

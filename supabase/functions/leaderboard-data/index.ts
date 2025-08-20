@@ -91,6 +91,16 @@ serve(async (req) => {
     const teams: LeaderboardTeam[] = (rawTeams || []).map((team: any) => {
       const now = Date.now();
       
+      // Debug timestamp handling
+      console.log('Processing team data:', {
+        team_id: team.team_id,
+        team_start_time: team.team_start_time,
+        team_start_time_type: typeof team.team_start_time,
+        projected_finish_time: team.projected_finish_time,
+        projected_finish_time_type: typeof team.projected_finish_time,
+        current_leg: team.current_leg
+      });
+      
       // Calculate derived fields
       const progressPercentage = Math.round(((team.current_leg - 1) / 36.0) * 100 * 100) / 100;
       
@@ -109,7 +119,7 @@ serve(async (req) => {
         ? Math.max(0, Math.round((team.current_leg_projected_finish - now) / (60 * 1000)))
         : 0;
       
-      return {
+      const result = {
         id: team.team_id,
         team_name: team.team_name,
         team_start_time: team.team_start_time,
@@ -121,6 +131,17 @@ serve(async (req) => {
         status: status,
         minutes_remaining_in_current_leg: minutesRemaining
       };
+      
+      // Debug the result
+      console.log('Team result:', {
+        team_id: result.id,
+        team_start_time: result.team_start_time,
+        projected_finish_time: result.projected_finish_time,
+        status: result.status,
+        current_leg: result.current_leg
+      });
+      
+      return result;
     });
 
     // If requesting a single team, return just the team object

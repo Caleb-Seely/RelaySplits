@@ -356,10 +356,58 @@ export function createValidationReport(
  * Quick validation for sync operations
  */
 export function validateForSync(leg: any, operation: string): boolean {
-  const validation = validateLeg(leg, undefined, undefined, undefined, DEFAULT_TIMING_CONFIG);
+  // For sync operations, we're more lenient with projected times
+  // since we're primarily concerned with actual timing data
+  const issues: string[] = [];
   
-  if (!validation.isValid) {
-    console.warn(`[${operation}] Validation failed for leg ${leg.id}:`, validation.issues);
+  // Basic required field checks
+  if (!leg || typeof leg.id !== 'number' || leg.id <= 0) {
+    console.warn(`[${operation}] Validation failed for leg ${leg?.id}: Invalid leg object`);
+    return false;
+  }
+  
+  if (typeof leg.runnerId !== 'number' || leg.runnerId <= 0) {
+    issues.push(`Leg ${leg.id} has invalid runnerId: ${leg.runnerId}`);
+  }
+  
+  if (typeof leg.distance !== 'number' || leg.distance <= 0) {
+    issues.push(`Leg ${leg.id} has invalid distance: ${leg.distance}`);
+  }
+  
+  // For sync operations, we're more lenient with projected times
+  // Only validate projected times if they're being used
+  if (leg.projectedStart !== undefined && leg.projectedStart !== null) {
+    if (typeof leg.projectedStart !== 'number' || leg.projectedStart < 0) {
+      issues.push(`Leg ${leg.id} has invalid projectedStart: ${leg.projectedStart}`);
+    }
+  }
+  
+  if (leg.projectedFinish !== undefined && leg.projectedFinish !== null) {
+    if (typeof leg.projectedFinish !== 'number' || leg.projectedFinish < 0) {
+      issues.push(`Leg ${leg.id} has invalid projectedFinish: ${leg.projectedFinish}`);
+    }
+  }
+  
+  // Validate actual times if present
+  if (leg.actualStart !== undefined && leg.actualStart !== null) {
+    if (typeof leg.actualStart !== 'number' || leg.actualStart <= 0) {
+      issues.push(`Leg ${leg.id} has invalid actualStart: ${leg.actualStart}`);
+    }
+  }
+  
+  if (leg.actualFinish !== undefined && leg.actualFinish !== null) {
+    if (typeof leg.actualFinish !== 'number' || leg.actualFinish <= 0) {
+      issues.push(`Leg ${leg.id} has invalid actualFinish: ${leg.actualFinish}`);
+    }
+    
+    // Check actual time consistency
+    if (leg.actualStart && leg.actualFinish <= leg.actualStart) {
+      issues.push(`Leg ${leg.id} has invalid actual time range: finish (${leg.actualFinish}) <= start (${leg.actualStart})`);
+    }
+  }
+  
+  if (issues.length > 0) {
+    console.warn(`[${operation}] Validation failed for leg ${leg.id}:`, issues);
     return false;
   }
   

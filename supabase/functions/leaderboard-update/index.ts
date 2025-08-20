@@ -58,7 +58,7 @@ serve(async (req) => {
     // Get team name for the update
     const { data: team, error: teamError } = await supabase
       .from('teams')
-      .select('name')
+      .select('name, start_time')
       .eq('id', payload.team_id)
       .single();
 
@@ -69,13 +69,33 @@ serve(async (req) => {
       );
     }
 
+    // Calculate the actual team start time
+    let teamStartTime: number;
+    if (team.start_time) {
+      teamStartTime = new Date(team.start_time).getTime();
+    } else {
+      // Fallback: estimate based on current leg if no actual start time
+      teamStartTime = payload.current_leg_projected_finish - (payload.current_leg - 1) * 30 * 60 * 1000;
+    }
+
+    console.log('Leaderboard update data:', {
+      team_id: payload.team_id,
+      team_start_time: teamStartTime,
+      team_start_time_date: new Date(teamStartTime).toISOString(),
+      projected_finish_time: payload.projected_finish_time,
+      projected_finish_time_date: new Date(payload.projected_finish_time).toISOString(),
+      current_leg: payload.current_leg,
+      current_leg_projected_finish: payload.current_leg_projected_finish,
+      current_leg_projected_finish_date: new Date(payload.current_leg_projected_finish).toISOString()
+    });
+
     // Update or insert leaderboard entry
     const { error: updateError } = await supabase
       .from('leaderboard')
       .upsert({
         team_id: payload.team_id,
         team_name: team.name,
-        team_start_time: payload.current_leg_projected_finish - (payload.current_leg - 1) * 30 * 60 * 1000, // Estimate start time
+        team_start_time: teamStartTime,
         current_leg: payload.current_leg,
         projected_finish_time: payload.projected_finish_time,
         current_leg_projected_finish: payload.current_leg_projected_finish,
