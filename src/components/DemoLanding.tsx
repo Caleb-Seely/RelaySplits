@@ -37,19 +37,27 @@ import {
   Grid3X3,
   List,
   Trophy,
-  ArrowRight
+  ArrowRight,
+  Download,
+  Smartphone,
+  Info,
+  X
 } from 'lucide-react';
 import { getDemoRunners, getDemoStartTime, initializeDemoLegs, demoTeam, updateDemoLeg } from '@/utils/demoData';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useTeam } from '@/contexts/TeamContext';
+import { usePWA } from '@/hooks/usePWA';
 import { toast } from 'sonner';
 import { useRaceStore } from '@/store/raceStore';
 import AdminSecretDisplay from './AdminSecretDisplay';
+
+
 
 const DemoLanding = () => {
   const navigate = useNavigate();
   const { createTeam, joinTeam, loading, refetch } = useTeamSync();
   const { setDeviceInfo } = useTeam();
+  const { canInstall, isInstalling, install } = usePWA();
   
   // Demo state
   const [demoLegs, setDemoLegs] = useState(initializeDemoLegs(getDemoStartTime()));
@@ -68,6 +76,7 @@ const DemoLanding = () => {
   const [showAdminSecret, setShowAdminSecret] = useState(false);
   const [adminSecret, setAdminSecret] = useState('');
   const [createdTeamName, setCreatedTeamName] = useState('');
+  const [showLearnMore, setShowLearnMore] = useState(false);
 
   // Update current time every second for live demo
   useEffect(() => {
@@ -75,6 +84,39 @@ const DemoLanding = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Detect browser and device for better installation guidance
+  const getBrowserInfo = () => {
+    const userAgent = navigator.userAgent;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+    const isAndroid = /Android/.test(userAgent);
+    
+    if (userAgent.includes('Chrome')) return { browser: 'Chrome', isMobile, isIOS, isAndroid };
+    if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) return { browser: 'Safari', isMobile, isIOS, isAndroid };
+    if (userAgent.includes('Firefox')) return { browser: 'Firefox', isMobile, isIOS, isAndroid };
+    if (userAgent.includes('Edge')) return { browser: 'Edge', isMobile, isIOS, isAndroid };
+    return { browser: 'Unknown', isMobile, isIOS, isAndroid };
+  };
+
+  // Handle PWA installation
+  const handleInstallApp = async () => {
+    if (!canInstall) {
+      toast.error('App installation not available. Please use a supported browser on mobile or desktop.');
+      return;
+    }
+
+    try {
+      const success = await install();
+      if (success) {
+        toast.success('App installed successfully! You can now access it from your home screen.');
+      } else {
+        toast.error('Installation was cancelled or failed.');
+      }
+    } catch (error) {
+      console.error('Installation error:', error);
+      toast.error('Failed to install app. Please try again.');
+    }
+  };
 
 
   // Handle click outside to close form
@@ -357,30 +399,111 @@ const DemoLanding = () => {
           />
         </div>
       )}
-      
-      {/* Header with Auth Tabs */}
-      <div className="bg-card border-b border-border relative header-area">
-        <div className="container mx-auto px-4 py-6">
-          <div className="text-center mb-6">
-            <h1 className="text-4xl font-bold text-foreground mb-2">TeamSplits</h1>
-            <p className="text-lg text-muted-foreground mb-1">Hood 2 Coast Team Tracking</p>
-            <p className="text-lg text-muted-foreground">Stay in sync, every leg of the race.</p>
-          </div>
-          
-          {/* Tab Headers - Primary Navigation */}
-          <div className="flex justify-center">
-            <div className="flex bg-gray-100 p-1 rounded-xl">
+
+      {/* Learn More Popup */}
+      {showLearnMore && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">What is TeamSplits?</h2>
               <Button
                 variant="ghost"
-                data-tab="view"
-                onClick={() => {
-                  setActiveTab('view');
-                  setIsFormVisible(true);
-                }}
+                size="sm"
+                onClick={() => setShowLearnMore(false)}
+                className="h-8 w-8 p-0 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              <p className="text-gray-700 leading-relaxed">
+                TeamSplits is a team tracking app built for relay races like Hood to Coast. It helps your whole team stay in sync—whether you're running, driving, or just following along.
+              </p>
+              
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
+                    <MapPin className="h-3 w-3 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-gray-800 font-medium">Get directions to each exchange without stress</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Timer className="h-3 w-3 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-gray-800 font-medium">Stay on pace with automatic updates and offline accuracy</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Trophy className="h-3 w-3 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-gray-800 font-medium">See how your team stacks up with live leaderboards</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center mt-0.5">
+                    <Users className="h-3 w-3 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-gray-800 font-medium">Invite your teammates to join with a quick code, or share a view-only link with family and friends</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-gray-700 text-sm leading-relaxed">
+                  Everything stays saved on your device so you don't have to keep logging in. Just join once and you're ready for race day.
+                </p>
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="p-6 border-t border-gray-100">
+              <Button
+                onClick={() => setShowLearnMore(false)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl"
+              >
+                Got it!
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+              {/* Header with Auth Tabs */}
+        <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-black border-b border-gray-700/50 relative header-area">
+          <div className="container mx-auto px-4 py-6">
+            <div className="text-center mb-6">
+              <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">TeamSplits</h1>
+              <p className="text-lg text-gray-300 mb-1">Hood 2 Coast Team Tracking</p>
+              <p className="text-lg text-gray-300">Stay in sync, every leg of the race.</p>
+          </div>
+          
+                      {/* Tab Headers - Primary Navigation */}
+            <div className="flex justify-center">
+              <div className="flex bg-gray-800/50 backdrop-blur-sm p-1 rounded-xl border border-gray-700/50">
+                <Button
+                  variant="ghost"
+                  data-tab="view"
+                  onClick={() => {
+                    setActiveTab('view');
+                    setIsFormVisible(true);
+                  }}
                                  className={`flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200 px-6 py-3 relative ${
                    activeTab === 'view' && isFormVisible
-                     ? 'text-blue-600' 
-                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                     ? 'text-blue-400 bg-blue-900/30' 
+                     : 'text-gray-300 hover:text-gray-100 hover:bg-gray-700/50'
                  }`}
                                >
                    <Eye className="h-4 w-4" />
@@ -396,8 +519,8 @@ const DemoLanding = () => {
                 }}
                                  className={`flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200 px-6 py-3 relative ${
                    activeTab === 'join' && isFormVisible
-                     ? 'text-blue-600' 
-                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                     ? 'text-blue-400 bg-blue-900/30' 
+                     : 'text-gray-300 hover:text-gray-100 hover:bg-gray-700/50'
                  }`}
                                >
                    <Users className="h-4 w-4" />
@@ -413,8 +536,8 @@ const DemoLanding = () => {
                 }}
                                  className={`flex items-center justify-center gap-2 text-sm font-medium rounded-lg transition-all duration-200 px-6 py-3 relative ${
                    activeTab === 'create' && isFormVisible
-                     ? 'text-blue-600' 
-                     : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
+                     ? 'text-blue-400 bg-blue-900/30' 
+                     : 'text-gray-300 hover:text-gray-100 hover:bg-gray-700/50'
                  }`}
                                >
                    <Plus className="h-4 w-4" />
@@ -427,11 +550,11 @@ const DemoLanding = () => {
 
         {/* Auth Form Card - Overlay on top of content */}
         {isFormVisible && (
-          <div className="absolute top-full left-0 right-0 z-10 form-card">
+          <div className="absolute top-full left-0 right-0 z-50 form-card">
             <div className="container mx-auto px-2">
               <div className="flex justify-center">
-                <div className="flex bg-gray-100 rounded-xl">
-                                 <Card className="bg-white rounded-b-2xl border border-gray-200 overflow-hidden -mt-1 transition-all duration-500 ease-in-out w-80">
+                <div className="flex bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50">
+                                 <Card className="bg-gray-900/90 backdrop-blur-sm rounded-b-2xl border border-gray-700/50 overflow-hidden -mt-1 transition-all duration-500 ease-in-out w-80">
                   <CardContent className="p-4">
                     {activeTab === 'view' && (
                                              <form onSubmit={handleViewTeam} className="space-y-2">
@@ -442,14 +565,14 @@ const DemoLanding = () => {
                             onChange={(e) => setViewerCode(e.target.value)}
                             placeholder="0 0 0 0 0 0"
                             maxLength={6}
-                            className="text-center font-mono text-xl tracking-widest h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                            className="text-center font-mono text-xl tracking-widest h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
                             required
                             autoFocus
                           />
                         </div>
                                                                            <Button 
                             type="submit" 
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-10 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700"
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-10 rounded-xl text-base border-2 border-blue-600 hover:border-blue-700"
                           >
                             View Team
                           </Button>
@@ -459,68 +582,68 @@ const DemoLanding = () => {
                     {activeTab === 'join' && (
                       <form onSubmit={handleJoinTeam} className="space-y-2">
                         <div className="space-y-2">
-                                                     <Input
-                             id="join-firstName"
-                             value={firstName}
-                             onChange={(e) => setFirstName(e.target.value)}
-                             placeholder="First name"
-                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
-                             required
-                             autoFocus
-                           />
+                          <Input
+                            id="join-firstName"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            placeholder="First name"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                            required
+                            autoFocus
+                          />
                         </div>
                         <div className="space-y-2">
-                                                     <Input
-                             id="join-lastName"
-                             value={lastName}
-                             onChange={(e) => setLastName(e.target.value)}
-                             placeholder="Last name"
-                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base"
-                             required
-                           />
+                          <Input
+                            id="join-lastName"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            placeholder="Last name"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                            required
+                          />
                         </div>
                         <div className="space-y-3">
-                                                     <Input
-                             id="inviteToken"
-                             value={inviteToken}
-                             onChange={(e) => setInviteToken(e.target.value)}
-                             placeholder="Invite token"
-                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
-                             required
-                           />
+                          <Input
+                            id="inviteToken"
+                            value={inviteToken}
+                            onChange={(e) => setInviteToken(e.target.value)}
+                            placeholder="Invite token"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                            required
+                          />
                         </div>
-                                                                           <Button 
-                            type="submit" 
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-10 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
-                            disabled={loading}
-                          >
-                            {loading ? 'Joining...' : 'Join Team'}
-                          </Button>
+                        <Button 
+                          type="submit" 
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 h-10 rounded-xl text-base border-2 border-blue-600 hover:border-blue-700" 
+                          disabled={loading}
+                        >
+                          {loading ? 'Joining...' : 'Join Team'}
+                        </Button>
                       </form>
                     )}
                     
                     {activeTab === 'create' && (
                       <form onSubmit={handleCreateTeam} className="space-y-2">
                         <div className="space-y-2">
-                                                     <Input
-                             id="create-firstName"
-                             value={firstName}
-                             onChange={(e) => setFirstName(e.target.value)}
-                             placeholder="First name"
-                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
-                             required
-                             autoFocus
-                           />
+                          <Input
+                            id="create-firstName"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            placeholder="First name"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                            required
+                            autoFocus
+                          />
                         </div>
                         <div className="space-y-2">
-                                                     <Input
-                             id="create-lastName"
-                             value={lastName}
-                             onChange={(e) => setLastName(e.target.value)}
-                             placeholder="Last name"
-                             className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
-                             required
-                           />
+                          <Input
+                            id="create-lastName"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            placeholder="Last name"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                            required
+                          />
                         </div>
                         <div className="space-y-2">
                           <Input
@@ -528,13 +651,13 @@ const DemoLanding = () => {
                             value={teamName}
                             onChange={(e) => setTeamName(e.target.value)}
                             placeholder="Team name"
-                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-white border border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                            className="h-10 rounded-xl transition-all duration-200 placeholder:text-gray-400 text-base bg-gray-800 border border-gray-600 text-gray-100 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
                             required
                           />
                         </div>
                                                                            <Button 
                             type="submit" 
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold shadow-lg hover:shadow-xl h-10 rounded-xl text-base border-2 border-gray-600 hover:border-gray-700" 
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg hover:shadow-xl h-10 rounded-xl text-base border-2 border-blue-600 hover:border-blue-700" 
                             disabled={loading}
                           >
                             {loading ? 'Creating...' : 'Create Team'}
@@ -552,17 +675,77 @@ const DemoLanding = () => {
 
 
 
-      {/* Leaderboard Button */}
+      {/* Learn More and Download Buttons */}
       <div className="container mx-auto px-4 py-4">
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-4">
           <Button
-            onClick={() => toast.info('Leaderboard coming soon! Invite other teams! Stay tuned for real-time team rankings and competition features.')}
-            className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+            onClick={() => setShowLearnMore(true)}
+            className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
           >
-            <Trophy className="h-5 w-5" />
-            Leaderboard
+            <Info className="h-5 w-5" />
+            Learn More
             <ArrowRight className="h-4 w-4" />
           </Button>
+          
+          {/* Download App Button */}
+          <Button
+            onClick={canInstall ? handleInstallApp : () => {
+              const { browser, isMobile, isIOS, isAndroid } = getBrowserInfo();
+              
+              if (isMobile) {
+                if (isIOS) {
+                  toast.info('On iOS Safari: Tap the Share button (square with arrow) and select "Add to Home Screen"');
+                } else if (isAndroid) {
+                  if (browser === 'Chrome') {
+                    toast.info('On Android Chrome: Tap the menu (⋮) and select "Add to Home Screen"');
+                  } else {
+                    toast.info('On Android: Tap the menu and look for "Add to Home Screen" or "Install App"');
+                  }
+                } else {
+                  toast.info('Tap your browser menu and look for "Add to Home Screen" or "Install App"');
+                }
+              } else {
+                if (browser === 'Chrome') {
+                  toast.info('In Chrome: Look for the install icon (📱) in the address bar on the right side');
+                } else if (browser === 'Edge') {
+                  toast.info('In Edge: Look for the install icon (📱) in the address bar on the right side');
+                } else if (browser === 'Firefox') {
+                  toast.info('In Firefox: Look for the install icon in the address bar or menu');
+                } else {
+                  toast.info('Look for an install icon in your browser address bar or menu');
+                }
+              }
+            }}
+            disabled={isInstalling}
+            className={`font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2 ${
+              canInstall 
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' 
+                : 'bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white'
+            }`}
+          >
+            {isInstalling ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Installing...
+              </>
+            ) : (
+              <>
+                <Download className="h-5 w-5" />
+                Download App
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Endorsement */}
+      <div className="container mx-auto px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm p-3 text-center">
+            <p className="text-gray-700 text-sm font-medium leading-relaxed">
+              "RelayTracker keeps your relay team in sync. Track progress, get exchange directions, and see where you stand on the leaderboard—no login hassle."  -Claude
+            </p>
+          </div>
         </div>
       </div>
 
@@ -572,17 +755,17 @@ const DemoLanding = () => {
       <div className={`container mx-auto px-4 py-8 ${isFormVisible ? 'blur-sm' : ''}`}>
 
         {/* Progress Bar - Updated to match real dashboard */}
-        <div className="max-w-xl mx-auto bg-card backdrop-blur-sm rounded-lg p-3 shadow-md border border-border mb-8">
+        <div className="max-w-xl mx-auto bg-white rounded-lg p-3 shadow-md border border-gray-200 mb-8">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold text-foreground">Progress</span>
-            <span className="text-xs font-bold text-primary">
+            <span className="text-xs font-semibold text-gray-700">Progress</span>
+            <span className="text-xs font-bold text-blue-600">
               Leg {progress.current}/{progress.total}
             </span>
-            <span className="text-sm font-bold text-foreground">
+            <span className="text-sm font-bold text-gray-900">
               {formatDuration(Math.max(0, currentTime.getTime() - demoStartTime))}
             </span>
           </div>
-          <div className="w-full bg-muted rounded-full h-2">
+          <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="h-2 rounded-full transition-all duration-500 relative overflow-hidden bg-gradient-to-r from-orange-500 via-amber-500 to-blue-500"
               style={{ width: `${(progress.completed / progress.total) * 100}%` }}
@@ -592,10 +775,10 @@ const DemoLanding = () => {
           </div>
           <div className="grid grid-cols-3 items-center mt-2">
             <div className="justify-self-start text-left">
-              <div className="text-sm font-bold text-foreground">
+              <div className="text-sm font-bold text-gray-900">
                 {formatTime(demoStartTime)}
               </div>
-              <div className="flex items-center justify-start gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center justify-start gap-1 text-xs text-gray-500">
                 <Clock className="h-3 w-3" />
                 <span>Start</span>
               </div>
@@ -604,10 +787,10 @@ const DemoLanding = () => {
 
             </div>
             <div className="justify-self-end text-right">
-              <div className="text-sm font-bold text-primary">
+              <div className="text-sm font-bold text-blue-600">
                 {calculateTotalDistanceTraveled(demoLegs).toFixed(1)} mi
               </div>
-              <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center justify-end gap-1 text-xs text-gray-500">
                 <MapPin className="h-4 w-4" />
                 <span>Distance</span>
               </div>

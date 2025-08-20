@@ -1,0 +1,78 @@
+🏃‍♀️ RELAYTRACKER - PROFESSIONAL RELAY RACE MANAGEMENT APP
+
+RelayTracker is a comprehensive web application designed to help relay race teams manage, track, and coordinate their races in real-time. It's specifically optimized for events like the Hood to Coast relay race but works for any relay race format.
+
+🏆 CORE PURPOSE
+The app helps relay race teams:
+- Coordinate 12 runners across 2 vans during long-distance relay races
+- Track real-time progress as runners complete their legs
+- Manage handoffs between runners at exchange points
+- Monitor race performance against projected times
+- Stay synchronized across multiple devices and team members
+
+🚀 KEY FEATURES FOR USERS
+
+1. RACE SETUP & CONFIGURATION
+- 3-Step Setup Wizard: Easy guided setup for race start time, team configuration, and leg distances
+- Team Management: Configure up to 12 runners with individual pace settings and van assignments
+- Data Import: Import runner information from Excel or CSV files
+- Flexible Format: Supports 36-leg races (Hood to Coast) or custom configurations
+
+2. LIVE RACE TRACKING
+- Real-Time Dashboard: Live updates showing current runner, next runner, and race progress
+- Race Timer: Continuous timer from start to finish with elapsed time display
+- Progress Tracking: Visual progress bar showing completion percentage and distance traveled
+- Van Coordination: Separate views for Van 1 and Van 2 with van-specific runner schedules
+- Status Indicators: Color-coded status for each leg (Ready, Running, Finished, Next Up)
+
+3. TIME MANAGEMENT
+- Projected vs Actual Times: Track both projected finish times and actual performance
+- Dynamic Recalculation: Automatic adjustment of future leg projections based on actual performance
+- Countdown Timers: Live countdown to next runner start times
+- Major Exchanges: Special tracking for major van exchange points
+- Manual Time Entry: Record exact start and finish times with intuitive time picker
+
+4. TEAM COORDINATION
+- Multi-Device Sync: Real-time synchronization across all team devices
+- View-Only Mode: Share race progress with supporters via unique viewer codes
+- Conflict Resolution: Handle simultaneous updates from multiple team members
+- Team Settings: Manage team configuration and runner assignments
+
+5. RACE ANALYTICS & LEADERBOARDS
+- Live Leaderboard: See how your team ranks against other teams in real-time
+- Performance Tracking: Compare projected vs actual paces for each runner
+- Distance Tracking: Real-time calculation of total distance traveled
+- Progress Visualization: Detailed leg schedule table with editing capabilities
+
+6. MOBILE-FIRST EXPERIENCE
+- Responsive Design: Optimized for all screen sizes from mobile phones to desktops
+- Touch-Friendly: Large touch targets and intuitive gesture support
+- PWA Support: Works as a Progressive Web App with native app-like features
+- Offline Capability: Continue tracking even with intermittent connectivity
+
+7. SMART NOTIFICATIONS
+- Runner Start Alerts: Get notified when runners start their legs
+- Handoff Notifications: Receive alerts when runners finish and hand off
+- Race Completion: Special notification when the final runner heads to the finish
+- Permission Management: Easy notification permission request with status indicators
+
+📋 USER WORKFLOW
+
+1. Setup Phase: Use the wizard to configure race start time, add 12 runners with paces, and set leg distances
+2. Pre-Race: Import team data from spreadsheets, review leg schedule, and test notifications
+3. During Race: Monitor live dashboard, record actual times, track progress, and coordinate van handoffs
+4. Post-Race: Review performance analytics, compare projected vs actual times, and export race data
+
+🏆 COMPETITIVE FEATURES
+- Real-time leaderboards showing team rankings and progress
+- Live ETA calculations for race completion
+- Performance comparisons against other teams
+- Major exchange tracking for strategic planning
+
+⚙️ TECHNICAL BENEFITS
+- Real-time synchronization across multiple devices
+- Conflict resolution for simultaneous updates
+- Offline queue management for poor connectivity
+- Data consistency with automatic conflict detection and resolution
+
+RelayTracker essentially transforms the chaotic coordination of a relay race into a smooth, real-time tracking experience that keeps everyone on the same page and helps teams perform at their best!
