@@ -63,7 +63,7 @@ const formatLastSeen = (lastSeen: string) => {
   return `${Math.floor(diffMins / 1440)}d ago`;
 };
 
-const shortenInviteToken = (token: string, maxLength: number = 12) => {
+const shortenInviteToken = (token: string, maxLength: number = 20) => {
   if (!token || token.length <= maxLength) return token;
   const start = Math.floor(maxLength / 2);
   const end = token.length - Math.floor(maxLength / 2);

@@ -438,7 +438,27 @@ export async function updateTeamLeaderboard(payload: LeaderboardUpdatePayload): 
 
     // Clear cache for this specific team to ensure fresh data on next fetch
     clearTeamLeaderboardCache(payload.team_id);
+    
+    // Also clear the main leaderboard cache to ensure all views get updated
+    clearAllLeaderboardCache();
 
+    // Publish a real-time update event to notify other components
+    const { eventBus, EVENT_TYPES } = await import('@/utils/eventBus');
+    eventBus.publish({
+      type: EVENT_TYPES.REALTIME_UPDATE,
+      payload: {
+        type: 'leaderboard',
+        action: 'updated',
+        team_id: payload.team_id,
+        current_leg: payload.current_leg,
+        projected_finish_time: payload.projected_finish_time,
+        timestamp: new Date().toISOString()
+      },
+      priority: 'high',
+      source: 'leaderboard'
+    });
+
+    console.log('[updateTeamLeaderboard] Successfully updated leaderboard and published event');
     return true;
   } catch (error) {
     console.error('Error updating leaderboard:', error);
@@ -544,7 +564,7 @@ export function calculateLeaderboardData(
     }
   }
 
-  // Calculate current leg projected finish time based on current leg's distance and runner's pace
+  // Calculate current leg projected finish time using the dashboard's leg projection system
   let currentLegProjectedFinish: number;
   
   if (currentLeg === 37) {
@@ -552,14 +572,22 @@ export function calculateLeaderboardData(
     currentLegProjectedFinish = lastLegCompletedAt;
   } else {
     const currentLegData = legs.find(leg => leg.id === currentLeg);
-    if (currentLegData) {
-      const currentRunner = runners.find(r => r.id === currentLegData.runnerId);
-      const legPace = currentLegData.paceOverride ?? (currentRunner?.pace || 30 * 60); // 30 min default
-      const legDuration = (currentLegData.distance * legPace * 1000); // Convert to milliseconds
-      currentLegProjectedFinish = lastLegCompletedAt + legDuration;
+    if (currentLegData && currentLegData.projectedFinish) {
+      // Use the dashboard's calculated projected finish time for the current leg
+      currentLegProjectedFinish = currentLegData.projectedFinish;
     } else {
-      // Fallback to 30 min estimate
-      currentLegProjectedFinish = lastLegCompletedAt + (30 * 60 * 1000);
+      // Fallback: calculate based on current leg's start time and pace
+      const currentRunner = runners.find(r => r.id === currentLegData?.runnerId);
+      if (currentLegData && currentRunner) {
+        const legPace = currentLegData.paceOverride ?? currentRunner.pace;
+        const legDuration = (currentLegData.distance * legPace * 1000); // Convert to milliseconds
+        // Use the leg's actual start time if available, otherwise use lastLegCompletedAt
+        const legStartTime = currentLegData.actualStart || lastLegCompletedAt;
+        currentLegProjectedFinish = legStartTime + legDuration;
+      } else {
+        // Fallback to 30 min estimate
+        currentLegProjectedFinish = lastLegCompletedAt + (30 * 60 * 1000);
+      }
     }
   }
   

@@ -17,6 +17,8 @@ async function triggerLeaderboardUpdateAfterRecalculation(teamId: string | undef
   if (!teamId) return;
   
   try {
+    console.log('[RaceStore] Triggering leaderboard update after recalculation for team:', teamId, 'currentLeg:', currentLeg);
+    
     // Find the current leg that's running or the next leg to start
     const currentLegData = legs.find(leg => leg.id === currentLeg);
     const lastCompletedLeg = legs.filter(leg => leg.actualFinish).sort((a, b) => b.id - a.id)[0];
@@ -25,9 +27,15 @@ async function triggerLeaderboardUpdateAfterRecalculation(teamId: string | undef
     
     // Import and call the leaderboard update function
     const { triggerLeaderboardUpdateOnLegStart } = await import('@/services/leaderboard');
-    await triggerLeaderboardUpdateOnLegStart(teamId, currentLeg, lastLegCompletedAt);
+    const success = await triggerLeaderboardUpdateOnLegStart(teamId, currentLeg, lastLegCompletedAt);
+    
+    if (success) {
+      console.log('[RaceStore] Leaderboard update triggered successfully');
+    } else {
+      console.warn('[RaceStore] Leaderboard update failed');
+    }
   } catch (error) {
-    console.warn('[RaceStore] Failed to trigger leaderboard update after recalculation:', error);
+    console.error('[RaceStore] Failed to trigger leaderboard update after recalculation:', error);
   }
 }
 
@@ -262,11 +270,20 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     // Special case: Update leaderboard when leg 36 finishes (race completion)
     if (field === 'actualFinish' && time !== null && state.teamId && id === 36) {
       // Trigger leaderboard update to mark race as finished
-      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
-        // Pass leg 37 to indicate race completion
-        triggerLeaderboardUpdateOnLegStart(state.teamId!, 37, time);
+      import('@/services/leaderboard').then(async ({ triggerLeaderboardUpdateOnLegStart }) => {
+        try {
+          // Pass leg 37 to indicate race completion
+          const success = await triggerLeaderboardUpdateOnLegStart(state.teamId!, 37, time);
+          if (success) {
+            console.log('[RaceStore] Race completion leaderboard update successful');
+          } else {
+            console.warn('[RaceStore] Race completion leaderboard update failed');
+          }
+        } catch (error) {
+          console.error('[RaceStore] Failed to trigger leaderboard update on race completion:', error);
+        }
       }).catch(error => {
-        console.error('Failed to trigger leaderboard update on race completion:', error);
+        console.error('Failed to import leaderboard service for race completion:', error);
       });
     }
 
@@ -335,10 +352,19 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     // Update leaderboard when a new leg starts
     if (state.teamId) {
       // Trigger leaderboard update asynchronously
-      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
-        triggerLeaderboardUpdateOnLegStart(state.teamId!, nextLegId, now);
+      import('@/services/leaderboard').then(async ({ triggerLeaderboardUpdateOnLegStart }) => {
+        try {
+          const success = await triggerLeaderboardUpdateOnLegStart(state.teamId!, nextLegId, now);
+          if (success) {
+            console.log('[RaceStore] Leg start leaderboard update successful');
+          } else {
+            console.warn('[RaceStore] Leg start leaderboard update failed');
+          }
+        } catch (error) {
+          console.error('[RaceStore] Failed to trigger leaderboard update on leg start:', error);
+        }
       }).catch(error => {
-        console.error('Failed to trigger leaderboard update on leg start:', error);
+        console.error('Failed to import leaderboard service for leg start:', error);
       });
     }
 
