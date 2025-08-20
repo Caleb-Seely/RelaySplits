@@ -86,7 +86,7 @@ serve(async (req) => {
         join_code: codeData,
         admin_secret: secretData,
         invite_token_rotated_at: new Date().toISOString(),
-        start_time: new Date().toISOString(),
+        start_time: new Date('2099-12-31T23:59:59Z').toISOString(), // Placeholder - will be set by setup wizard
       })
       .select()
       .single()
@@ -127,13 +127,16 @@ serve(async (req) => {
       )
     }
 
+    // Note: Leaderboard entry will be created after team setup is complete
+    // This prevents issues with incomplete team data
+
     // Log audit event
     await supabase.from('team_audit').insert({
       team_id: team.id,
       device_id: deviceId,
       action: 'team_created',
       payload: { team_name: name, admin_display_name }
-    })
+    });
 
     const response: CreateTeamResponse = {
       teamId: team.id,
@@ -141,7 +144,7 @@ serve(async (req) => {
       join_code: codeData,
       admin_secret: secretData,
       deviceId: deviceId,
-    }
+    };
 
     return new Response(
       JSON.stringify(response),

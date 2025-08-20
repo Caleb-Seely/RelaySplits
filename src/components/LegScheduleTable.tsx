@@ -57,7 +57,16 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
   const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
     ? legs[0].actualStart
-    : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
+    : (() => {
+        if (team?.start_time) {
+          const teamStartTime = new Date(team.start_time);
+          const placeholderDate = new Date('2099-12-31T23:59:59Z');
+          if (Math.abs(teamStartTime.getTime() - placeholderDate.getTime()) > 1000) {
+            return teamStartTime.getTime();
+          }
+        }
+        return startTime;
+      })();
 
   // Filter legs by current van
   const vanRunners = runners.filter(r => r.van === currentVan);

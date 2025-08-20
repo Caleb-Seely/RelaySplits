@@ -78,6 +78,7 @@ import { useDecoupledNotifications } from '@/hooks/useDecoupledNotifications';
 import DashboardPrompts from './DashboardPrompts';
 
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardProps {
   isViewOnly?: boolean;
@@ -85,6 +86,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamName }) => {
+  const navigate = useNavigate();
   const {
     runners,
     legs,
@@ -155,7 +157,27 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       console.log('[Dashboard] Checking if data needs to be loaded...');
       console.log('[Dashboard] Current state - legs:', legs.length, 'runners:', runners.length, 'isSetupComplete:', isSetupComplete, 'teamId:', teamId);
       
-
+      // CRITICAL FIX: Ensure start time is synchronized before initializing legs
+      // Check if we have a stored team start time that differs from the race store
+      const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+      if (storedTeamStartTime) {
+        const storedTime = new Date(storedTeamStartTime).getTime();
+        const raceStoreTime = startTime;
+        
+        // If the times differ significantly, update the race store first
+        if (Math.abs(storedTime - raceStoreTime) > 1000) {
+          console.log('[Dashboard] CRITICAL: Syncing race store start time with stored team start time before initializing legs');
+          console.log('  Stored team start time:', new Date(storedTime).toString());
+          console.log('  Race store start time:', new Date(raceStoreTime).toString());
+          
+          // Update the race store's start time to match the stored team start time
+          const { setStartTime } = useRaceStore.getState();
+          setStartTime(storedTime);
+          
+          // Wait a moment for the state update to propagate
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
       
       // If we have no legs but have a teamId, we need to load data
       if (legs.length === 0 && teamId) {
@@ -275,19 +297,41 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     const timeoutId = setTimeout(loadDataIfNeeded, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [teamId, legs.length, runners.length, isSetupComplete, isViewOnly, fetchLatestData, initializeLegs]);
+  }, [teamId, legs.length, runners.length, isSetupComplete, isViewOnly, fetchLatestData, initializeLegs, startTime]);
 
   // Fallback mechanism to ensure legs are initialized if they're still missing after a delay
   useEffect(() => {
     if (!teamId || isViewOnly || legs.length > 0) return;
     
-    const fallbackTimer = setTimeout(() => {
+    const fallbackTimer = setTimeout(async () => {
       console.log('[Dashboard] Fallback: Initializing legs after timeout');
+      
+      // CRITICAL FIX: Ensure start time is synchronized before fallback initialization
+      const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+      if (storedTeamStartTime) {
+        const storedTime = new Date(storedTeamStartTime).getTime();
+        const raceStoreTime = startTime;
+        
+        // If the times differ significantly, update the race store first
+        if (Math.abs(storedTime - raceStoreTime) > 1000) {
+          console.log('[Dashboard] Fallback: Syncing race store start time with stored team start time');
+          console.log('  Stored team start time:', new Date(storedTime).toString());
+          console.log('  Race store start time:', new Date(raceStoreTime).toString());
+          
+          // Update the race store's start time to match the stored team start time
+          const { setStartTime } = useRaceStore.getState();
+          setStartTime(storedTime);
+          
+          // Wait a moment for the state update to propagate
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
       initializeLegs();
     }, 3000); // Wait 3 seconds before fallback initialization
     
     return () => clearTimeout(fallbackTimer);
-  }, [teamId, legs.length, isViewOnly, initializeLegs]);
+  }, [teamId, legs.length, isViewOnly, initializeLegs, startTime]);
 
 
 
@@ -322,14 +366,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   // Determine if user can edit (not in view-only mode and has edit permissions)
   const canEdit = !isViewOnly && (deviceInfo?.role === 'admin' || deviceInfo?.role === 'member');
 
-  // Comprehensive loading condition that includes team loading and race data initialization
-  // Optimized to prevent showing skeleton when we have valid local data during sync operations
-  const isDataLoading = loading || (
-    legs.length === 0 && 
-    teamId && 
-    !isViewOnly && 
-    !isSetupComplete // Don't show loading if setup is complete and we're just waiting for data
-  );
+
 
   // Quick help popup for new team members
   const { shouldShowHelp, dismissHelp } = useQuickHelp();
@@ -382,9 +419,86 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
   // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
   // Prioritize team start time over race store start time to avoid showing default 1pm time
-  const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
-    ? legs[0].actualStart
-    : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
+  const actualRaceStartTime = (() => {
+    // Debug logging to understand what's happening
+    console.log('[Dashboard] actualRaceStartTime calculation:');
+    console.log('  team?.start_time:', team?.start_time);
+    console.log('  team object:', team);
+    console.log('  localStorage relay_team_start_time:', localStorage.getItem('relay_team_start_time'));
+    console.log('  race store startTime:', startTime, '(', new Date(startTime).toISOString(), ')');
+    console.log('  legs[0].actualStart:', legs.length > 0 ? legs[0].actualStart : 'no legs');
+    
+    // CRITICAL FIX: Only use actualStart if the race has actually started
+    // Check if legs[0].actualStart is set and if it's a reasonable time (not the current time)
+    const hasActualStart = legs.length > 0 && typeof legs[0].actualStart === 'number';
+    const now = Date.now();
+    const isActualStartReasonable = hasActualStart && 
+      legs[0].actualStart > 0 && 
+      legs[0].actualStart < now + (24 * 60 * 60 * 1000) && // Not more than 24 hours in the future
+      Math.abs(legs[0].actualStart - now) > 60000; // At least 1 minute different from current time
+    
+    if (hasActualStart && isActualStartReasonable) {
+      console.log('[Dashboard] Using actual start time from leg 1:', new Date(legs[0].actualStart).toISOString());
+      return legs[0].actualStart;
+    }
+    
+    // First priority: team start time from context (if loaded and not placeholder)
+    if (team?.start_time) {
+      const teamStartTime = new Date(team.start_time);
+      const placeholderDate = new Date('2099-12-31T23:59:59Z');
+      if (Math.abs(teamStartTime.getTime() - placeholderDate.getTime()) > 1000) {
+        console.log('[Dashboard] Using team start time from context:', teamStartTime.toISOString());
+        return teamStartTime.getTime();
+      }
+    }
+    
+    // Second priority: stored team start time from localStorage (if not placeholder)
+    // This should be the primary fallback since it contains the user's actual selection
+    const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+    if (storedTeamStartTime) {
+      const storedTime = new Date(storedTeamStartTime);
+      const placeholderDate = new Date('2099-12-31T23:59:59Z');
+      if (Math.abs(storedTime.getTime() - placeholderDate.getTime()) > 1000) {
+        console.log('[Dashboard] Using stored team start time from localStorage:', storedTime.toISOString());
+        return storedTime.getTime();
+      }
+    }
+    
+    // Third priority: race store start time (but only if it's not the default)
+    const defaultStartTime = new Date('2025-08-22T13:00').getTime();
+    if (Math.abs(startTime - defaultStartTime) > 1000) {
+      console.log('[Dashboard] Using race store start time:', new Date(startTime).toISOString());
+      return startTime;
+    }
+    
+    // If we have a teamId but no valid start time found, return null to indicate we're waiting for data
+    if (teamId) {
+      console.log('[Dashboard] Team data not loaded yet or no valid start time found, returning null to wait for data');
+      return null;
+    }
+    
+    // Last resort: return the race store time even if it's default (for non-team scenarios)
+    console.log('[Dashboard] No valid start time found, using race store time as last resort');
+    return startTime;
+  })();
+
+  // Additional loading check: if we have a teamId but no valid start time yet, show loading
+  const isWaitingForStartTime = teamId && !actualRaceStartTime && !isViewOnly;
+  const isDataLoading = loading || (
+    legs.length === 0 && 
+    teamId && 
+    !isViewOnly && 
+    !isSetupComplete // Don't show loading if setup is complete and we're just waiting for data
+  ) || (
+    // FIXED: Also wait for team data to load to ensure correct start time is available
+    teamId && 
+    !team?.start_time && 
+    !isViewOnly
+  ) || isWaitingForStartTime;
+
+
+
+
 
   // Check for team context mismatch (only log warnings, not every calculation)
   if (team?.start_time && Math.abs(new Date(team.start_time).getTime() - startTime) > 1000) {
@@ -439,7 +553,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
 
   const currentRunner = getCurrentRunner(legs, currentTime);
-  const nextRunner = getNextRunner(legs, currentTime, actualRaceStartTime);
+  const nextRunner = getNextRunner(legs, currentTime, actualRaceStartTime ?? undefined);
   
   // Enhanced loading state for current runner card that prevents skeleton when we have runner data
   const isCurrentRunnerLoading = isDataLoading && !currentRunner;
@@ -462,7 +576,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
 
   const getCountdownToNext = () => {
-    if (!nextRunner) return null;
+    if (!nextRunner || !actualRaceStartTime) return null;
     const countdownMs = getCountdownTime(nextRunner, currentTime, legs, actualRaceStartTime);
     return formatCountdown(countdownMs);
   };
@@ -579,7 +693,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   };
 
   const getFinalRaceTime = () => {
-    if (!isRaceComplete()) return null;
+    if (!isRaceComplete() || !actualRaceStartTime) return null;
     const lastLeg = legs[legs.length - 1];
     return lastLeg.actualFinish! - actualRaceStartTime;
   };
@@ -678,10 +792,19 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         <div className="relative z-10 container mx-auto px-2 sm:px-3 lg:px-4 lg:pb-4 space-y-4 lg:space-y-5">
           {/* Enhanced Header with Sync Status */}
           <div className="text-center space-y-3">
-            <div className="mb-2">
+            <div className="mb-2 flex items-center justify-center gap-4">
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">
                 {isViewOnly && viewOnlyTeamName ? viewOnlyTeamName : (team?.name || 'Team Name')}
               </h1>
+              <Button
+                onClick={() => navigate('/leaderboard')}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 bg-card hover:bg-accent"
+              >
+                <Trophy className="h-4 w-4" />
+                Leaderboard
+              </Button>
             </div>
 
             {/* Race Progress Bar */}
@@ -695,8 +818,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                   isRaceComplete() ? 'text-green-600' : 'text-foreground'
                 }`}>
                   {isRaceComplete() 
-                    ? formatDuration(getFinalRaceTime()!)
-                    : formatDuration(Math.max(0, currentTime.getTime() - actualRaceStartTime))
+                    ? (getFinalRaceTime() ? formatDuration(getFinalRaceTime()!) : '--')
+                    : (actualRaceStartTime ? formatDuration(Math.max(0, currentTime.getTime() - actualRaceStartTime)) : '--')
                   }
                   
                 </span>
@@ -712,7 +835,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
               <div className="grid grid-cols-3 items-center mt-2">
                 <div className="justify-self-start text-left">
                   <div className="text-sm font-bold text-foreground">
-                    {formatRaceTime(actualRaceStartTime)}
+                    {actualRaceStartTime ? formatRaceTime(actualRaceStartTime) : '--'}
                   </div>
                   <div className="flex items-center justify-start gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
@@ -1198,6 +1321,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                           <div className="text-center">
                             <div className="text-3xl font-bold text-foreground mb-2">
                               {(() => {
+                                if (!actualRaceStartTime) return '--';
                                 const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
                                 const isFirstLeg = nextRunner && nextRunner.id === 1;
                                 
@@ -1213,6 +1337,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                             <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
                               <Target className="h-4 w-4" />
                               {(() => {
+                                if (!actualRaceStartTime) return 'Loading...';
                                 const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
                                 const isFirstLeg = nextRunner && nextRunner.id === 1;
                                 
@@ -1242,7 +1367,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                               return 'Final leg in progress - almost there!';
                             }
                             
-                            const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime;
+                            if (!actualRaceStartTime) return 'Loading...';
+                            const isBeforeRaceStart = currentTime.getTime() < actualRaceStartTime!;
                             const isFirstLeg = nextRunner && nextRunner.id === 1;
                             if (isFirstLeg && isBeforeRaceStart) {
                               return 'First runner will start automatically';

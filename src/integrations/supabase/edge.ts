@@ -242,6 +242,22 @@ function validateEdgeFunctionInput(name: string, body: any): { success: boolean;
         }
         return { success: true, data: body };
       
+      case 'leaderboard-update':
+        // Validate leaderboard update payload
+        if (!body.team_id || typeof body.team_id !== 'string' || body.team_id.trim() === '') {
+          return { success: false, error: 'Invalid team_id' };
+        }
+        if (!body.current_leg || typeof body.current_leg !== 'number' || body.current_leg <= 0) {
+          return { success: false, error: 'Invalid current_leg' };
+        }
+        if (!body.projected_finish_time || typeof body.projected_finish_time !== 'number' || body.projected_finish_time <= 0) {
+          return { success: false, error: 'Invalid projected_finish_time' };
+        }
+        if (!body.current_leg_projected_finish || typeof body.current_leg_projected_finish !== 'number' || body.current_leg_projected_finish <= 0) {
+          return { success: false, error: 'Invalid current_leg_projected_finish' };
+        }
+        return { success: true, data: body };
+      
       default:
         // For unknown functions, do basic validation
         if (typeof body !== 'object' || body === null) {

@@ -66,31 +66,52 @@ export const useTeamSync = () => {
         const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
         
         if (storedTeamName) {
-          // If we have a stored team start time, use it; otherwise use race store's current start time
-          const race = useRaceStore.getState();
-          const teamStartTime = storedTeamStartTime || new Date(race.startTime).toISOString();
-          
-
-          
-          setTeam({ 
-            id: storedTeamId, 
-            name: storedTeamName, 
-            start_time: teamStartTime,
-            join_code: storedJoinCode || undefined,
-            invite_token: storedInviteToken || undefined
-          });
-          
-          // Sync race store start time with team start time
-          race.setStartTime(new Date(teamStartTime).getTime());
+          if (storedTeamStartTime) {
+            // Check if this is the placeholder date (2099-12-31)
+            const placeholderDate = new Date('2099-12-31T23:59:59Z');
+            const storedTime = new Date(storedTeamStartTime);
+            if (Math.abs(storedTime.getTime() - placeholderDate.getTime()) < 1000) {
+              // This is the placeholder date, don't use it
+              console.log('[useTeamSync] Detected placeholder start time, not using team start time');
+              // Set team without start time
+              setTeam({ 
+                id: storedTeamId, 
+                name: storedTeamName, 
+                start_time: undefined,
+                join_code: storedJoinCode || undefined,
+                invite_token: storedInviteToken || undefined
+              });
+            } else {
+              // We have a valid stored team start time, use it
+              setTeam({ 
+                id: storedTeamId, 
+                name: storedTeamName, 
+                start_time: storedTeamStartTime,
+                join_code: storedJoinCode || undefined,
+                invite_token: storedInviteToken || undefined
+              });
+              
+              // Sync race store start time with team start time
+              const race = useRaceStore.getState();
+              race.setStartTime(storedTime.getTime());
+            }
+          } else {
+            // No stored start time, fetch from database
+            console.log('[useTeamSync] No stored team start time, fetching from database');
+            fetchTeamDetails(storedTeamId);
+          }
           
           // Initialize legs if they don't exist yet (with delay to ensure sync tracking is ready)
-          if (race.legs.length === 0) {
-            setTimeout(() => {
-              const currentRace = useRaceStore.getState();
-              if (currentRace.legs.length === 0) {
-                currentRace.initializeLegs();
-              }
-            }, 100);
+          if (storedTeamStartTime) {
+            const race = useRaceStore.getState();
+            if (race.legs.length === 0) {
+              setTimeout(() => {
+                const currentRace = useRaceStore.getState();
+                if (currentRace.legs.length === 0) {
+                  currentRace.initializeLegs();
+                }
+              }, 100);
+            }
           }
         } else {
           // Try to fetch current team details via Edge Function
@@ -126,6 +147,7 @@ export const useTeamSync = () => {
         // Store team details in localStorage
         localStorage.setItem('relay_team_name', teamData.name);
         localStorage.setItem('relay_team_start_time', teamData.start_time);
+        console.log('[fetchTeamDetails] Updated localStorage with team start time:', teamData.start_time);
         localStorage.setItem('relay_team_join_code', teamData.join_code);
         if (teamData.invite_token) {
           localStorage.setItem('relay_team_invite_token', teamData.invite_token);
@@ -135,7 +157,8 @@ export const useTeamSync = () => {
         }
         
         // Set team in state
-        setTeam({ 
+                console.log('[fetchTeamDetails] Setting team context with start_time:', teamData.start_time);
+        setTeam({
           id: teamData.id, 
           name: teamData.name, 
           start_time: teamData.start_time,
@@ -143,12 +166,27 @@ export const useTeamSync = () => {
           invite_token: teamData.invite_token
         });
         
-        // Sync race store start time with team start time
-        const race = useRaceStore.getState();
-        const raceStoreTime = new Date(teamData.start_time).getTime();
-        race.setStartTime(raceStoreTime);
+        // Check if this is the placeholder date (2099-12-31)
+        const placeholderDate = new Date('2099-12-31T23:59:59Z');
+        const teamStartTime = new Date(teamData.start_time);
+        
+        console.log('[fetchTeamDetails] Retrieved team data:');
+        console.log('  Database start_time (ISO):', teamData.start_time);
+        console.log('  Database start_time (parsed):', teamStartTime.toString());
+        console.log('  Database start_time (local):', teamStartTime.toLocaleString());
+        console.log('  Database start_time (timestamp):', teamStartTime.getTime());
         
         // Initialize legs if they don't exist yet (with delay to ensure sync tracking is ready)
+        const race = useRaceStore.getState();
+        
+        if (Math.abs(teamStartTime.getTime() - placeholderDate.getTime()) < 1000) {
+          // This is the placeholder date, don't use it
+          console.log('[fetchTeamDetails] Detected placeholder start time, not syncing with race store');
+        } else {
+          // Sync race store start time with team start time
+          race.setStartTime(teamStartTime.getTime());
+        }
+        
         if (race.legs.length === 0) {
           setTimeout(() => {
             const currentRace = useRaceStore.getState();
@@ -227,9 +265,8 @@ export const useTeamSync = () => {
       // Store team data in localStorage but don't update context yet
       // This prevents Index.tsx from thinking it's an existing team
       console.log('[createTeam] Storing team data in localStorage but not updating context yet');
-      const race = useRaceStore.getState();
-      const teamStartTime = new Date(race.startTime).toISOString();
-      localStorage.setItem('relay_team_start_time', teamStartTime);
+      // Don't set team start time here - it will be set in SetupWizard
+      // localStorage.setItem('relay_team_start_time', teamStartTime);
       localStorage.setItem('relay_team_join_code', joinCode);
       localStorage.setItem('relay_team_invite_token', inviteToken);
       
@@ -242,6 +279,7 @@ export const useTeamSync = () => {
       console.log('[createTeam] Team context will be updated after admin secret dialog is closed');
       
       // Reset race store for new team
+      const race = useRaceStore.getState();
       race.setTeamId(teamId);
       race.setRaceData({ isSetupComplete: false });
       race.setSetupStep(1);
@@ -337,17 +375,18 @@ export const useTeamSync = () => {
       sendTeamIdToServiceWorker(teamId);
       sendSupabaseUrlToServiceWorker();
       
-      // Use race store's current start time for joined team
-      const race = useRaceStore.getState();
-      const teamStartTime = new Date(race.startTime).toISOString();
-      localStorage.setItem('relay_team_start_time', teamStartTime);
+      // Don't set team start time here - it will be fetched from database
+      // const race = useRaceStore.getState();
+      // const teamStartTime = new Date(race.startTime).toISOString();
+      // localStorage.setItem('relay_team_start_time', teamStartTime);
       setDeviceInfo(newDeviceInfo);
 
       // Set team state immediately with the data we have from the join response
+      // Note: start_time will be fetched from database in fetchTeamDetails
       setTeam({ 
         id: teamId, 
         name: teamName, 
-        start_time: teamStartTime, 
+        start_time: '', // Will be fetched from database
         join_code,
         invite_token
       });
@@ -356,6 +395,7 @@ export const useTeamSync = () => {
       await fetchTeamDetails(teamId);
 
       // Reset race store for joined team
+      const race = useRaceStore.getState();
       race.setTeamId(teamId);
       race.setRaceData({ isSetupComplete: false });
       race.setSetupStep(1);

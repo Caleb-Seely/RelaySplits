@@ -25,7 +25,7 @@ interface SetupWizardProps {
 }
 
 const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
-  console.log('[SetupWizard] Rendering with isNewTeam:', isNewTeam);
+  // Component rendering
   const {
     startTime,
     runners,
@@ -67,6 +67,13 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   useEffect(() => {
     if (team && team.start_time && !didInitFromTeam && !isNewTeam) {
       const initialStartTime = new Date(team.start_time);
+      // Check if this is the placeholder date (2099-12-31)
+      const placeholderDate = new Date('2099-12-31T23:59:59Z');
+      if (Math.abs(initialStartTime.getTime() - placeholderDate.getTime()) < 1000) {
+        // This is the placeholder date, don't use it
+        console.log('[SetupWizard] Detected placeholder start time, not initializing from team data');
+        return;
+      }
       setStartTime(initialStartTime.getTime());
       setSelectedDateTime(dayjs(initialStartTime));
       // Go directly to runner configuration (single-step wizard)
@@ -75,10 +82,30 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     }
   }, [team, didInitFromTeam, setStartTime, setSetupStep, setDidInitFromTeam, isNewTeam]);
 
-  // Sync selectedDateTime with startTime (only if not already set)
+  // Initialize selectedDateTime with appropriate default
   useEffect(() => {
-    if (startTime && !selectedDateTime && !isNewTeam) {
-      setSelectedDateTime(dayjs(startTime));
+    if (!selectedDateTime) {
+      let initialTime = startTime;
+      
+      // For new teams, check if we have a stored team start time or use a better default
+      if (isNewTeam) {
+        const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+        if (storedTeamStartTime) {
+          const storedTime = new Date(storedTeamStartTime);
+          const placeholderDate = new Date('2099-12-31T23:59:59Z');
+          if (Math.abs(storedTime.getTime() - placeholderDate.getTime()) > 1000) {
+            initialTime = storedTime.getTime();
+          }
+        } else {
+          // For new teams without stored time, use a reasonable default (tomorrow at 8 AM)
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(8, 0, 0, 0);
+          initialTime = tomorrow.getTime();
+        }
+      }
+      
+      setSelectedDateTime(dayjs(initialTime));
     }
   }, [startTime, selectedDateTime, isNewTeam]);
 
@@ -131,6 +158,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
     if (newValue) {
       const newStartTime = newValue.valueOf();
       setStartTime(newStartTime);
+      
+      // Update localStorage immediately to prevent race conditions
+      const newStartTimeISO = new Date(newStartTime).toISOString();
+      localStorage.setItem('relay_team_start_time', newStartTimeISO);
     }
   };
 
@@ -154,13 +185,15 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
     setIsSaving(true);
     const toastId = toast.loading('Saving your team...');
-    console.log('[SetupWizard] Starting finish flow. isNewTeam:', isNewTeam, 'team:', team?.id);
+    // Starting finish flow
 
     try {
       // Save start time to team if this is a new team
       if (isNewTeam && team?.id) {
         const deviceId = getDeviceId();
-        const teamUpdateISO = new Date(startTime).toISOString();
+        
+        // Use the selectedDateTime value instead of startTime to ensure we send the correct time
+        const teamUpdateISO = selectedDateTime ? selectedDateTime.toISOString() : new Date(startTime).toISOString();
         
         const result = await invokeEdge('teams-update', {
           teamId: team.id,
@@ -172,7 +205,16 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
         if (result && !('error' in result)) {
           const updatedTeam = (result as any).data?.team;
           if (updatedTeam?.start_time) {
-            localStorage.setItem('relay_team_start_time', updatedTeam.start_time);
+            // Check if the server returned the same time we sent
+            const sentTime = teamUpdateISO;
+            const receivedTime = updatedTeam.start_time;
+            
+            if (sentTime === receivedTime) {
+              localStorage.setItem('relay_team_start_time', updatedTeam.start_time);
+            } else {
+              console.warn('[SetupWizard] Server returned different time than sent!');
+              // Don't overwrite localStorage if server returned different time
+            }
             
             // Also update the race store's start time to match
             const race = useRaceStore.getState();
@@ -190,12 +232,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
       }
 
       // Ensure legs exist before any save
-      console.log('[SetupWizard] Ensuring legs are initialized');
       initializeLegs();
-      
-      // Verify legs were created
       const storeStateAfterInit = useRaceStore.getState();
-      console.log('[SetupWizard] After initializeLegs - runners:', storeStateAfterInit.runners.length, 'legs:', storeStateAfterInit.legs.length);
       if (storeStateAfterInit.legs.length === 0) {
         console.error('[SetupWizard] Legs were not initialized properly!');
         toast.error('Failed to initialize race legs', { id: toastId });
@@ -204,27 +242,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
       // For new teams, insert initial rows for the team created in DemoLanding
       if (isNewTeam && team?.id) {
-        console.log('[SetupWizard] About to call saveInitialRows for team', team.id);
-        const storeState = useRaceStore.getState();
-        console.log('[SetupWizard] Current store state - runners:', storeState.runners.length, 'legs:', storeState.legs.length);
-        console.log('[SetupWizard] Start time:', storeState.startTime, 'ISO:', new Date(storeState.startTime).toISOString());
-        console.log('[SetupWizard] Sample runner:', storeState.runners[0]);
-        console.log('[SetupWizard] Sample leg:', storeState.legs[0]);
         
         try {
           // Small delay to ensure device info is properly set
           await new Promise(resolve => setTimeout(resolve, 100));
           
           const { error } = await saveInitialRows(team.id);
-          console.log('[SetupWizard] saveInitialRows completed, error:', error);
           if (error) {
             console.error('[SetupWizard] saveInitialRows failed:', error);
             toast.error(`Failed to save initial data: ${error.message}`, { id: toastId });
             return;
           }
-          
-          // Data is already saved and store is updated, no need to fetch again
-          console.log('[SetupWizard] Initial data saved and store updated successfully');
         } catch (e) {
           console.error('[SetupWizard] Exception in saveInitialRows:', e);
           toast.error(`Failed to save initial data: ${(e as Error)?.message || 'Unknown error'}`, { id: toastId });
@@ -235,24 +263,14 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
              // Complete local setup
        completeSetup();
        
-       // Log the final store state after setup completion
-       const finalStoreState = useRaceStore.getState();
-       console.log('[SetupWizard] Final store state after setup completion:', {
-         runners: finalStoreState.runners.length,
-         legs: finalStoreState.legs.length,
-         isSetupComplete: finalStoreState.isSetupComplete,
-         teamId: finalStoreState.teamId,
-         startTime: finalStoreState.startTime
-       });
-       
-       console.log('[SetupWizard] Finish flow complete');
+       // Setup complete
        toast.success('Your team is ready!', { id: toastId });
     } catch (e: unknown) {
       console.error('[SetupWizard] Unexpected error during finish flow:', e);
       toast.error((e as Error)?.message || 'Failed to complete setup', { id: toastId });
     } finally {
       setIsSaving(false);
-      console.log('[SetupWizard] Dismissing toast id', toastId);
+      // Dismiss toast
       toast.dismiss(toastId);
     }
   };

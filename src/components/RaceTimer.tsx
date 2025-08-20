@@ -19,7 +19,16 @@ const RaceTimer = () => {
   // Get the actual race start time from leg 1's actual start, or fall back to team start time or local start time
   const actualRaceStartTime = legs.length > 0 && legs[0].actualStart
     ? legs[0].actualStart
-    : (team?.start_time ? new Date(team.start_time).getTime() : startTime);
+    : (() => {
+        if (team?.start_time) {
+          const teamStartTime = new Date(team.start_time);
+          const placeholderDate = new Date('2099-12-31T23:59:59Z');
+          if (Math.abs(teamStartTime.getTime() - placeholderDate.getTime()) > 1000) {
+            return teamStartTime.getTime();
+          }
+        }
+        return startTime;
+      })();
 
   const raceElapsedMs = currentTime.getTime() - actualRaceStartTime;
   const isRaceStarted = raceElapsedMs > 0;

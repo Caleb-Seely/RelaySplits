@@ -92,13 +92,9 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
         projectedStart: time,
       };
 
-      const now = Date.now();
-      if (typeof updatedLegs[0].actualStart !== 'number') {
-        updatedLegs[0] = {
-          ...updatedLegs[0],
-          actualStart: time <= now ? time : undefined
-        } as typeof updatedLegs[number];
-      }
+      // FIXED: Don't automatically set actualStart based on current time
+      // actualStart should only be set when the race actually starts
+      // The previous logic was causing the dashboard to show current time instead of saved start time
 
       const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, time);
       return { startTime: time, legs: finalLegs };
@@ -213,6 +209,16 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       source: 'raceStore'
     });
 
+    // Update leaderboard when a leg is completed
+    if (field === 'actualFinish' && time !== null && state.teamId) {
+      // Trigger leaderboard update asynchronously
+      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegComplete }) => {
+        triggerLeaderboardUpdateOnLegComplete(state.teamId!, id, time);
+      }).catch(error => {
+        console.error('Failed to trigger leaderboard update:', error);
+      });
+    }
+
     // Update last synced timestamp to indicate local change
     return { legs: finalLegs, lastSyncedAt: Date.now() };
   }),
@@ -300,6 +306,13 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     if (state.teamId) {
       localStorage.setItem(`relay_setup_locked_${state.teamId}`, '1');
       console.log('[RaceStore] Setup completion persisted for team:', state.teamId);
+      
+      // Create leaderboard entry after setup is complete
+      import('@/services/leaderboard').then(({ createInitialLeaderboardEntry }) => {
+        createInitialLeaderboardEntry(state.teamId!, state.startTime);
+      }).catch(error => {
+        console.error('[RaceStore] Failed to create leaderboard entry:', error);
+      });
     }
   },
 

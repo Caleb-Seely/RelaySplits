@@ -12,6 +12,8 @@ import { notificationManager } from "@/utils/notifications";
 
 // Route-level code splitting
 const Index = lazy(() => import("./pages/Index"));
+const LeaderboardPage = lazy(() => import("./pages/Leaderboard"));
+const LeaderboardTest = lazy(() => import("./pages/LeaderboardTest"));
 
 const DemoLanding = lazy(() => import("./components/DemoLanding"));
 const ViewOnlyDashboard = lazy(() => import("./components/ViewOnlyDashboard"));
@@ -44,6 +46,8 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/demo" element={<DemoLanding />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/leaderboard-test" element={<LeaderboardTest />} />
 
                 <Route path="/view/:viewerCode" element={<ViewOnlyDashboard />} />
                 <Route path="/notifications-test" element={<NotificationDiagnostics />} />

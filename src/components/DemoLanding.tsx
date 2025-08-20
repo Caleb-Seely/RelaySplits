@@ -186,12 +186,7 @@ const DemoLanding = () => {
 
     if (result.success) {
       toast.success('Joined team successfully!');
-      // After joining, go straight to Dashboard
-      try {
-        useRaceStore.getState().completeSetup();
-      } catch (_) {
-        // no-op if store shape changes
-      }
+      // After joining, go straight to Dashboard (no setup needed for existing teams)
       navigate('/');
     } else {
       toast.error(result.error || 'Failed to join team');
@@ -403,6 +398,7 @@ const DemoLanding = () => {
         <div className="container mx-auto px-4 py-6">
           <div className="text-center mb-6">
             <h1 className="text-4xl font-bold text-foreground mb-2">TeamSplits</h1>
+            <p className="text-lg text-muted-foreground mb-1">Hood 2 Coast Team Tracking</p>
             <p className="text-xl text-muted-foreground">Stay in sync, every leg of the race.</p>
           </div>
           

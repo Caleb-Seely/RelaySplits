@@ -40,7 +40,29 @@ const Index = () => {
   const isOnline = navigator.onLine;
   const offlineChangesCount = queueStatus.pendingCount;
   const hasRestoredOfflineRef = useRef(false);
-  
+
+  // CRITICAL FIX: Synchronize race store start time with team start time from localStorage
+  useEffect(() => {
+    const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+    if (storedTeamStartTime) {
+      const teamStartTime = new Date(storedTeamStartTime).getTime();
+      const placeholderDate = new Date('2099-12-31T23:59:59Z');
+      
+      // Only sync if it's not the placeholder
+      if (Math.abs(teamStartTime - placeholderDate.getTime()) > 1000) {
+        const { startTime, setStartTime } = useRaceStore.getState();
+        
+        // Only update if the times differ significantly
+        if (Math.abs(teamStartTime - startTime) > 1000) {
+          console.log('[Index] Syncing race store start time with team start time from localStorage');
+          console.log('  Team start time:', new Date(teamStartTime).toISOString());
+          console.log('  Race store start time:', new Date(startTime).toISOString());
+          setStartTime(teamStartTime);
+        }
+      }
+    }
+  }, []);
+
   // Initialize Supabase sync and offline queue
   const { onConflictDetected } = useConflictResolution();
   const { fetchLatestData } = useEnhancedSyncManager();
@@ -146,8 +168,30 @@ const Index = () => {
       }
       const firstLeg = legs[0];
       const now = Date.now();
-      if (typeof firstLeg.actualStart !== 'number' && now >= startTime) {
-        updateLegActualTime(1, 'actualStart', startTime);
+      
+      // CRITICAL FIX: Use team start time from localStorage instead of race store startTime
+      // The race store startTime might still be the default, not the team's saved time
+      const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
+      let actualStartTime = startTime; // Default to race store time
+      
+      if (storedTeamStartTime) {
+        const teamStartTime = new Date(storedTeamStartTime).getTime();
+        const placeholderDate = new Date('2099-12-31T23:59:59Z');
+        
+        // Only use team start time if it's not the placeholder
+        if (Math.abs(teamStartTime - placeholderDate.getTime()) > 1000) {
+          actualStartTime = teamStartTime;
+          console.log('[Index] Using team start time from localStorage for auto-start:', new Date(actualStartTime).toISOString());
+        } else {
+          console.log('[Index] Team start time is placeholder, using race store time');
+        }
+      } else {
+        console.log('[Index] No team start time in localStorage, using race store time');
+      }
+      
+      if (typeof firstLeg.actualStart !== 'number' && now >= actualStartTime) {
+        console.log('[Index] Auto-starting race at team start time:', new Date(actualStartTime).toISOString());
+        updateLegActualTime(1, 'actualStart', actualStartTime);
       }
     }, 1000);
     return () => clearInterval(id);

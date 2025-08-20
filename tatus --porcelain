@@ -1,0 +1,26 @@
+warning: in the working copy of 'simple-test.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/App.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/Dashboard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/DemoLanding.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/LegScheduleTable.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/RaceTimer.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useTeamSync.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/integrations/supabase/edge.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/Index.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/store/raceStore.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/teams-create/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/migrations/20250110000000_create_backups_table.sql', LF will be replaced by CRLF the next time Git touches it
+simple-test.js
+src/App.tsx
+src/components/Dashboard.tsx
+src/components/DemoLanding.tsx
+src/components/ErrorBoundary.tsx
+src/components/LegScheduleTable.tsx
+src/components/RaceTimer.tsx
+src/components/SetupWizard.tsx
+src/hooks/useTeamSync.ts
+src/integrations/supabase/edge.ts
+src/pages/Index.tsx
+src/store/raceStore.ts
+supabase/functions/teams-create/index.ts
+supabase/migrations/20250110000000_create_backups_table.sql
