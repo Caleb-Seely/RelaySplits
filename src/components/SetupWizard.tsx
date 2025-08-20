@@ -19,6 +19,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs, { Dayjs } from 'dayjs';
+import { useRaceTracking, useFeatureUsageTracking } from '@/hooks/useAnalytics';
 
 interface SetupWizardProps {
   isNewTeam?: boolean;
@@ -41,6 +42,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
   const { onConflictDetected } = useConflictResolution();
   const { fetchLatestData, saveInitialRows } = useEnhancedSyncManager();
   const { team, refreshTeamData } = useTeamSync();
+  const { trackSetupCompleted, trackTeamSizeFinalized } = useRaceTracking();
+  const { trackSpreadsheetImportUsed } = useFeatureUsageTracking();
 
   const [isSaving, setIsSaving] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -262,6 +265,18 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
              // Complete local setup
        completeSetup();
+       
+       // Track setup completion
+       trackSetupCompleted({
+         team_id: team?.id,
+         team_size: runners.length
+       });
+       
+       // Track team size finalized
+       trackTeamSizeFinalized({
+         team_id: team?.id,
+         team_size: runners.length
+       });
        
        // Setup complete
        toast.success('Your team is ready!', { id: toastId });

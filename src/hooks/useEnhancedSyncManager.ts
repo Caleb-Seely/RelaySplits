@@ -11,12 +11,14 @@ import { recalculateProjections } from '@/utils/raceUtils';
 import { syncLogger } from '@/utils/logger';
 import { validateForSync, validateLeg } from '@/utils/validation';
 import { getSynchronizedTime } from '@/services/clockSync';
+import { useTechnicalTracking } from '@/hooks/useAnalytics';
 
 // Enhanced sync manager that prioritizes data accuracy and integrates with existing systems
 export const useEnhancedSyncManager = () => {
   const store = useRaceStore();
   const { onConflictDetected } = useConflictResolution();
   const { queueChange, processQueue, getQueueStatus } = useOfflineQueue();
+  const { trackSyncError } = useTechnicalTracking();
   
   // Track sync state
   const isProcessingSync = useRef(false);
@@ -194,6 +196,10 @@ export const useEnhancedSyncManager = () => {
       }
     } catch (error) {
       console.error(`[useEnhancedSyncManager] Error syncing leg ${legId}:`, error);
+      trackSyncError(error as Error, {
+        sync_method: 'leg_update',
+        field: field
+      });
       // Queue the change for retry
       queueChange({
         table: 'legs',

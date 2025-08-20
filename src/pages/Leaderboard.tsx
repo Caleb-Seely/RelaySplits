@@ -37,8 +37,8 @@ const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; posi
           {position === 3 && <Flame className="h-6 w-6 text-orange-500 mx-auto" />}
         </div>
       </div>
-      <div className="mt-2 text-center bg-white rounded-lg p-3 shadow-md border border-gray-100 min-w-[140px]">
-        <h3 className={`font-bold text-sm truncate ${isCurrentTeam ? 'text-blue-600' : 'text-gray-800'}`}>
+      <div className="mt-2 text-center bg-white rounded-lg p-3 shadow-md border border-gray-100 min-w-[140px] max-w-[200px]">
+        <h3 className={`font-bold text-sm truncate w-full ${isCurrentTeam ? 'text-blue-600' : 'text-gray-800'}`}>
           {team.team_name || `Team ${team.id}`}
         </h3>
         <p className="text-xs text-gray-500 mt-1">
@@ -119,16 +119,16 @@ const TeamCard = ({ team, position, isCurrentTeam = false }: { team: any; positi
         )}
 
                  {/* Header Row - Team Name and Leg Info */}
-         <div className="flex items-center justify-between mb-3">
+         <div className="flex items-center justify-between mb-3 gap-3">
            {/* Team Name */}
-           <div className="min-w-0 flex-1">
-             <h3 className="text-base font-bold text-gray-100 group-hover:text-blue-400 transition-colors truncate">
+           <div className="min-w-0 flex-1 max-w-full">
+             <h3 className="text-base font-bold text-gray-100 group-hover:text-blue-400 transition-colors truncate w-full">
                {team.team_name || `Team ${team.id}`}
              </h3>
            </div>
            
            {/* Next Leg with Time Badge */}
-           <div className="flex items-center">
+           <div className="flex items-center flex-shrink-0">
              {minutesToFinish !== null && (
                <div className={`flex items-center space-x-1 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm ${
                  minutesToFinish === 0
@@ -416,30 +416,32 @@ export const LeaderboardPage = () => {
                </h1>
                <p className="text-gray-300 text-lg">Live race standings and team progress</p>
              </div>
-             <div className="flex items-center gap-3">
-               <button 
-                 onClick={handleTestRealtime} 
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-               >
-                 <Zap className="h-4 w-4 mr-2" />
-                 Test RT
-               </button>
-               <button 
-                 onClick={forceRefresh} 
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-               >
-                 <RefreshCw className="h-4 w-4 mr-2" />
-                 Force Refresh
-               </button>
-               <button 
-                 onClick={handleManualRefresh} 
-                 disabled={isRefreshing}
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                 Refresh
-               </button>
-             </div>
+                           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <button 
+                  onClick={handleTestRealtime} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                >
+                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Test RT</span>
+                  <span className="sm:hidden">RT</span>
+                </button>
+                <button 
+                  onClick={forceRefresh} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                >
+                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Force Refresh</span>
+                  <span className="sm:hidden">Force</span>
+                </button>
+                <button 
+                  onClick={handleManualRefresh} 
+                  disabled={isRefreshing}
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
            </div>
           
           {/* Loading State */}
@@ -466,37 +468,39 @@ export const LeaderboardPage = () => {
                </h1>
                <p className="text-gray-300 text-lg">Live race standings and team progress</p>
              </div>
-             <div className="flex items-center gap-3">
-               <button 
-                 onClick={handleTestRealtime} 
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-               >
-                 <Zap className="h-4 w-4 mr-2" />
-                 Test RT
-               </button>
-               <button 
-                 onClick={handleDebugTest} 
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-purple-600 text-purple-300 bg-transparent hover:bg-purple-800 hover:border-purple-500 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-               >
-                 <Bug className="h-4 w-4 mr-2" />
-                 Debug
-               </button>
-               <button 
-                 onClick={forceRefresh} 
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-               >
-                 <RefreshCw className="h-4 w-4 mr-2" />
-                 Force Refresh
-               </button>
-               <button 
-                 onClick={handleManualRefresh} 
-                 disabled={isRefreshing}
-                 className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                 Refresh
-               </button>
-             </div>
+                           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <button 
+                  onClick={handleTestRealtime} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                >
+                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Test RT</span>
+                  <span className="sm:hidden">RT</span>
+                </button>
+                <button 
+                  onClick={handleDebugTest} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-purple-600 text-purple-300 bg-transparent hover:bg-purple-800 hover:border-purple-500 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                >
+                  <Bug className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Debug
+                </button>
+                <button 
+                  onClick={forceRefresh} 
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                >
+                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Force Refresh</span>
+                  <span className="sm:hidden">Force</span>
+                </button>
+                <button 
+                  onClick={handleManualRefresh} 
+                  disabled={isRefreshing}
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
            </div>
           <div className="bg-red-900/20 border border-red-700/50 text-red-300 px-6 py-4 rounded-2xl shadow-lg backdrop-blur-sm">
             <p className="font-medium">Unable to load leaderboard data</p>
@@ -521,41 +525,43 @@ export const LeaderboardPage = () => {
               </h1>
               <p className="text-gray-300 text-lg">Live race standings and team progress</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
               {lastUpdateTime && (
                 <div className="hidden lg:flex items-center text-sm text-gray-300 bg-gray-800/50 backdrop-blur-sm px-3 py-2 rounded-full shadow-lg border border-gray-700/50">
                   <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
                   Last updated: {lastUpdateTime.toLocaleTimeString()}
                 </div>
               )}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button 
                   onClick={handleTestRealtime} 
-                  className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                 >
-                  <Zap className="h-4 w-4 mr-2" />
-                  Test RT
+                  <Zap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Test RT</span>
+                  <span className="sm:hidden">RT</span>
                 </button>
                 <button 
                   onClick={handleDebugTest} 
-                  className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-purple-600 text-purple-300 bg-transparent hover:bg-purple-800 hover:border-purple-500 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-purple-600 text-purple-300 bg-transparent hover:bg-purple-800 hover:border-purple-500 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                 >
-                  <Bug className="h-4 w-4 mr-2" />
+                  <Bug className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                   Debug
                 </button>
                 <button 
                   onClick={forceRefresh} 
-                  className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-orange-600 text-orange-300 bg-transparent hover:bg-orange-800 hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                 >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Force Refresh
+                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Force Refresh</span>
+                  <span className="sm:hidden">Force</span>
                 </button>
                 <button 
                   onClick={handleManualRefresh} 
                   disabled={isRefreshing}
-                  className="inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center rounded-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-800 hover:border-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                   Refresh
                 </button>
               </div>

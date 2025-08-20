@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatPace } from '@/utils/raceUtils';
 import { Clock, AlertCircle, Check } from 'lucide-react';
+import { useFeatureUsageTracking } from '@/hooks/useAnalytics';
 
 interface PaceInputModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ const PaceInputModal: React.FC<PaceInputModalProps> = ({
   const [paceSeconds, setPaceSeconds] = useState(initialPace);
   const [error, setError] = useState('');
   const [isValid, setIsValid] = useState(false);
+  const { trackPaceOverrideUsed } = useFeatureUsageTracking();
 
   // Preset pace options (in seconds per mile)
   const pacePresets = [
@@ -129,6 +131,11 @@ const PaceInputModal: React.FC<PaceInputModalProps> = ({
   const handleSubmit = () => {
     if (isValid && paceSeconds > 0) {
       onSubmit(paceSeconds);
+      trackPaceOverrideUsed({
+        runner_name: runnerName,
+        pace_seconds: paceSeconds,
+        pace_formatted: formatPace(paceSeconds)
+      });
       onClose();
     }
   };

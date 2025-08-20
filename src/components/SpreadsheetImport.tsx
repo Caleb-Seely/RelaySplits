@@ -15,6 +15,7 @@ import { Runner } from '@/types/race';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { Upload, FileSpreadsheet, Users, AlertCircle, Check, X, RefreshCw } from 'lucide-react';
+import { useFeatureUsageTracking, useTechnicalTracking } from '@/hooks/useAnalytics';
 
 interface SpreadsheetImportProps {
   isOpen: boolean;
@@ -43,6 +44,8 @@ type ValidationError = {
 const SpreadsheetImport: React.FC<SpreadsheetImportProps> = ({ isOpen, onClose, onImported }) => {
   const { setRunners } = useRaceStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { trackSpreadsheetImportUsed } = useFeatureUsageTracking();
+  const { trackImportCrash } = useTechnicalTracking();
   
   // State management
   const [currentStep, setCurrentStep] = useState<'upload' | 'mapping' | 'preview' | 'importing'>('upload');
@@ -478,6 +481,14 @@ const SpreadsheetImport: React.FC<SpreadsheetImportProps> = ({ isOpen, onClose, 
 
     // Actually import the data
     setRunners(previewRunners);
+    
+    // Track successful import
+    trackSpreadsheetImportUsed({
+      import_file_type: file?.name?.split('.').pop() || 'unknown',
+      import_row_count: previewRunners.length,
+      import_error_count: validationErrors.length
+    });
+    
     // Notify parent so it can update any local UI state (e.g., paceInputs)
     try {
       onImported?.(previewRunners);

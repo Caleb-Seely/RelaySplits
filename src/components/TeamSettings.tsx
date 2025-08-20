@@ -34,6 +34,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { useRaceStore } from '@/store/raceStore';
+import { useFeatureUsageTracking } from '@/hooks/useAnalytics';
 
 import { triggerConfetti } from '@/utils/confetti';
 
@@ -84,6 +85,7 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
   const { updateTeamInviteToken } = useTeamSync();
   const { undoLastStartRunner, canUndo, getUndoDescription } = useRaceStore();
   const isMobile = useIsMobile();
+  const { trackConfettiTest, trackSettingsAccessed } = useFeatureUsageTracking();
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [teamName, setTeamName] = useState(team?.name || '');
@@ -218,6 +220,7 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
   const testConfetti = () => {
     console.log('Testing confetti');
     triggerConfetti({ particleCount: 50, spread: 50 });
+    trackConfettiTest({ team_id: team?.id });
   };
 
   return (

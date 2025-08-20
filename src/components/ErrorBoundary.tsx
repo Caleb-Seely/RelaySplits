@@ -1,4 +1,6 @@
 import React from 'react';
+import { analytics } from '@/services/analytics';
+import { captureSentryError } from '@/services/sentry';
 
 export class LeaderboardErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -19,7 +21,28 @@ export class LeaderboardErrorBoundary extends React.Component<
   }
   
   private reportError(error: Error, errorInfo: React.ErrorInfo) {
-    // Send to monitoring service
+    // Track error in analytics
+    analytics.trackError({
+      error_message: error.message,
+      error_stack: error.stack,
+      error_type: error.constructor.name,
+      fatal: false,
+      context: {
+        component: 'LeaderboardErrorBoundary',
+        errorInfo: errorInfo.componentStack
+      }
+    });
+
+    // Capture error in Sentry
+    captureSentryError(error, {
+      component: 'LeaderboardErrorBoundary',
+      errorInfo: errorInfo.componentStack
+    }, {
+      error_boundary: 'true',
+      component: 'leaderboard'
+    });
+
+    // Legacy gtag tracking (keeping for backward compatibility)
     if (window.gtag) {
       window.gtag('event', 'exception', {
         description: error.message,

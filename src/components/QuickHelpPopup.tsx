@@ -12,6 +12,7 @@ import {
   Eye,
   Smartphone
 } from 'lucide-react';
+import { useFeatureUsageTracking } from '@/hooks/useAnalytics';
 
 interface QuickHelpPopupProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface QuickHelpPopupProps {
 
 const QuickHelpPopup: React.FC<QuickHelpPopupProps> = ({ isOpen, onClose }) => {
   const [animateItems, setAnimateItems] = useState(false);
+  const { trackQuickHelpUsed } = useFeatureUsageTracking();
 
   useEffect(() => {
     if (isOpen) {
@@ -32,6 +34,7 @@ const QuickHelpPopup: React.FC<QuickHelpPopupProps> = ({ isOpen, onClose }) => {
 
   const handleGotIt = () => {
     console.log('[QuickHelpPopup] Got it clicked');
+    trackQuickHelpUsed();
     onClose();
   };
 

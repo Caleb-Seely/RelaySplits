@@ -79,6 +79,7 @@ import DashboardPrompts from './DashboardPrompts';
 
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
 import { useNavigate } from 'react-router-dom';
+import { useRaceTracking, useFeatureUsageTracking, useTechnicalTracking } from '@/hooks/useAnalytics';
 
 interface DashboardProps {
   isViewOnly?: boolean;
@@ -107,6 +108,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
   const { performSmartSync, getQueueStatus, isProcessingSync, setupRealtimeSubscriptions, manualRetry, fetchLatestData } = useEnhancedSyncManager();
+  const { trackRaceStarted, trackLegCompleted, trackVanSwitched, trackRunnerAdded } = useRaceTracking();
+  const { trackConfettiTest, trackCelebrationButtonClicked } = useFeatureUsageTracking();
+  const { trackSyncError } = useTechnicalTracking();
   const { 
     isSupported: notificationsSupported, 
     getPermission: notificationPermission, 
@@ -652,10 +656,23 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         // Starting the first leg - no current runner exists
         console.log('[handleStartRunner] Starting first leg:', nextRunner.id);
         startNextRunner(null, nextRunner.id);
+        
+        // Track race started
+        trackRaceStarted({
+          team_id: teamId,
+          leg_number: nextRunner.id
+        });
       } else {
         // Transitioning from current to next leg
         console.log('[handleStartRunner] Transitioning from leg', currentRunner.id, 'to leg', nextRunner.id);
         startNextRunner(currentRunner.id, nextRunner.id);
+        
+        // Track leg completed
+        trackLegCompleted({
+          team_id: teamId,
+          leg_number: currentRunner.id,
+          runner_id: currentRunner.runnerId
+        });
       }
       
       // Force immediate UI refresh by updating currentTime
@@ -792,19 +809,21 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         <div className="relative z-10 container mx-auto px-2 sm:px-3 lg:px-4 lg:pb-4 space-y-4 lg:space-y-5">
           {/* Enhanced Header with Sync Status */}
           <div className="text-center space-y-3">
-            <div className="mb-2 flex items-center justify-center gap-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex-1"></div>
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">
                 {isViewOnly && viewOnlyTeamName ? viewOnlyTeamName : (team?.name || 'Team Name')}
               </h1>
-              <Button
-                onClick={() => navigate('/leaderboard')}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 bg-card hover:bg-accent"
-              >
-                <Trophy className="h-4 w-4" />
-                Leaderboard
-              </Button>
+              <div className="flex-1 flex justify-end">
+                <Button
+                  onClick={() => navigate('/leaderboard')}
+                  variant="outline"
+                  size="sm"
+                  className="bg-card hover:bg-accent"
+                >
+                  <Trophy className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Race Progress Bar */}
@@ -1214,6 +1233,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                           onClick={() => {
                             console.log('Triggering confetti for celebrate');
                             triggerConfetti({ particleCount: 150, spread: 80 });
+                            trackCelebrationButtonClicked({
+                              team_id: teamId
+                            });
                             toast(getRandomCelebrationMessage());
                           }}
                           size="lg"
@@ -1389,6 +1411,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                     updateLegActualTime(36, 'actualFinish', Date.now());
                                     console.log('Triggering confetti for finish race');
                                     triggerConfetti({ particleCount: 200, spread: 100 });
+                                    trackCelebrationButtonClicked({
+                                      team_id: teamId
+                                    });
                                   }}
                                   size="sm"
                                   className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
@@ -1431,6 +1456,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                     updateLegActualTime(36, 'actualFinish', Date.now());
                                     console.log('Triggering confetti for finish race');
                                     triggerConfetti({ particleCount: 200, spread: 100 });
+                                    trackCelebrationButtonClicked({
+                                      team_id: teamId
+                                    });
                                   }}
                                   size="sm"
                                   className="font-semibold px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
@@ -1464,7 +1492,10 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                   <Button
                     variant={currentVan === 1 ? "default" : "ghost"}
                     size="lg"
-                    onClick={() => setCurrentVan(1)}
+                    onClick={() => {
+                      setCurrentVan(1);
+                      trackVanSwitched({ team_id: teamId, van_number: 1 });
+                    }}
                     className={`relative px-6 py-2 font-semibold transition-all duration-200 ${
                       currentVan === 1
                         ? 'bg-primary text-primary-foreground shadow-lg transform scale-105'
@@ -1477,7 +1508,10 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                   <Button
                     variant={currentVan === 2 ? "default" : "ghost"}
                     size="lg"
-                    onClick={() => setCurrentVan(2)}
+                    onClick={() => {
+                      setCurrentVan(2);
+                      trackVanSwitched({ team_id: teamId, van_number: 2 });
+                    }}
                     className={`relative px-6 py-2 font-semibold transition-all duration-200 ${
                       currentVan === 2
                         ? 'bg-primary text-primary-foreground shadow-lg transform scale-105'

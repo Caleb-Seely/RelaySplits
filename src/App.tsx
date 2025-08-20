@@ -9,6 +9,7 @@ import { TeamProvider } from "@/contexts/TeamContext";
 import { ConflictResolutionProvider } from "@/contexts/ConflictResolutionContext";
 import ConflictResolutionModal from "@/components/ConflictResolutionModal";
 import { notificationManager } from "@/utils/notifications";
+import { useSessionDurationTracking } from "@/hooks/useAnalytics";
 
 // Route-level code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -22,6 +23,8 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 const App = () => {
+  const { trackSessionDuration } = useSessionDurationTracking();
+  
   // Initialize notification system on app start (but don't request permission automatically)
   useEffect(() => {
     notificationManager.initialize().then((success) => {
@@ -32,6 +35,21 @@ const App = () => {
       }
     });
   }, []);
+  
+  // Track session duration on app unload
+  useEffect(() => {
+    const startTime = Date.now();
+    
+    const handleBeforeUnload = () => {
+      const duration = Date.now() - startTime;
+      trackSessionDuration(duration);
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [trackSessionDuration]);
 
   return (
   <QueryClientProvider client={queryClient}>

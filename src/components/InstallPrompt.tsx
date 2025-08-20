@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { X, Download, Smartphone, Monitor } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
+import { usePWATracking } from '@/hooks/useAnalytics';
 
 interface InstallPromptProps {
   onDismiss?: () => void;
@@ -12,19 +13,24 @@ interface InstallPromptProps {
 const InstallPrompt: React.FC<InstallPromptProps> = ({ onDismiss }) => {
   const { canInstall, isInstalling, install } = usePWA();
   const [isDismissed, setIsDismissed] = useState(false);
+  const { trackInstallPromptShown, trackInstallSuccess } = usePWATracking();
 
   useEffect(() => {
     // Check if user has already dismissed this session
     const dismissed = sessionStorage.getItem('pwa-install-dismissed');
     if (dismissed) {
       setIsDismissed(true);
+    } else {
+      // Track that install prompt was shown
+      trackInstallPromptShown();
     }
-  }, []);
+  }, [trackInstallPromptShown]);
 
   const handleInstall = async () => {
     const success = await install();
     if (success) {
       console.log('PWA installation successful');
+      trackInstallSuccess();
     } else {
       console.log('PWA installation declined or failed');
     }

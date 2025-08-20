@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,30 +11,12 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    nodePolyfills({
-      // Whether to polyfill specific globals
-      globals: {
-        Buffer: true,
-        global: true,
-        process: true,
-      },
-      // Whether to polyfill `global`
-      protocolImports: true,
-      // Add specific polyfills for Node.js modules
-      include: ['util', 'stream', 'crypto', 'buffer', 'url', 'events'],
-    }),
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Node.js polyfills for browser compatibility
-      util: 'util',
-      stream: 'stream-browserify',
-      crypto: 'crypto-browserify',
-      buffer: 'buffer',
-      url: 'url',
     },
     // Fix CommonJS/ES module compatibility
     mainFields: ['module', 'main'],
@@ -104,17 +85,13 @@ export default defineConfig(({ mode }) => ({
     include: [
       'react',
       'react-dom',
+      '@supabase/supabase-js',
       'zustand',
       '@tanstack/react-query',
       'date-fns',
       'zod',
       'dompurify',
       'canvas-confetti',
-      // Include polyfills
-      'util',
-      'buffer',
-      'crypto-browserify',
-      'stream-browserify',
     ],
     // Exclude problematic dependencies
     exclude: ['@sentry/react'], // Exclude Sentry from pre-bundling
@@ -127,8 +104,6 @@ export default defineConfig(({ mode }) => ({
   define: {
     // Fix CommonJS issues
     global: 'globalThis',
-    // Ensure proper polyfills are available
-    'process.env': {},
   },
   // Performance optimizations
   esbuild: {

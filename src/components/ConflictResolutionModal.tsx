@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Clock, AlertTriangle } from 'lucide-react';
 // import { format } from 'date-fns';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
+import { useTechnicalTracking } from '@/hooks/useAnalytics';
 
 const ConflictResolutionModal: React.FC = () => {
   const { currentConflict, isConflictModalOpen, closeConflict, resolveConflict } = useConflictResolution();
+  const { trackConflictResolved } = useTechnicalTracking();
   
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString('en-US', { 
@@ -25,6 +27,11 @@ const ConflictResolutionModal: React.FC = () => {
 
   const handleResolve = (selectedTime: number) => {
     resolveConflict(selectedTime);
+    trackConflictResolved({
+      conflict_type: 'time_sync',
+      leg_number: currentConflict?.legNumber,
+      runner_id: currentConflict?.runnerId
+    });
   };
 
   if (!currentConflict) return null;

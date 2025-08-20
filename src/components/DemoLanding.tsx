@@ -364,7 +364,7 @@ const DemoLanding = () => {
           <div className="text-center mb-6">
             <h1 className="text-4xl font-bold text-foreground mb-2">TeamSplits</h1>
             <p className="text-lg text-muted-foreground mb-1">Hood 2 Coast Team Tracking</p>
-            <p className="text-xl text-muted-foreground">Stay in sync, every leg of the race.</p>
+            <p className="text-lg text-muted-foreground">Stay in sync, every leg of the race.</p>
           </div>
           
           {/* Tab Headers - Primary Navigation */}

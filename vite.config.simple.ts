@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,30 +11,12 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    nodePolyfills({
-      // Whether to polyfill specific globals
-      globals: {
-        Buffer: true,
-        global: true,
-        process: true,
-      },
-      // Whether to polyfill `global`
-      protocolImports: true,
-      // Add specific polyfills for Node.js modules
-      include: ['util', 'stream', 'crypto', 'buffer', 'url', 'events'],
-    }),
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Node.js polyfills for browser compatibility
-      util: 'util',
-      stream: 'stream-browserify',
-      crypto: 'crypto-browserify',
-      buffer: 'buffer',
-      url: 'url',
     },
     // Fix CommonJS/ES module compatibility
     mainFields: ['module', 'main'],
@@ -43,16 +24,18 @@ export default defineConfig(({ mode }) => ({
   build: {
     // Optimize bundle size
     target: 'es2020',
-    minify: 'esbuild', // Use esbuild instead of terser
+    minify: 'esbuild',
     rollupOptions: {
       external: (id) => {
-        // Don't bundle Sentry's CommonJS dependencies
+        // Externalize Node.js modules that shouldn't be bundled
+        if (id === 'stream' || id === 'http' || id === 'url' || id === 'crypto' || id === 'buffer') {
+          return true;
+        }
         return false;
       },
       output: {
         // Manual chunk splitting for better caching
         manualChunks: {
-          // Vendor chunks
           'react-vendor': ['react', 'react-dom'],
           'ui-vendor': [
             '@radix-ui/react-dialog',
@@ -95,7 +78,7 @@ export default defineConfig(({ mode }) => ({
       },
     },
     // Optimize chunk size warnings
-    chunkSizeWarningLimit: 1000, // Increase limit to 1MB
+    chunkSizeWarningLimit: 1000,
     // Enable source maps for debugging
     sourcemap: mode === 'development',
   },
@@ -110,14 +93,9 @@ export default defineConfig(({ mode }) => ({
       'zod',
       'dompurify',
       'canvas-confetti',
-      // Include polyfills
-      'util',
-      'buffer',
-      'crypto-browserify',
-      'stream-browserify',
     ],
     // Exclude problematic dependencies
-    exclude: ['@sentry/react'], // Exclude Sentry from pre-bundling
+    exclude: ['@sentry/react', '@supabase/supabase-js'],
     esbuildOptions: {
       // Fix CommonJS compatibility issues
       mainFields: ['module', 'main'],
@@ -127,8 +105,6 @@ export default defineConfig(({ mode }) => ({
   define: {
     // Fix CommonJS issues
     global: 'globalThis',
-    // Ensure proper polyfills are available
-    'process.env': {},
   },
   // Performance optimizations
   esbuild: {
