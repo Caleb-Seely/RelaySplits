@@ -110,6 +110,14 @@ export class PWAManager {
   init(): void {
     console.log('[PWA] Initializing PWA manager...');
     
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches || 
+        (window.navigator as any).standalone === true) {
+      console.log('[PWA] App is already installed');
+      this.notifyInstallListeners(false);
+      return;
+    }
+    
     // Listen for beforeinstallprompt event
     window.addEventListener('beforeinstallprompt', (e) => {
       console.log('[PWA] beforeinstallprompt event received');
@@ -125,11 +133,49 @@ export class PWAManager {
       this.notifyInstallListeners(false);
     });
     
+    // Check if we should show install prompt after user engagement
+    this.checkInstallEligibility();
+    
     console.log('[PWA] PWA manager initialized, waiting for beforeinstallprompt event...');
+  }
+
+  private checkInstallEligibility(): void {
+    // On Android Chrome, the beforeinstallprompt event might not fire immediately
+    // We need to wait for user engagement and check periodically
+    let checkCount = 0;
+    const maxChecks = 10; // Check for 10 seconds
+    
+    const checkInterval = setInterval(() => {
+      checkCount++;
+      
+      // Check if we can install (this might become true after user interaction)
+      if (this.deferredPrompt) {
+        clearInterval(checkInterval);
+        this.notifyInstallListeners(true);
+        return;
+      }
+      
+      // Stop checking after max attempts
+      if (checkCount >= maxChecks) {
+        clearInterval(checkInterval);
+        console.log('[PWA] Install prompt not available after user engagement');
+      }
+    }, 1000);
   }
 
   async install(): Promise<boolean> {
     if (!this.deferredPrompt) {
+      // If no deferred prompt but we're on Android Chrome, return false
+      // The UI will handle showing installation instructions
+      const userAgent = navigator.userAgent;
+      const isAndroid = /Android/.test(userAgent);
+      const isChrome = /Chrome/.test(userAgent);
+      
+      if (isAndroid && isChrome) {
+        console.log('[PWA] No deferred prompt available on Android Chrome');
+        return false;
+      }
+      
       return false;
     }
 
@@ -152,7 +198,28 @@ export class PWAManager {
   }
 
   canInstall(): boolean {
-    return this.deferredPrompt !== null;
+    // Check if we have a deferred prompt
+    if (this.deferredPrompt !== null) {
+      return true;
+    }
+    
+    // Additional checks for Android Chrome
+    const userAgent = navigator.userAgent;
+    const isAndroid = /Android/.test(userAgent);
+    const isChrome = /Chrome/.test(userAgent);
+    
+    // On Android Chrome, we might need to show manual installation instructions
+    if (isAndroid && isChrome) {
+      // Check if we're in a standalone mode (already installed)
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        return false;
+      }
+      
+      // For Android Chrome, we can show installation instructions even without beforeinstallprompt
+      return true;
+    }
+    
+    return false;
   }
 
   onInstallStateChange(callback: (canInstall: boolean) => void): void {

@@ -50,6 +50,7 @@ import { usePWA } from '@/hooks/usePWA';
 import { toast } from 'sonner';
 import { useRaceStore } from '@/store/raceStore';
 import AdminSecretDisplay from './AdminSecretDisplay';
+import { PWADebugInfo } from './PWADebugInfo';
 
 
 
@@ -77,6 +78,7 @@ const DemoLanding = () => {
   const [adminSecret, setAdminSecret] = useState('');
   const [createdTeamName, setCreatedTeamName] = useState('');
   const [showLearnMore, setShowLearnMore] = useState(false);
+  const [showPWADebug, setShowPWADebug] = useState(false);
 
   // Update current time every second for live demo
   useEffect(() => {
@@ -101,7 +103,31 @@ const DemoLanding = () => {
   // Handle PWA installation
   const handleInstallApp = async () => {
     if (!canInstall) {
-      toast.error('App installation not available. Please use a supported browser on mobile or desktop.');
+      const { browser, isMobile, isIOS, isAndroid } = getBrowserInfo();
+      
+      if (isMobile) {
+        if (isIOS) {
+          toast.info('On iOS Safari: Tap the Share button (square with arrow) and select "Add to Home Screen"');
+        } else if (isAndroid) {
+          if (browser === 'Chrome') {
+            toast.info('On Android Chrome: Tap the menu (⋮) and select "Add to Home Screen" or look for the install icon in the address bar');
+          } else {
+            toast.info('On Android: Tap the menu and look for "Add to Home Screen" or "Install App"');
+          }
+        } else {
+          toast.info('Tap your browser menu and look for "Add to Home Screen" or "Install App"');
+        }
+      } else {
+        if (browser === 'Chrome') {
+          toast.info('In Chrome: Look for the install icon (📱) in the address bar on the right side');
+        } else if (browser === 'Edge') {
+          toast.info('In Edge: Look for the install icon (📱) in the address bar on the right side');
+        } else if (browser === 'Firefox') {
+          toast.info('In Firefox: Look for the install icon in the address bar or menu');
+        } else {
+          toast.info('Look for an install icon in your browser address bar or menu');
+        }
+      }
       return;
     }
 
@@ -697,7 +723,7 @@ const DemoLanding = () => {
                   toast.info('On iOS Safari: Tap the Share button (square with arrow) and select "Add to Home Screen"');
                 } else if (isAndroid) {
                   if (browser === 'Chrome') {
-                    toast.info('On Android Chrome: Tap the menu (⋮) and select "Add to Home Screen"');
+                    toast.info('On Android Chrome: Tap the menu (⋮) and select "Add to Home Screen" or look for the install icon in the address bar');
                   } else {
                     toast.info('On Android: Tap the menu and look for "Add to Home Screen" or "Install App"');
                   }
@@ -734,6 +760,16 @@ const DemoLanding = () => {
                 Download App
               </>
             )}
+          </Button>
+          
+          {/* Debug Button for Android Chrome */}
+          <Button
+            onClick={() => setShowPWADebug(true)}
+            variant="outline"
+            className="font-semibold px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+          >
+            <Info className="h-5 w-5" />
+            Debug PWA
           </Button>
         </div>
       </div>
@@ -1311,6 +1347,12 @@ const DemoLanding = () => {
           </div>
                 </div>
       </div>
+
+      {/* PWA Debug Info */}
+      <PWADebugInfo 
+        isVisible={showPWADebug} 
+        onClose={() => setShowPWADebug(false)} 
+      />
     </div>
   );
 };
