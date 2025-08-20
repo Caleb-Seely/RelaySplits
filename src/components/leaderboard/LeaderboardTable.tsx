@@ -76,7 +76,7 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ teams }) => 
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {teams.map((team, index) => (
-            <tr key={team.id} className="hover:bg-gray-50">
+            <tr key={team.id || team.team_id || `team-${index}`} className="hover:bg-gray-50">
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                 {index + 1}
               </td>

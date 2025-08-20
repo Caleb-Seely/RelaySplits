@@ -827,11 +827,16 @@ export const useEnhancedSyncManager = () => {
           eventBus.publish({
             type: EVENT_TYPES.REALTIME_UPDATE,
             payload: {
-              table: payload.payload.type,
+              type: payload.payload.type,
               action: payload.payload.action,
               count: payload.payload.count,
               device_id: payload.payload.device_id,
-              timestamp: payload.payload.timestamp
+              timestamp: payload.payload.timestamp,
+              // Include team_id for leaderboard updates
+              team_id: payload.payload.team_id,
+              // Include additional fields for leaderboard updates
+              current_leg: payload.payload.current_leg,
+              projected_finish_time: payload.payload.projected_finish_time
             },
             priority: 'high',
             source: 'realtime'

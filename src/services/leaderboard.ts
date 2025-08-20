@@ -262,6 +262,157 @@ export async function fetchLeaderboardData(params?: LeaderboardRequest): Promise
 }
 
 /**
+ * Fetch leaderboard data for a specific team only
+ * This is more efficient than fetching the entire leaderboard
+ */
+export async function fetchTeamLeaderboardData(teamId: string): Promise<any> {
+  console.log('🚀 fetchTeamLeaderboardData called for team:', teamId);
+  
+  try {
+    // Ensure we have basic authentication for leaderboard access
+    const { ensureLeaderboardAccess } = await import('@/services/auth');
+    await ensureLeaderboardAccess();
+
+    // Check cache first
+    const cacheKey = `leaderboard-team-${teamId}`;
+    const cachedData = getCachedData(cacheKey);
+    if (cachedData) {
+      console.log('📦 Returning cached team leaderboard data');
+      return cachedData;
+    }
+
+    // Check if user is a team member
+    const isTeam = await isTeamMember();
+    
+    if (isTeam) {
+      console.log('🔐 Team member - trying Edge Function with team credentials');
+      
+      // Get team credentials from localStorage
+      const storedTeamId = localStorage.getItem('relay_team_id');
+      const storedDeviceInfo = localStorage.getItem('relay_device_info');
+      const deviceInfo = storedDeviceInfo ? JSON.parse(storedDeviceInfo) : null;
+      
+      if (storedTeamId && deviceInfo?.deviceId) {
+        try {
+          console.log('🔐 Calling Edge Function for single team:', teamId);
+          
+          const { data, error } = await supabase.functions.invoke('leaderboard-data', {
+            body: {
+              teamId: storedTeamId,
+              deviceId: deviceInfo.deviceId,
+              singleTeamId: teamId // Request specific team only
+            },
+          });
+
+          console.log('🔐 Edge Function response for single team:', { data, error });
+
+          if (error) {
+            console.warn('Edge Function failed for single team, falling back to direct access:', error);
+          } else {
+            console.log('✅ Edge Function success for single team, returning data');
+            // Cache the result
+            setCachedData(cacheKey, data);
+            return data;
+          }
+        } catch (edgeError) {
+          console.warn('Edge Function error for single team, using fallback:', edgeError);
+          if (!LEADERBOARD_CONFIG.FALLBACK_TO_DB) {
+            throw edgeError;
+          }
+        }
+      }
+    }
+
+    // Fallback: Use direct database access for single team
+    console.log('📊 Using direct database access for single team');
+    const { data: teamData, error } = await supabase
+      .from('leaderboard' as any)
+      .select(`
+        team_id,
+        team_name,
+        team_start_time,
+        current_leg,
+        projected_finish_time,
+        current_leg_projected_finish,
+        last_updated_at
+      `)
+      .eq('team_id', teamId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching single team leaderboard data:', error);
+      throw error;
+    }
+
+    if (!teamData) {
+      console.log('No leaderboard data found for team:', teamId);
+      return null;
+    }
+
+    console.log('✅ Found team data in database:', teamData);
+
+    // Transform the data to match the schema
+    const now = Date.now();
+    const typedTeamData = teamData as any;
+    const progressPercentage = Math.round(((typedTeamData.current_leg - 1) / 36.0) * 100 * 100) / 100;
+    
+    let status: 'active' | 'dnf' | 'finished' | 'not_started';
+    if (typedTeamData.current_leg <= 1) {
+      status = 'not_started';
+    } else if (typedTeamData.current_leg > 36) {
+      status = 'finished';
+    } else if (typedTeamData.projected_finish_time < now - (2 * 60 * 60 * 1000)) {
+      status = 'dnf';
+    } else {
+      status = 'active';
+    }
+    
+    const result = {
+      id: typedTeamData.team_id,
+      team_name: getTeamName(typedTeamData.team_id),
+      team_start_time: typedTeamData.team_start_time || Date.now(),
+      current_leg: typedTeamData.current_leg || 1,
+      projected_finish_time: typedTeamData.projected_finish_time,
+      current_leg_projected_finish: typedTeamData.projected_finish_time || (Date.now() + 30 * 60 * 1000),
+      last_updated_at: typedTeamData.last_updated_at || new Date().toISOString(),
+      progress_percentage: progressPercentage,
+      status: status
+    };
+
+    // Cache the result
+    setCachedData(cacheKey, result);
+    return result;
+  } catch (error) {
+    console.error('Error fetching single team leaderboard data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Clear cache for a specific team when it's updated
+ */
+export function clearTeamLeaderboardCache(teamId: string): void {
+  const cacheKey = `leaderboard-team-${teamId}`;
+  cacheStore.delete(cacheKey);
+  console.log('🗑️ Cleared leaderboard cache for team:', teamId);
+}
+
+/**
+ * Clear all leaderboard cache
+ */
+export function clearAllLeaderboardCache(): void {
+  const keysToDelete: string[] = [];
+  for (const key of cacheStore.keys()) {
+    if (key.startsWith('leaderboard-')) {
+      keysToDelete.push(key);
+    }
+  }
+  
+  keysToDelete.forEach(key => cacheStore.delete(key));
+  console.log('🗑️ Cleared all leaderboard cache');
+}
+
+/**
  * Updates the team's leaderboard entry when a leg is completed
  */
 export async function updateTeamLeaderboard(payload: LeaderboardUpdatePayload): Promise<boolean> {
@@ -284,6 +435,9 @@ export async function updateTeamLeaderboard(payload: LeaderboardUpdatePayload): 
       console.error('Failed to update leaderboard:', error);
       return false;
     }
+
+    // Clear cache for this specific team to ensure fresh data on next fetch
+    clearTeamLeaderboardCache(payload.team_id);
 
     return true;
   } catch (error) {

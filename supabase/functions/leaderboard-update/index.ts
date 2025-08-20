@@ -92,6 +92,26 @@ serve(async (req) => {
       );
     }
 
+    // Send broadcast message to team channel for realtime updates
+    try {
+      await supabase.channel(`team-${payload.team_id}`).send({
+        type: 'broadcast',
+        event: 'data_updated',
+        payload: {
+          type: 'leaderboard',
+          action: 'updated',
+          team_id: payload.team_id,
+          current_leg: payload.current_leg,
+          projected_finish_time: payload.projected_finish_time,
+          timestamp: new Date().toISOString()
+        }
+      });
+      console.log('Broadcast sent for leaderboard update');
+    } catch (broadcastError) {
+      console.warn('Failed to send broadcast message:', broadcastError);
+      // Don't fail the request if broadcast fails
+    }
+
     return new Response(
       JSON.stringify({ success: true, message: 'Leaderboard updated successfully' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

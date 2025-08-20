@@ -42,13 +42,24 @@ serve(async (req) => {
     const lastUpdate = req.headers.get('x-last-update');
     const forceRefresh = req.headers.get('x-force-refresh') === 'true';
     
+    // Parse request body to check for single team request
+    let requestBody = null;
+    let singleTeamId = null;
+    
+    try {
+      requestBody = await req.json();
+      singleTeamId = requestBody?.singleTeamId;
+    } catch (e) {
+      // No request body or invalid JSON, continue with full leaderboard
+    }
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Query the simplified leaderboard table
-    const { data: rawTeams, error } = await supabase
+    // Build the query
+    let query = supabase
       .from('leaderboard')
       .select(`
         team_id,
@@ -58,9 +69,18 @@ serve(async (req) => {
         projected_finish_time,
         current_leg_projected_finish,
         last_updated_at
-      `)
-      .order('projected_finish_time', { ascending: true })
-      .order('last_updated_at', { ascending: false });
+      `);
+    
+    // If requesting a single team, filter by team_id
+    if (singleTeamId) {
+      query = query.eq('team_id', singleTeamId);
+    } else {
+      // Full leaderboard - order by projected finish time
+      query = query.order('projected_finish_time', { ascending: true })
+                  .order('last_updated_at', { ascending: false });
+    }
+
+    const { data: rawTeams, error } = await query;
 
     if (error) {
       console.error('Database error:', error);
@@ -103,6 +123,29 @@ serve(async (req) => {
       };
     });
 
+    // If requesting a single team, return just the team object
+    if (singleTeamId) {
+      const singleTeam = teams[0];
+      if (!singleTeam) {
+        return new Response(
+          JSON.stringify({ error: 'Team not found' }),
+          { 
+            status: 404, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      return new Response(JSON.stringify(singleTeam), {
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=30' // 30 second cache
+        }
+      });
+    }
+
+    // Return full leaderboard response
     const response: LeaderboardResponse = {
       teams: teams,
       last_updated: new Date().toISOString(),
