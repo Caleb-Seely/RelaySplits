@@ -18,6 +18,9 @@ interface ViewTeamResponse {
   teamName: string;
   viewer_code: string;
   start_time: string;
+  isSetUp: boolean;
+  runnersCount: number;
+  legsCount: number;
 }
 
 const ViewOnlyDashboard = () => {
@@ -31,6 +34,7 @@ const ViewOnlyDashboard = () => {
   const { onConflictDetected } = useConflictResolution();
   const { fetchLatestData } = useEnhancedSyncManager();
   const setTeamId = useRaceStore((s) => s.setTeamId);
+  const initializeLegs = useRaceStore((s) => s.initializeLegs);
   const { setDeviceInfo } = useTeam();
   const hasFetchedData = useRef(false);
   const fetchLatestDataRef = useRef(fetchLatestData);
@@ -136,6 +140,9 @@ const ViewOnlyDashboard = () => {
             console.log('[ViewOnlyDashboard] Setting hasFetchedData to true');
             hasFetchedData.current = true;
             
+            // Wait a moment for the state to update
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
                          // Debug: Check what data is in the race store
              const storeState = useRaceStore.getState();
              console.log('[ViewOnlyDashboard] Race store state after fetch:', {
@@ -145,10 +152,89 @@ const ViewOnlyDashboard = () => {
                isSetupComplete: storeState.isSetupComplete
              });
              
-             // Check if team is set up (has legs)
-             if (storeState.legs.length === 0) {
-               console.log('[ViewOnlyDashboard] Team has no legs - not set up yet');
+             // Check if team is set up using the same logic as Dashboard
+             // A team is considered set up if it has legs OR if it has runners and is marked as setup complete
+             const hasLegs = storeState.legs.length > 0;
+             const hasRunners = storeState.runners.length > 0;
+             const isSetupComplete = storeState.isSetupComplete;
+             
+             console.log('[ViewOnlyDashboard] Team setup check:', {
+               hasLegs,
+               hasRunners,
+               isSetupComplete,
+               totalRunners: storeState.runners.length
+             });
+             
+             // Team is not set up if it has no legs AND either has no runners OR is not marked as setup complete
+             if (!hasLegs && (!hasRunners || !isSetupComplete)) {
+               console.log('[ViewOnlyDashboard] Team not set up - no legs and insufficient setup data');
                setTeamNotSetUp(true);
+             } else if (!hasLegs && hasRunners && isSetupComplete) {
+               // Team has runners and is marked as setup complete but no legs - try to initialize legs
+               console.log('[ViewOnlyDashboard] Team has runners and is setup complete but no legs - attempting to initialize legs');
+               try {
+                 initializeLegs();
+                 
+                 // Check state after initialization
+                 const stateAfterInit = useRaceStore.getState();
+                 console.log('[ViewOnlyDashboard] State after leg init - legs:', stateAfterInit.legs.length, 'runners:', stateAfterInit.runners.length);
+                 
+                 if (stateAfterInit.legs.length > 0) {
+                   console.log('[ViewOnlyDashboard] Legs initialized successfully');
+                   setTeamNotSetUp(false);
+                 } else {
+                   console.log('[ViewOnlyDashboard] Failed to initialize legs');
+                   setTeamNotSetUp(true);
+                 }
+               } catch (error) {
+                 console.error('[ViewOnlyDashboard] Error initializing legs:', error);
+                 setTeamNotSetUp(true);
+               }
+             } else {
+               console.log('[ViewOnlyDashboard] Team appears to be set up');
+               setTeamNotSetUp(false);
+             }
+             
+             // Fallback: Use server-side setup information if client-side check is inconclusive
+             if (teamData && !hasLegs && !hasRunners) {
+               console.log('[ViewOnlyDashboard] Using server-side setup info as fallback:', {
+                 serverIsSetUp: teamData.isSetUp,
+                 serverRunnersCount: teamData.runnersCount,
+                 serverLegsCount: teamData.legsCount
+               });
+               
+               if (!teamData.isSetUp) {
+                 console.log('[ViewOnlyDashboard] Server indicates team is not set up');
+                 setTeamNotSetUp(true);
+               } else {
+                 console.log('[ViewOnlyDashboard] Server indicates team is set up, but client data missing - will retry fetch');
+                 // Don't set teamNotSetUp here, let the retry logic handle it
+               }
+             }
+             
+             // If we still don't have legs but have runners, try one more fetch attempt
+             if (storeState.legs.length === 0 && storeState.runners.length > 0) {
+               console.log('[ViewOnlyDashboard] No legs after initial fetch, trying one more fetch attempt...');
+               try {
+                 await fetchLatestDataRef.current();
+                 
+                 // Wait again for state update
+                 await new Promise(resolve => setTimeout(resolve, 500));
+                 
+                 const finalState = useRaceStore.getState();
+                 console.log('[ViewOnlyDashboard] Final state after retry - legs:', finalState.legs.length, 'runners:', finalState.runners.length);
+                 
+                 if (finalState.legs.length === 0) {
+                   console.log('[ViewOnlyDashboard] Still no legs after retry - team not set up');
+                   setTeamNotSetUp(true);
+                 } else {
+                   console.log('[ViewOnlyDashboard] Legs found after retry - team is set up');
+                   setTeamNotSetUp(false);
+                 }
+               } catch (error) {
+                 console.error('[ViewOnlyDashboard] Error in retry fetch:', error);
+                 setTeamNotSetUp(true);
+               }
              }
           } catch (error) {
             console.error('[ViewOnlyDashboard] Error fetching initial data:', error);
@@ -171,7 +257,7 @@ const ViewOnlyDashboard = () => {
     loadTeamData();
     
     // No cleanup needed here - we'll handle cleanup on actual unmount
-  }, [viewerCode]); // Removed setTeamId and setDeviceInfo from dependencies
+  }, [viewerCode, setTeamId, setDeviceInfo, initializeLegs, teamData]); // Added missing dependencies
 
   if (loading) {
     return (
@@ -236,7 +322,7 @@ const ViewOnlyDashboard = () => {
               <AlertCircle className="h-12 w-12 text-yellow-600 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2 text-yellow-800">Team Not Set Up Yet</h2>
               <p className="text-yellow-700 mb-4">
-                This team has {useRaceStore.getState().runners.length} runners but hasn't been configured for the race yet. 
+                This team has {teamData?.runnersCount || useRaceStore.getState().runners.length} runners but hasn't been configured for the race yet. 
                 The team needs to complete setup before you can view race data.
               </p>
               <p className="text-sm text-yellow-600">

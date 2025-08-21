@@ -16,6 +16,9 @@ interface ViewTeamResponse {
   teamName: string;
   viewer_code: string;
   start_time: string;
+  isSetUp: boolean;
+  runnersCount: number;
+  legsCount: number;
 }
 
 serve(async (req) => {
@@ -62,6 +65,22 @@ serve(async (req) => {
       )
     }
 
+    // Check if team is set up by looking for legs data
+    const { data: legs, error: legsError } = await supabase
+      .from('legs')
+      .select('id')
+      .eq('team_id', team.id)
+      .limit(1);
+
+    const { data: runners, error: runnersError } = await supabase
+      .from('runners')
+      .select('id')
+      .eq('team_id', team.id);
+
+    const legsCount = legs?.length || 0;
+    const runnersCount = runners?.length || 0;
+    const isSetUp = legsCount > 0 || (runnersCount > 0 && team.start_time);
+
     // Log audit event for viewer access
     await supabase.from('team_audit').insert({
       team_id: team.id,
@@ -76,6 +95,9 @@ serve(async (req) => {
       teamName: team.name,
       viewer_code: team.join_code,
       start_time: team.start_time,
+      isSetUp,
+      runnersCount,
+      legsCount,
     }
 
     return new Response(

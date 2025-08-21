@@ -59,3 +59,4 @@ SET team_start_time = CASE
   last_updated_at = NOW()
 WHERE team_start_time > 4102444800000;  -- Timestamp for 2099-12-31
 */
+

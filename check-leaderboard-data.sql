@@ -46,3 +46,4 @@ SELECT
 FROM leaderboard
 WHERE ABS((projected_finish_time - team_start_time) / (1000 * 60 * 60) - 18) < 0.1
 ORDER BY team_start_time;
+

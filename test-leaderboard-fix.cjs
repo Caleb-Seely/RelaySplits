@@ -108,3 +108,4 @@ async function testLeaderboardFix() {
 
 // Run the test
 testLeaderboardFix();
+

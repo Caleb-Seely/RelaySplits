@@ -44,3 +44,4 @@ SELECT
 FROM leaderboard
 WHERE current_leg = 37
 ORDER BY team_start_time;
+
