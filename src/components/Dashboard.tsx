@@ -724,7 +724,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       if (team?.join_code) {
         // Format for view code: "Use viewer code XXXXXX to watch TEAM NAME run the Hood 2 Coast"
         const teamName = team?.name || 'Team';
-        const copyText = `Use viewer code ${team.join_code} to watch ${teamName} run the Hood to Coast!`;
+        const copyText = `Use viewer code ${team.join_code} on TeamSplits.com to watch ${teamName} run the Hood to Coast!`;
         navigator.clipboard.writeText(copyText);
         toast.success('View code copied to clipboard!');
       } else {
@@ -1671,7 +1671,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                     size="sm"
                     onClick={() => {
                       const teamName = team?.name || 'Team';
-                      const copyText = `Join ${teamName} using this token!:\n ${team.invite_token}`;
+                      const copyText = `Join ${teamName} on TeamSplits.com using this token!:\n${team.invite_token}`;
                       navigator.clipboard.writeText(copyText);
                       toast.success('Team invite copied to clipboard');
                     }}
