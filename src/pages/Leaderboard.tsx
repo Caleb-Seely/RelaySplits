@@ -501,7 +501,7 @@ export const LeaderboardPage = () => {
            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-12">
              <div className="mb-4 lg:mb-0">
                <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
-                 Hood 2 Coast
+                 Hood to Coast
                </h1>
                <p className="text-gray-300 text-lg">Live race standings and team progress</p>
              </div>

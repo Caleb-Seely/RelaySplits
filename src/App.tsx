@@ -10,6 +10,7 @@ import { ConflictResolutionProvider } from "@/contexts/ConflictResolutionContext
 import ConflictResolutionModal from "@/components/ConflictResolutionModal";
 import { notificationManager } from "@/utils/notifications";
 import { useSessionDurationTracking } from "@/hooks/useAnalytics";
+import UpdateNotification from '@/components/UpdateNotification';
 
 // Route-level code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -58,6 +59,7 @@ const App = () => {
         <ConflictResolutionProvider>
           <Toaster />
           <Sonner />
+          <UpdateNotification />
           <BrowserRouter>
             <Suspense fallback={<div className="p-6">Loading...</div>}>
               <Routes>

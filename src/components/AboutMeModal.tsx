@@ -221,7 +221,7 @@ const AboutMeModal: React.FC<AboutMeModalProps> = ({ isOpen, onClose, teamId, de
                 <Input
                   id="feedback-input"
                   type="text"
-                  placeholder="Tell me what worked and what didn't..."
+                  placeholder="Tell me about it..."
                   value={feedback}
                   onChange={handleFeedbackChange}
                   onKeyPress={handleKeyPress}

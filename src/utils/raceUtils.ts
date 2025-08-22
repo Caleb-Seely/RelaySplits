@@ -412,13 +412,28 @@ export function getRunnersByVan(runners: Runner[], van: 1 | 2): Runner[] {
 }
 
 export function getMajorExchangeTimes(legs: Leg[]): Array<{ legId: number; projectedFinish: number; actualFinish?: number }> {
-  return legs
+  const majorExchangeLegs = legs
     .filter(leg => MAJOR_EXCHANGES.includes(leg.id))
     .map(leg => ({
       legId: leg.id,
       projectedFinish: leg.projectedFinish,
       actualFinish: leg.actualFinish
     }));
+
+  // Special case: Add finish location (37) if it's in MAJOR_EXCHANGES but not in legs
+  if (MAJOR_EXCHANGES.includes(37) && !legs.find(leg => leg.id === 37)) {
+    // Find leg 36 (the final actual leg)
+    const leg36 = legs.find(leg => leg.id === 36);
+    if (leg36) {
+      majorExchangeLegs.push({
+        legId: 37,
+        projectedFinish: leg36.projectedFinish,
+        actualFinish: leg36.actualFinish
+      });
+    }
+  }
+
+  return majorExchangeLegs;
 }
 
 export function getRunTime(leg: Leg): number | null {

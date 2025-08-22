@@ -36,201 +36,202 @@ export const LEG_LOCATIONS: Record<number, LegLocation> = {
   // Van 1 First Rotation
   1: {
     name: 'Timberline Lodge',
-    address: '45.304771, -121.759188',
+    address: '45.3309549, -121.7155129',
     description: 'Race Start'
   },
   2: {
-    name: 'Ski Bowl East',
+    name: 'Government Camp',
     address: '45.304771, -121.759188',
     description: 'Leg 2 Exchange'
   },
   3: {
-    name: 'Rhododendron',
-    address: '45.334985, -121.918987',
+    name: 'IDK',
+    address: '45.307884, -121.854509',
     description: 'Leg 3 Exchange'
   },
   4: {
-    name: 'Welches',
-    address: '45.377700, -122.039235',
+    name: 'IDK',
+    address: '45.334985, -121.918987',
     description: 'Leg 4 Exchange'
   },
   5: {
-    name: 'Brightwood',
-    address: '45.366529, -122.155008',
+    name: 'IDK',
+    address: '45.377700, -122.039235',
     description: 'Leg 5 Exchange'
   },
   6: {
-    name: 'Sandy High School',
-    address: '45.405721, -122.276866',
-    description: 'Van Switch 1'
+    name: 'IDK',
+    address: '45.366529, -122.155008',
+    description: 'Leg 6 Exchange'
   },
-  
   // Van 2 First Rotation
   7: {
     name: 'Sandy High School',
-    address: '45.453705, -122.290537',
-    description: 'Leg 7 Exchange'
-  },
+    address: '45.405721, -122.276866',
+    description: 'Van Switch 1'
+  },  
   8: {
-    name: 'Boring',
-    address: '45.432170, -122.375395',
+    name: 'IDK',
+    address: '45.453705, -122.290537',
     description: 'Leg 8 Exchange'
   },
   9: {
-    name: 'Gresham',
-    address: '45.495413, -122.431662',
+    name: 'Boring Trail Start',
+    address: '45.432170, -122.375395',
     description: 'Leg 9 Exchange'
   },
   10: {
-    name: 'Troutdale',
-    address: '45.478160, -122.548594',
+    name: 'Boring Trail',
+    address: '45.495413, -122.431662',
     description: 'Leg 10 Exchange'
   },
   11: {
-    name: 'Portland',
-    address: '45.461816, -122.617121',
+    name: 'Boring Trail',
+    address: '45.478160, -122.548594',
     description: 'Leg 11 Exchange'
   },
   12: {
-    name: 'St. Helens High School',
+    name: 'Springwater',
+    address: '45.461816, -122.617121',
+    description: 'Leg 12 Exchange'
+  },
+  // Van 1 Second Rotation
+  13: {
+    name: 'OMSI',
     address: '45.506717, -122.664303',
     description: 'Van Switch 2'
   },
-  
-  // Van 1 Second Rotation
-  13: {
-    name: 'St. Helens High School',
-    address: '45.551924, -122.715139',
-    description: 'Leg 13 Exchange'
-  },
   14: {
-    name: 'Scappoose',
-    address: '45.629822, -122.815850',
+    name: 'IDK',
+    address: '45.551924, -122.715139',
     description: 'Leg 14 Exchange'
   },
   15: {
-    name: 'Warren',
-    address: '45.694970, -122.871008',
+    name: 'Sauvies',
+    address: '45.629822, -122.815850',
     description: 'Leg 15 Exchange'
   },
   16: {
-    name: 'Pittsburg',
-    address: '45.749198, -122.874359',
+    name: 'IDK',
+    address: '45.694970, -122.871008',
     description: 'Leg 16 Exchange'
   },
   17: {
-    name: 'Rainier',
-    address: '45.818053, -122.850781',
+    name: 'IDK',
+    address: '45.749198, -122.874359',
     description: 'Leg 17 Exchange'
   },
   18: {
-    name: 'Scappoose High School',
+    name: 'IDK',
+    address: '45.819164, -122.850781',
+    description: 'Leg 18 Exchange'
+  },
+  // Van 2 Second Rotation
+  19: {
+    name: 'Columbi County Fair',
     address: '45.850550, -122.872306',
     description: 'Van Switch 3'
   },
-  
-  // Van 2 Second Rotation
-  19: {
-    name: 'Scappoose High School',
-    address: '45.901569, -122.933970',
-    description: 'Leg 19 Exchange'
-  },
   20: {
-    name: 'Vernonia',
-    address: '45.890793, -122.997456',
+    name: 'IDK',
+    address: '45.901569, -122.933970',
     description: 'Leg 20 Exchange'
   },
   21: {
-    name: 'Mist',
-    address: '45.945578, -123.043629',
+    name: 'IDK',
+    address: '45.890793, -122.997456',
     description: 'Leg 21 Exchange'
   },
   22: {
-    name: 'Birkenfeld',
-    address: '45.949276, -123.149365',
+    name: 'IDK',
+    address: '45.945578, -123.043629',
     description: 'Leg 22 Exchange'
   },
   23: {
-    name: 'Elsie',
-    address: '45.974329, -123.198666',
+    name: 'IDK',
+    address: '45.949276, -123.149365',
     description: 'Leg 23 Exchange'
   },
   24: {
-    name: 'North Plains Elementary',
+    name: 'IDK',
+    address: '45.974329, -123.198666',
+    description: 'Leg 24 Exchange'
+  },
+  // Van 1 Final Rotation
+  25: {
+    name: 'Major EX Field',
     address: '46.002792, -123.278399',
     description: 'Van Switch 4'
   },
-  
-  // Van 1 Final Rotation
-  25: {
-    name: 'North Plains Elementary',
-    address: '45.995729, -123.334103',
-    description: 'Leg 25 Exchange'
-  },
   26: {
-    name: 'Banks',
-    address: '45.975560, -123.416774',
+    name: 'IDK',
+    address: '45.995729, -123.334103',
     description: 'Leg 26 Exchange'
   },
   27: {
-    name: 'Buxton',
-    address: '45.933928, -123.506100',
+    name: 'IDK',
+    address: '45.975560, -123.416774',
     description: 'Leg 27 Exchange'
   },
   28: {
-    name: 'Manning',
-    address: '45.954195, -123.573884',
+    name: 'IDK',
+    address: '45.933928, -123.506100',
     description: 'Leg 28 Exchange'
   },
   29: {
-    name: 'Cedar Mill',
-    address: '46.020736, -123.625101',
+    name: 'IDK',
+    address: '45.954195, -123.573884',
     description: 'Leg 29 Exchange'
   },
   30: {
-    name: 'Beach Elementary',
+    name: 'IDK',
+    address: '46.020736, -123.625101',
+    description: 'Leg 30 Exchange'
+  },
+  // Van 2 Final Rotation
+  31: {
+    name: 'Major EX Field 2',
     address: '46.065768, -123.692707',
     description: 'Van Switch 5'
   },
-  
-  // Van 2 Final Rotation
-  31: {
-    name: 'Beach Elementary',
-    address: '46.097719, -123.749397',
-    description: 'Leg 31 Exchange'
-  },
   32: {
-    name: 'Seaside',
-    address: '46.069758, -123.787865',
+    name: 'IDK',
+    address: '46.097719, -123.749397',
     description: 'Leg 32 Exchange'
   },
   33: {
-    name: 'Cannon Beach',
-    address: '46.147492, -123.846048',
+    name: 'IDK',
+    address: '46.069758, -123.787865',
     description: 'Leg 33 Exchange'
   },
   34: {
-    name: 'Arch Cape',
-    address: '46.104487, -123.866126',
+    name: 'IDK',
+    address: '46.147492, -123.846048',
     description: 'Leg 34 Exchange'
   },
   35: {
-    name: 'Oswald West State Park',
-    address: '46.007615, -123.867294',
+    name: 'IDK',
+    address: '46.104487, -123.866126',
     description: 'Leg 35 Exchange'
   },
   36: {
+    name: 'Final Leg Start',
+    address: '46.007615, -123.867294',
+    description: 'Leg 36 Exchange'
+  },
+  37: {
     name: 'Seaside Beach',
     address: '45.993835, -123.930111',
     description: 'Race Finish'
   }
 };
 
+
 /**
  * Major van exchange points where teams swap between Van 1 and Van 2.
  * These are the leg numbers where major handoffs occur in a relay race.
  */
-export const MAJOR_EXCHANGES = [6, 12, 18, 24, 30, 36];
+export const MAJOR_EXCHANGES = [7, 13, 19, 25, 31, 37];
 
 /**
  * Get the distance for a specific leg

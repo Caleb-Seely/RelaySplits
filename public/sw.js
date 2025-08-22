@@ -1,6 +1,6 @@
-const CACHE_NAME = 'relay-splits-v1';
-const STATIC_CACHE = 'relay-splits-static-v1';
-const API_CACHE = 'relay-splits-api-v1';
+const CACHE_NAME = 'relay-splits-v2';
+const STATIC_CACHE = 'relay-splits-static-v2';
+const API_CACHE = 'relay-splits-api-v2';
 
 // Files to cache immediately
 const STATIC_FILES = [

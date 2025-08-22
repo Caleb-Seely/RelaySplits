@@ -13,12 +13,12 @@ const MajorExchanges = () => {
   const majorExchanges = getMajorExchangeTimes(legs);
   
   const exchangeNames = {
-    6: 'Van Switch 1',
-    12: 'Van Switch 2', 
-    18: 'Van Switch 3',
-    24: 'Van Switch 4',
-    30: 'Van Switch 5',
-    36: 'FINISH'
+    7: 'Van Switch 1',
+    13: 'Van Switch 2', 
+    19: 'Van Switch 3',
+    25: 'Van Switch 4',
+    31: 'Van Switch 5',
+    37: 'FINISH'
   };
 
   return (
