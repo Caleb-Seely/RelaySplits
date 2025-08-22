@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { useRaceStore } from '@/store/raceStore';
@@ -41,6 +41,7 @@ const ViewOnlyDashboard = () => {
   const isMounted = useRef(true);
   const hasUnmounted = useRef(false);
   const fetchInProgress = useRef(false);
+  const hasShownToast = useRef(false);
   
   console.log('[ViewOnlyDashboard] Component render - viewerCode:', viewerCode, 'hasFetchedData:', hasFetchedData.current, 'isMounted:', isMounted.current, 'hasUnmounted:', hasUnmounted.current);
   
@@ -49,6 +50,11 @@ const ViewOnlyDashboard = () => {
     console.log('[ViewOnlyDashboard] fetchLatestData changed, updating ref');
     fetchLatestDataRef.current = fetchLatestData;
   }, [fetchLatestData]);
+  
+  // Create stable callbacks to prevent useEffect re-runs
+  const stableSetTeamId = useCallback(setTeamId, []);
+  const stableSetDeviceInfo = useCallback(setDeviceInfo, []);
+  const stableInitializeLegs = useCallback(initializeLegs, []);
   
   // Cleanup on unmount
   useEffect(() => {
@@ -60,6 +66,7 @@ const ViewOnlyDashboard = () => {
       // Only reset hasFetchedData on actual unmount
       hasFetchedData.current = false;
       fetchInProgress.current = false;
+      hasShownToast.current = false;
       // Clean up viewer-specific localStorage items
     };
   }, []);
@@ -103,7 +110,7 @@ const ViewOnlyDashboard = () => {
         setTeamData(data);
         
         // Set team ID in race store so Dashboard can access the data
-        setTeamId(data.teamId);
+        stableSetTeamId(data.teamId);
         
         // Set temporary device info for viewer (no device registration, no persistence)
         console.log('[ViewOnlyDashboard] Setting device info for viewer');
@@ -115,7 +122,7 @@ const ViewOnlyDashboard = () => {
           lastName: '',
           displayName: 'Viewer'
         };
-        setDeviceInfo(deviceInfo);
+        stableSetDeviceInfo(deviceInfo);
         
         // Don't persist viewer info to localStorage - viewers are stateless
         localStorage.removeItem('relay_team_id');
@@ -173,7 +180,7 @@ const ViewOnlyDashboard = () => {
                // Team has runners and is marked as setup complete but no legs - try to initialize legs
                console.log('[ViewOnlyDashboard] Team has runners and is setup complete but no legs - attempting to initialize legs');
                try {
-                 initializeLegs();
+                 stableInitializeLegs();
                  
                  // Check state after initialization
                  const stateAfterInit = useRaceStore.getState();
@@ -245,7 +252,11 @@ const ViewOnlyDashboard = () => {
           console.log('[ViewOnlyDashboard] Skipping fetch - hasFetchedData:', hasFetchedData.current, 'fetchInProgress:', fetchInProgress.current, 'teamId:', data.teamId);
         }
         
-        toast.success(`Viewing ${data.teamName}`);
+        // Only show toast once per session
+        if (!hasShownToast.current) {
+          toast.success(`Viewing ${data.teamName}`);
+          hasShownToast.current = true;
+        }
       } catch (err) {
         console.error('Error loading team data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load team');
@@ -257,7 +268,7 @@ const ViewOnlyDashboard = () => {
     loadTeamData();
     
     // No cleanup needed here - we'll handle cleanup on actual unmount
-  }, [viewerCode, setTeamId, setDeviceInfo, initializeLegs, teamData]); // Added missing dependencies
+  }, [viewerCode, stableSetTeamId, stableSetDeviceInfo, stableInitializeLegs]); // Removed teamData to prevent notification spam
 
   if (loading) {
     return (

@@ -76,6 +76,7 @@ import { useQuickHelp } from '@/hooks/useQuickHelp';
 import { usePWA } from '@/hooks/usePWA';
 import { useDecoupledNotifications } from '@/hooks/useDecoupledNotifications';
 import DashboardPrompts from './DashboardPrompts';
+import AboutMeModal from './AboutMeModal';
 
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
 import { useNavigate } from 'react-router-dom';
@@ -390,6 +391,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   } | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [aboutMeModalOpen, setAboutMeModalOpen] = useState(false);
   const [isStartingRunner, setIsStartingRunner] = useState(false);
   const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<number | null>(null);
 
@@ -1951,8 +1953,20 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                       Install App
                     </Button>
                   )}
+
                 </div>
               )}
+
+              {/* About Me Heart Button - Always visible */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAboutMeModalOpen(true)}
+                title="About the developer"
+                className="relative group"
+              >
+                <span className="text-lg animate-pulse group-hover:animate-none">❤️</span>
+              </Button>
             </div>
           </div>
         </footer>
@@ -2004,6 +2018,16 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
       {/* Dashboard Prompts - PWA Install and Notification Permission */}
       <DashboardPrompts />
+
+      {/* About Me Modal */}
+      <AboutMeModal 
+        isOpen={aboutMeModalOpen} 
+        onClose={() => setAboutMeModalOpen(false)}
+        teamId={team?.id}
+        deviceId={getDeviceId()}
+        teamName={team?.name}
+        displayName={deviceInfo?.displayName}
+      />
     </>
   );
 };
