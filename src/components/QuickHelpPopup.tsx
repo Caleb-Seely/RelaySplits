@@ -1,7 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { 
   MapPin, 
   Play, 
@@ -12,6 +9,10 @@ import {
   Eye,
   Smartphone
 } from 'lucide-react';
+
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useFeatureUsageTracking } from '@/hooks/useAnalytics';
 
 interface QuickHelpPopupProps {

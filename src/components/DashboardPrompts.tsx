@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import { X, Download, Smartphone, Monitor, Bell, BellOff } from 'lucide-react';
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { X, Download, Smartphone, Monitor, Bell, BellOff } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
 import { useDecoupledNotifications } from '@/hooks/useDecoupledNotifications';
 import { notificationManager } from '@/utils/notifications';
-import { toast } from 'sonner';
+
 
 interface DashboardPromptsProps {
   onDismiss?: () => void;

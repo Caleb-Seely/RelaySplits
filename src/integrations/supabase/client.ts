@@ -2,6 +2,7 @@
 // Import polyfill first to ensure util.inherits is available
 import '@/utils/supabase-polyfill';
 import { createClient } from '@supabase/supabase-js';
+
 import type { Database } from './types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;

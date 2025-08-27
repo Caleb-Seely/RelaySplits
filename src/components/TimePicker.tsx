@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { Clock, CalendarIcon } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
-import { Clock, CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TimePickerProps {

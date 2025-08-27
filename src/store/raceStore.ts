@@ -1,8 +1,10 @@
 import { create } from 'zustand';
+
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 import { recalculateProjections, clearRunnerCache, validateTimeUpdate, autoFixSingleRunnerViolations, initializeRace, validateRaceState, validateSingleRunnerRule, detectAndRepairImpossibleLegStates, validateLegStateIntegrity } from '@/utils/raceUtils';
 import type { RaceData, Runner, Leg } from '@/types/race';
 import { validateRaceData, createValidationReport } from '@/utils/validation';
+import { repairRaceDataComprehensive, createRepairReport } from '@/utils/dataRepair';
 
 // Subscribe to real-time updates from other devices
 eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event) => {
@@ -571,6 +573,21 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     if (data.legs) {
       clearRunnerCache();
     }
+    
+    // Attempt data repair if we have complete race data
+    if (data.runners && data.legs && data.startTime) {
+      const raceData = { runners: data.runners, legs: data.legs, startTime: data.startTime };
+      const repairedData = repairRaceDataComprehensive(raceData);
+      
+      if (repairedData) {
+        console.log('[RaceStore] Data repair applied:', createRepairReport(raceData, repairedData));
+        set((state) => ({ ...state, ...repairedData, ...data }));
+        return;
+      } else {
+        console.warn('[RaceStore] Data repair failed, using original data');
+      }
+    }
+    
     set((state) => ({ ...state, ...data }));
   },
 

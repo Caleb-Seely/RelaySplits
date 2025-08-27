@@ -1,20 +1,19 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { useTeam } from '@/contexts/TeamContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { useRaceStore } from '@/store/raceStore';
-
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { runDiagnostics } from '@/utils/diagnostics';
 import Dashboard from '@/components/Dashboard';
 import SetupWizard from '@/components/SetupWizard';
-
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
@@ -67,8 +66,6 @@ const Index = () => {
   const { onConflictDetected } = useConflictResolution();
   const { fetchLatestData } = useEnhancedSyncManager();
   const { processQueue, getQueueStatus, isProcessing: isQueueProcessing } = useOfflineQueue();
-
-  try {
 
   // Component render - removed excessive logging
 
@@ -306,24 +303,6 @@ const Index = () => {
       </main>
     </div>
   );
-  } catch (error) {
-    console.error('[Index] Error in component:', error);
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <AlertTriangle className="h-32 w-32 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-semibold text-foreground mb-2">Something went wrong</h1>
-          <p className="text-muted-foreground">An error occurred while loading the application.</p>
-          <Button 
-            onClick={() => window.location.reload()} 
-            className="mt-4"
-          >
-            Reload Page
-          </Button>
-        </div>
-      </div>
-    );
-  }
 };
 
 export default Index;

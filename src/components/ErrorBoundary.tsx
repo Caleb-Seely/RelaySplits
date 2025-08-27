@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { analytics } from '@/services/analytics';
 import { captureSentryError } from '@/services/sentry';
 

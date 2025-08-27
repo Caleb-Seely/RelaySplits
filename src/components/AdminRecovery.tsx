@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
+import { Shield, AlertTriangle, CheckCircle, Key } from 'lucide-react';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,8 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useTeamManagement } from '@/hooks/useTeamManagement';
 import { useTeam } from '@/contexts/TeamContext';
 import { useTeamSync } from '@/hooks/useTeamSync';
-import { toast } from 'sonner';
-import { Shield, AlertTriangle, CheckCircle, Key } from 'lucide-react';
 
 interface AdminRecoveryProps {
   teamId: string;

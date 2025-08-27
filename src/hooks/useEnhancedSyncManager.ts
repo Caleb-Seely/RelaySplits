@@ -1,19 +1,21 @@
 import { useCallback, useRef, useEffect } from 'react';
+
 import { useRaceStore } from '@/store/raceStore';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
+import { useTechnicalTracking } from '@/hooks/useAnalytics';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { supabase } from '@/integrations/supabase/client';
-import type { Runner, Leg } from '@/types/race';
-import type { Tables } from '@/integrations/supabase/types';
 import { recalculateProjections, clearRunnerCache } from '@/utils/raceUtils';
 import { syncLogger } from '@/utils/logger';
 import { validateForSync, validateLeg } from '@/utils/validation';
 import { detectAndRepairImpossibleLegStates, validateLegStateIntegrity } from '@/utils/raceUtils';
 import { getSynchronizedTime } from '@/services/clockSync';
-import { useTechnicalTracking } from '@/hooks/useAnalytics';
 import { detectMissingTimeConflicts, shouldCheckForMissingTimes } from '@/utils/dataConsistency';
+import { withErrorHandling, NetworkError } from '@/utils/errorHandling';
+import type { Runner, Leg } from '@/types/race';
+import type { Tables } from '@/integrations/supabase/types';
 
 // Enhanced sync manager that prioritizes data accuracy and integrates with existing systems
 export const useEnhancedSyncManager = () => {
@@ -162,15 +164,27 @@ export const useEnhancedSyncManager = () => {
         
         console.log('[useEnhancedSyncManager] Creating leg in database:', legPayload);
         
-        const result = await invokeEdge('legs-upsert', {
-          teamId: storeRef.current.teamId,
-          deviceId,
-          legs: [legPayload],
-          action: 'upsert'
-        });
-        
-        if ((result as any).error) {
-          console.error('[useEnhancedSyncManager] Failed to create leg:', (result as any).error);
+        const safeInvokeEdge = withErrorHandling(
+          async () => {
+            const res = await invokeEdge('legs-upsert', {
+              teamId: storeRef.current.teamId,
+              deviceId,
+              legs: [legPayload],
+              action: 'upsert'
+            });
+            if (res && typeof res === 'object' && 'error' in res) {
+              throw new NetworkError(`Legs-upsert failed: ${(res as any).error}`);
+            }
+            return res;
+          },
+          { showToast: true },
+          { component: 'EnhancedSyncManager', operation: 'legs-upsert' }
+        );
+
+        try {
+          const result = await safeInvokeEdge();
+        } catch (error) {
+          console.error('[useEnhancedSyncManager] Failed to create leg:', error);
           return;
         }
         
@@ -231,21 +245,22 @@ export const useEnhancedSyncManager = () => {
 
     isProcessingSync.current = true;
 
-    try {
-      // Check if we're offline
-      if (!navigator.onLine) {
-        console.log(`[useEnhancedSyncManager] Offline - queuing leg update for ${field}`);
-        queueChange({
-          table: 'legs',
-          remoteId: leg.remoteId,
-          payload: {
-            number: leg.id,
-            distance: leg.distance,
-            [field === 'actualStart' ? 'start_time' : 'finish_time']: value ? new Date(value).toISOString() : null
-          }
-        });
-        return;
-      }
+    // Check if we're offline
+    if (!navigator.onLine) {
+      console.log(`[useEnhancedSyncManager] Offline - queuing leg update for ${field}`);
+      queueChange({
+        table: 'legs',
+        remoteId: leg.remoteId,
+        payload: {
+          number: leg.id,
+          distance: leg.distance,
+          [field === 'actualStart' ? 'start_time' : 'finish_time']: value ? new Date(value).toISOString() : null
+        }
+      });
+      pendingSyncs.current.delete(syncKey);
+      isProcessingSync.current = false;
+      return;
+    }
 
       // Build the complete payload for the leg update (include all leg data to prevent data loss)
       const payload = {
@@ -260,77 +275,58 @@ export const useEnhancedSyncManager = () => {
       console.log(`[useEnhancedSyncManager] Syncing leg ${leg.id} ${field}:`, payload);
 
       const deviceId = getDeviceId();
-      const result = await invokeEdge('legs-upsert', {
-        teamId: storeRef.current.teamId,
-        deviceId,
-        legs: [payload],
-        action: 'upsert'
-      });
+      const safeInvokeEdge = withErrorHandling(
+        async () => {
+          const res = await invokeEdge('legs-upsert', {
+            teamId: storeRef.current.teamId,
+            deviceId,
+            legs: [payload],
+            action: 'upsert'
+          });
+          if (res && typeof res === 'object' && 'error' in res) {
+            throw new NetworkError(`Legs-upsert failed: ${(res as any).error}`);
+          }
+          return res;
+        },
+        { showToast: true },
+        { component: 'EnhancedSyncManager', operation: 'legs-upsert' }
+      );
+
+      const result = await safeInvokeEdge();
+      console.log(`[useEnhancedSyncManager] Successfully synced leg ${leg.id} ${field}`);
       
-      if ((result as any).error) {
-        console.error(`[useEnhancedSyncManager] Failed to sync leg ${leg.id}:`, (result as any).error);
-        // Queue the change for retry
-        queueChange({
-          table: 'legs',
-          remoteId: leg.remoteId,
-          payload: {
-            number: leg.id,
-            distance: leg.distance,
-            [field === 'actualStart' ? 'start_time' : 'finish_time']: value ? new Date(value).toISOString() : null
+      // Validate after sync
+      const updatedLeg = storeRef.current.legs.find(l => l.id === leg.id);
+      if (updatedLeg && !validateLegDataIntegrity(updatedLeg, 'post-sync')) {
+        console.error('Post-sync validation failed, data may be corrupted');
+        // Could trigger recovery mechanism here
+      }
+      
+      // Update last synced timestamp
+      storeRef.current.setLastSyncedAt(Date.now());
+
+      // After successful sync, check for related missing times
+      if (value !== null) {
+        const updatedLegs = storeRef.current.legs;
+        detectMissingTimeConflicts(updatedLegs, storeRef.current.runners, storeRef.current.teamId).then(missingTimeConflicts => {
+          // Only show conflicts related to the current leg or adjacent legs
+          const relevantConflicts = missingTimeConflicts.filter(conflict => 
+            Math.abs(conflict.legId - leg.id) <= 1
+          );
+          
+          if (relevantConflicts.length > 0) {
+            console.log('[useEnhancedSyncManager] Detected missing time conflicts after leg sync:', relevantConflicts);
+            // Handle multiple conflicts by passing them all to the conflict resolution system
+            relevantConflicts.forEach(conflict => {
+              onConflictDetected({ type: 'missing_time', ...conflict });
+            });
           }
         });
-      } else {
-        console.log(`[useEnhancedSyncManager] Successfully synced leg ${leg.id} ${field}`);
-        
-        // Validate after sync
-        const updatedLeg = storeRef.current.legs.find(l => l.id === leg.id);
-        if (updatedLeg && !validateLegDataIntegrity(updatedLeg, 'post-sync')) {
-          console.error('Post-sync validation failed, data may be corrupted');
-          // Could trigger recovery mechanism here
-        }
-        
-        // Update last synced timestamp
-        storeRef.current.setLastSyncedAt(Date.now());
-
-        // After successful sync, check for related missing times
-        if (value !== null) {
-          const updatedLegs = storeRef.current.legs;
-          detectMissingTimeConflicts(updatedLegs, storeRef.current.runners, storeRef.current.teamId).then(missingTimeConflicts => {
-            // Only show conflicts related to the current leg or adjacent legs
-            const relevantConflicts = missingTimeConflicts.filter(conflict => 
-              Math.abs(conflict.legId - leg.id) <= 1
-            );
-            
-            if (relevantConflicts.length > 0) {
-              console.log('[useEnhancedSyncManager] Detected missing time conflicts after leg sync:', relevantConflicts);
-              // Handle multiple conflicts by passing them all to the conflict resolution system
-              relevantConflicts.forEach(conflict => {
-                onConflictDetected({ type: 'missing_time', ...conflict });
-              });
-            }
-          });
-        }
       }
-    } catch (error) {
-      console.error(`[useEnhancedSyncManager] Error syncing leg ${leg.id}:`, error);
-      trackSyncError(error as Error, {
-        sync_method: 'leg_update'
-      });
-      // Queue the change for retry
-      queueChange({
-        table: 'legs',
-        remoteId: leg.remoteId,
-        payload: {
-          number: leg.id,
-          distance: leg.distance,
-          [field === 'actualStart' ? 'start_time' : 'finish_time']: value ? new Date(value).toISOString() : null
-        }
-      });
-    } finally {
+      
       // Remove from pending syncs
       pendingSyncs.current.delete(syncKey);
       isProcessingSync.current = false;
-    }
   }, [queueChange, onConflictDetected]);
 
   // Handle atomic start runner synchronization
@@ -360,70 +356,9 @@ export const useEnhancedSyncManager = () => {
       pendingSyncs.current.add(syncKey);
       isProcessingSync.current = true;
 
-      try {
-        // Check if we're offline
-        if (!navigator.onLine) {
-          console.log(`[useEnhancedSyncManager] Offline - queuing first leg start`);
-          queueChange({
-            table: 'legs',
-            remoteId: nextLeg.remoteId,
-            payload: {
-              number: nextLeg.id,
-              distance: nextLeg.distance,
-              start_time: new Date(startTime).toISOString()
-            }
-          });
-          return;
-        }
-
-        // Build the complete payload for the first leg start (include all leg data)
-        const legsPayload = [{
-          id: nextLeg.remoteId,
-          number: nextLeg.id,
-          distance: nextLeg.distance,
-          start_time: new Date(startTime).toISOString(),
-          finish_time: nextLeg.actualFinish ? new Date(nextLeg.actualFinish).toISOString() : null
-        }];
-
-        console.log(`[useEnhancedSyncManager] Syncing first leg start:`, legsPayload);
-
-        const deviceId = getDeviceId();
-        const result = await invokeEdge('legs-upsert', {
-          teamId: storeRef.current.teamId,
-          deviceId,
-          legs: legsPayload,
-          action: 'upsert'
-        });
-        
-        if ((result as any).error) {
-          console.error(`[useEnhancedSyncManager] Failed to sync first leg start:`, (result as any).error);
-          // Queue the change for retry
-          queueChange({
-            table: 'legs',
-            remoteId: nextLeg.remoteId,
-            payload: {
-              number: nextLeg.id,
-              distance: nextLeg.distance,
-              start_time: new Date(startTime).toISOString()
-            }
-          });
-        } else {
-          console.log(`[useEnhancedSyncManager] Successfully synced first leg start`);
-          // Update last synced timestamp without triggering a full data fetch
-          storeRef.current.setLastSyncedAt(Date.now());
-          
-          // Trigger leaderboard update after successful sync
-          if (storeRef.current.teamId) {
-            import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
-              triggerLeaderboardUpdateOnLegStart(storeRef.current.teamId!, nextLegId, startTime);
-            }).catch(error => {
-              console.error('Failed to trigger leaderboard update on first leg start:', error);
-            });
-          }
-        }
-      } catch (error) {
-        console.error(`[useEnhancedSyncManager] Error syncing first leg start:`, error);
-        // Queue the change for retry
+      // Check if we're offline
+      if (!navigator.onLine) {
+        console.log(`[useEnhancedSyncManager] Offline - queuing first leg start`);
         queueChange({
           table: 'legs',
           remoteId: nextLeg.remoteId,
@@ -433,10 +368,56 @@ export const useEnhancedSyncManager = () => {
             start_time: new Date(startTime).toISOString()
           }
         });
-      } finally {
         pendingSyncs.current.delete(syncKey);
         isProcessingSync.current = false;
+        return;
       }
+
+      // Build the complete payload for the first leg start (include all leg data)
+      const legsPayload = [{
+        id: nextLeg.remoteId,
+        number: nextLeg.id,
+        distance: nextLeg.distance,
+        start_time: new Date(startTime).toISOString(),
+        finish_time: nextLeg.actualFinish ? new Date(nextLeg.actualFinish).toISOString() : null
+      }];
+
+      console.log(`[useEnhancedSyncManager] Syncing first leg start:`, legsPayload);
+
+      const deviceId = getDeviceId();
+      const safeInvokeEdge = withErrorHandling(
+        async () => {
+          const res = await invokeEdge('legs-upsert', {
+            teamId: storeRef.current.teamId,
+            deviceId,
+            legs: legsPayload,
+            action: 'upsert'
+          });
+          if (res && typeof res === 'object' && 'error' in res) {
+            throw new NetworkError(`Legs-upsert failed: ${(res as any).error}`);
+          }
+          return res;
+        },
+        { showToast: true },
+        { component: 'EnhancedSyncManager', operation: 'legs-upsert' }
+      );
+
+      const result = await safeInvokeEdge();
+      console.log(`[useEnhancedSyncManager] Successfully synced first leg start`);
+      // Update last synced timestamp without triggering a full data fetch
+      storeRef.current.setLastSyncedAt(Date.now());
+      
+      // Trigger leaderboard update after successful sync
+      if (storeRef.current.teamId) {
+        import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
+          triggerLeaderboardUpdateOnLegStart(storeRef.current.teamId!, nextLegId, startTime);
+        }).catch(error => {
+          console.error('Failed to trigger leaderboard update on first leg start:', error);
+        });
+      }
+      
+      pendingSyncs.current.delete(syncKey);
+      isProcessingSync.current = false;
       return;
     }
 
@@ -458,106 +439,11 @@ export const useEnhancedSyncManager = () => {
 
     isProcessingSync.current = true;
 
-    try {
-      // Check if we're offline
-      if (!navigator.onLine) {
-        console.log(`[useEnhancedSyncManager] Offline - queuing start runner update`);
-        
-        // Queue both updates
-        if (finishTime) {
-          queueChange({
-            table: 'legs',
-            remoteId: currentLeg.remoteId,
-            payload: {
-              number: currentLeg.id,
-              distance: currentLeg.distance,
-              finish_time: new Date(finishTime).toISOString()
-            }
-          });
-        }
-        
-        queueChange({
-          table: 'legs',
-          remoteId: nextLeg.remoteId,
-          payload: {
-            number: nextLeg.id,
-            distance: nextLeg.distance,
-            start_time: new Date(startTime).toISOString()
-          }
-        });
-        
-        return;
-      }
-
-      // Build the complete payload for both leg updates (include all leg data)
-      const legsPayload = [
-        ...(finishTime ? [{
-          id: currentLeg.remoteId,
-          number: currentLeg.id,
-          distance: currentLeg.distance,
-          start_time: currentLeg.actualStart ? new Date(currentLeg.actualStart).toISOString() : null,
-          finish_time: new Date(finishTime).toISOString()
-        }] : []),
-        {
-          id: nextLeg.remoteId,
-          number: nextLeg.id,
-          distance: nextLeg.distance,
-          start_time: new Date(startTime).toISOString(),
-          finish_time: nextLeg.actualFinish ? new Date(nextLeg.actualFinish).toISOString() : null
-        }
-      ];
-
-      console.log(`[useEnhancedSyncManager] Syncing start runner:`, legsPayload);
-
-      const deviceId = getDeviceId();
-      const result = await invokeEdge('legs-upsert', {
-        teamId: storeRef.current.teamId,
-        deviceId,
-        legs: legsPayload,
-        action: 'upsert'
-      });
+    // Check if we're offline
+    if (!navigator.onLine) {
+      console.log(`[useEnhancedSyncManager] Offline - queuing start runner update`);
       
-      if ((result as any).error) {
-        console.error(`[useEnhancedSyncManager] Failed to sync start runner:`, (result as any).error);
-        // Queue the changes for retry
-        if (finishTime) {
-          queueChange({
-            table: 'legs',
-            remoteId: currentLeg.remoteId,
-            payload: {
-              number: currentLeg.id,
-              distance: currentLeg.distance,
-              finish_time: new Date(finishTime).toISOString()
-            }
-          });
-        }
-        
-        queueChange({
-          table: 'legs',
-          remoteId: nextLeg.remoteId,
-          payload: {
-            number: nextLeg.id,
-            distance: nextLeg.distance,
-            start_time: new Date(startTime).toISOString()
-          }
-        });
-      } else {
-        console.log(`[useEnhancedSyncManager] Successfully synced start runner`);
-        // Update last synced timestamp without triggering a full data fetch
-        storeRef.current.setLastSyncedAt(Date.now());
-        
-        // Trigger leaderboard update after successful sync
-        if (storeRef.current.teamId) {
-          import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
-            triggerLeaderboardUpdateOnLegStart(storeRef.current.teamId!, nextLegId, startTime);
-          }).catch(error => {
-            console.error('Failed to trigger leaderboard update on leg start:', error);
-          });
-        }
-      }
-    } catch (error) {
-      console.error(`[useEnhancedSyncManager] Error syncing start runner:`, error);
-      // Queue the changes for retry
+      // Queue both updates
       if (finishTime) {
         queueChange({
           table: 'legs',
@@ -579,11 +465,67 @@ export const useEnhancedSyncManager = () => {
           start_time: new Date(startTime).toISOString()
         }
       });
-    } finally {
-      // Remove from pending syncs
+      
       pendingSyncs.current.delete(syncKey);
       isProcessingSync.current = false;
+      return;
     }
+
+    // Build the complete payload for both leg updates (include all leg data)
+    const legsPayload = [
+      ...(finishTime ? [{
+        id: currentLeg.remoteId,
+        number: currentLeg.id,
+        distance: currentLeg.distance,
+        start_time: currentLeg.actualStart ? new Date(currentLeg.actualStart).toISOString() : null,
+        finish_time: new Date(finishTime).toISOString()
+      }] : []),
+      {
+        id: nextLeg.remoteId,
+        number: nextLeg.id,
+        distance: nextLeg.distance,
+        start_time: new Date(startTime).toISOString(),
+        finish_time: nextLeg.actualFinish ? new Date(nextLeg.actualFinish).toISOString() : null
+      }
+    ];
+
+    console.log(`[useEnhancedSyncManager] Syncing start runner:`, legsPayload);
+
+    const deviceId = getDeviceId();
+    const safeInvokeEdge = withErrorHandling(
+      async () => {
+        const res = await invokeEdge('legs-upsert', {
+          teamId: storeRef.current.teamId,
+          deviceId,
+          legs: legsPayload,
+          action: 'upsert'
+        });
+        if (res && typeof res === 'object' && 'error' in res) {
+          throw new NetworkError(`Legs-upsert failed: ${(res as any).error}`);
+        }
+        return res;
+      },
+      { showToast: true },
+      { component: 'EnhancedSyncManager', operation: 'legs-upsert' }
+    );
+
+    const result = await safeInvokeEdge();
+    console.log(`[useEnhancedSyncManager] Successfully synced start runner`);
+    // Update last synced timestamp without triggering a full data fetch
+    storeRef.current.setLastSyncedAt(Date.now());
+    
+    // Trigger leaderboard update after successful sync
+    if (storeRef.current.teamId) {
+      import('@/services/leaderboard').then(({ triggerLeaderboardUpdateOnLegStart }) => {
+        triggerLeaderboardUpdateOnLegStart(storeRef.current.teamId!, nextLegId, startTime);
+      }).catch(error => {
+        console.error('Failed to trigger leaderboard update on leg start:', error);
+      });
+    }
+    
+    // Remove from pending syncs
+    pendingSyncs.current.delete(syncKey);
+    isProcessingSync.current = false;
   }, [queueChange]);
 
   // Handle runner synchronization

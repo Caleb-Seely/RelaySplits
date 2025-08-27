@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { 
   handleError, 
   withErrorHandling, 
@@ -105,7 +106,7 @@ describe('Error Handling', () => {
     });
 
     it('should show appropriate toast messages for different error types', () => {
-      const { toast } = require('sonner');
+      const { toast } = await import('sonner');
 
       // Network error
       const networkError = new NetworkError('Network failed');
@@ -123,8 +124,8 @@ describe('Error Handling', () => {
       expect(toast.error).toHaveBeenCalledWith('Something went wrong. Please try again.');
     });
 
-    it('should respect showToast option', () => {
-      const { toast } = require('sonner');
+    it('should respect showToast option', async () => {
+      const { toast } = await import('sonner');
       const error = new Error('Test error');
 
       handleError(error, { showToast: false });

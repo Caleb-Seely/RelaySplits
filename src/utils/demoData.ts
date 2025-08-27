@@ -1,5 +1,6 @@
-import type { Runner, Leg } from '@/types/race';
 import { LEG_DISTANCES } from './legData';
+
+import type { Runner, Leg } from '@/types/race';
 
 // Helper function to convert pace from MM:SS format to seconds per mile
 const paceToSeconds = (pace: string): number => {

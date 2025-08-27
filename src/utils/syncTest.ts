@@ -1,8 +1,9 @@
 // Test utility for the new decoupled sync system
 import { eventBus, EVENT_TYPES } from './eventBus';
+import { syncOptimizer } from './syncOptimizer';
+
 import { useRaceStore } from '@/store/raceStore';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
-import { syncOptimizer } from './syncOptimizer';
 
 export const testDecoupledSystem = () => {
   console.log('🧪 Testing Enhanced Sync System...');

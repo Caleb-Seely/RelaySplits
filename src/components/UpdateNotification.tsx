@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { RefreshCw, X } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
 import { serviceWorkerManager } from '@/utils/serviceWorker';
 
 const UpdateNotification: React.FC = () => {

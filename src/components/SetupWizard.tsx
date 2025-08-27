@@ -1,5 +1,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Clock, Users, Play, Waves } from 'lucide-react';
+import { z } from 'zod';
+import { toast } from 'sonner';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import dayjs, { Dayjs } from 'dayjs';
+
+import SpreadsheetImport from './SpreadsheetImport';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,16 +20,9 @@ import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
-import { Clock, Users, Play, Waves } from 'lucide-react';
 import { formatTime, formatDate, formatRaceTime } from '@/utils/raceUtils';
-import SpreadsheetImport from './SpreadsheetImport';
-import { z } from 'zod';
-import { toast } from 'sonner';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import dayjs, { Dayjs } from 'dayjs';
 import { useRaceTracking, useFeatureUsageTracking } from '@/hooks/useAnalytics';
+import { sanitizeRunnerName } from '@/utils/sanitization';
 
 interface SetupWizardProps {
   isNewTeam?: boolean;
@@ -117,7 +120,12 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isNewTeam = false }) => {
 
 
   const handleRunnerUpdate = (id: number, field: 'name' | 'pace', value: string | number) => {
-    updateRunner(id, { [field]: value });
+    if (field === 'name' && typeof value === 'string') {
+      const sanitizedName = sanitizeRunnerName(value);
+      updateRunner(id, { [field]: sanitizedName });
+    } else {
+      updateRunner(id, { [field]: value });
+    }
   };
 
   const formatPace = (seconds: number) => {

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Clock, AlertCircle, Check } from 'lucide-react';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatPace } from '@/utils/raceUtils';
-import { Clock, AlertCircle, Check } from 'lucide-react';
 import { useFeatureUsageTracking } from '@/hooks/useAnalytics';
 
 interface PaceInputModalProps {

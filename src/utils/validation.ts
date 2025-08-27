@@ -1,4 +1,4 @@
-import type { Runner, Leg } from '@/types/race';
+import type { Runner, Leg, RaceData } from '@/types/race';
 
 /**
  * Validation result interface for comprehensive data validation
@@ -413,3 +413,231 @@ export function validateForSync(leg: any, operation: string): boolean {
   
   return true;
 }
+
+/**
+ * Enhanced validation for RaceData objects
+ */
+export const validateRaceDataStructure = (data: unknown): data is RaceData => {
+  if (!data || typeof data !== 'object') return false;
+  
+  const raceData = data as Partial<RaceData>;
+  
+  return (
+    Array.isArray(raceData.runners) &&
+    Array.isArray(raceData.legs) &&
+    typeof raceData.startTime === 'number'
+  );
+};
+
+/**
+ * Enhanced validation for Runner objects
+ */
+export const validateRunnerStructure = (runner: unknown): runner is Runner => {
+  if (!runner || typeof runner !== 'object') return false;
+  
+  const r = runner as Partial<Runner>;
+  
+  return (
+    typeof r.id === 'number' &&
+    typeof r.name === 'string' &&
+    typeof r.pace === 'number' &&
+    (r.van === 1 || r.van === 2)
+  );
+};
+
+/**
+ * Enhanced validation for Leg objects
+ */
+export const validateLegStructure = (leg: unknown): leg is Leg => {
+  if (!leg || typeof leg !== 'object') return false;
+  
+  const l = leg as Partial<Leg>;
+  
+  return (
+    typeof l.id === 'number' &&
+    typeof l.runnerId === 'number' &&
+    typeof l.distance === 'number' &&
+    typeof l.projectedStart === 'number' &&
+    typeof l.projectedFinish === 'number'
+  );
+};
+
+/**
+ * Validates runner name format and length
+ */
+export const validateRunnerName = (name: string): boolean => {
+  if (typeof name !== 'string') return false;
+  
+  const trimmed = name.trim();
+  return trimmed.length > 0 && trimmed.length <= 50;
+};
+
+/**
+ * Validates pace values (minutes per mile)
+ */
+export const validatePace = (pace: number): boolean => {
+  return typeof pace === 'number' && pace >= 180 && pace <= 900; // 3:00 to 15:00 pace
+};
+
+/**
+ * Validates distance values (miles)
+ */
+export const validateDistance = (distance: number): boolean => {
+  return typeof distance === 'number' && distance >= 0.1 && distance <= 50;
+};
+
+/**
+ * Validates timestamp values
+ */
+export const validateTimestamp = (timestamp: number): boolean => {
+  if (typeof timestamp !== 'number') return false;
+  
+  const now = Date.now();
+  const oneYearAgo = now - (365 * 24 * 60 * 60 * 1000);
+  const oneYearFromNow = now + (365 * 24 * 60 * 60 * 1000);
+  
+  return timestamp >= oneYearAgo && timestamp <= oneYearFromNow;
+};
+
+/**
+ * Validates van assignment
+ */
+export const validateVanAssignment = (van: number): boolean => {
+  return van === 1 || van === 2;
+};
+
+/**
+ * Validates runner ID uniqueness
+ */
+export const validateRunnerIdUniqueness = (runners: Runner[]): boolean => {
+  const ids = runners.map(r => r.id);
+  const uniqueIds = new Set(ids);
+  return uniqueIds.size === ids.length;
+};
+
+/**
+ * Validates leg ID uniqueness
+ */
+export const validateLegIdUniqueness = (legs: Leg[]): boolean => {
+  const ids = legs.map(l => l.id);
+  const uniqueIds = new Set(ids);
+  return uniqueIds.size === ids.length;
+};
+
+/**
+ * Validates leg sequence consistency
+ */
+export const validateLegSequence = (legs: Leg[]): boolean => {
+  for (let i = 1; i < legs.length; i++) {
+    const prevLeg = legs[i - 1];
+    const currLeg = legs[i];
+    
+    if (prevLeg.actualFinish && currLeg.actualStart && 
+        currLeg.actualStart < prevLeg.actualFinish) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/**
+ * Validates that all runners are assigned to legs
+ */
+export const validateRunnerAssignments = (runners: Runner[], legs: Leg[]): boolean => {
+  const assignedRunnerIds = new Set(legs.map(l => l.runnerId));
+  return runners.every(r => assignedRunnerIds.has(r.id));
+};
+
+/**
+ * Comprehensive validation for race data integrity
+ */
+export const validateRaceDataIntegrity = (data: RaceData): ValidationResult => {
+  const issues: string[] = [];
+  const warnings: string[] = [];
+  const suggestions: string[] = [];
+
+  // Basic structure validation
+  if (!validateRaceDataStructure(data)) {
+    issues.push('Invalid race data structure');
+    return { isValid: false, issues, warnings, suggestions };
+  }
+
+  // Validate runners
+  if (!Array.isArray(data.runners) || data.runners.length === 0) {
+    issues.push('No runners defined');
+  } else {
+    data.runners.forEach((runner, index) => {
+      if (!validateRunner(runner)) {
+        issues.push(`Invalid runner at index ${index}`);
+      } else {
+        if (!validateRunnerName(runner.name)) {
+          issues.push(`Invalid runner name: ${runner.name}`);
+        }
+        if (!validatePace(runner.pace)) {
+          issues.push(`Invalid pace for runner ${runner.name}: ${runner.pace}`);
+        }
+        if (!validateVanAssignment(runner.van)) {
+          issues.push(`Invalid van assignment for runner ${runner.name}: ${runner.van}`);
+        }
+      }
+    });
+
+    if (!validateRunnerIdUniqueness(data.runners)) {
+      issues.push('Duplicate runner IDs found');
+    }
+  }
+
+  // Validate legs
+  if (!Array.isArray(data.legs) || data.legs.length === 0) {
+    issues.push('No legs defined');
+  } else {
+    data.legs.forEach((leg, index) => {
+      if (!validateLeg(leg)) {
+        issues.push(`Invalid leg at index ${index}`);
+      } else {
+        if (!validateDistance(leg.distance)) {
+          issues.push(`Invalid distance for leg ${leg.id}: ${leg.distance}`);
+        }
+        if (!validateTimestamp(leg.projectedStart)) {
+          issues.push(`Invalid projected start time for leg ${leg.id}`);
+        }
+        if (!validateTimestamp(leg.projectedFinish)) {
+          issues.push(`Invalid projected finish time for leg ${leg.id}`);
+        }
+        if (leg.actualStart && !validateTimestamp(leg.actualStart)) {
+          issues.push(`Invalid actual start time for leg ${leg.id}`);
+        }
+        if (leg.actualFinish && !validateTimestamp(leg.actualFinish)) {
+          issues.push(`Invalid actual finish time for leg ${leg.id}`);
+        }
+      }
+    });
+
+    if (!validateLegIdUniqueness(data.legs)) {
+      issues.push('Duplicate leg IDs found');
+    }
+
+    if (!validateLegSequence(data.legs)) {
+      issues.push('Invalid leg sequence detected');
+    }
+  }
+
+  // Validate start time
+  if (!validateTimestamp(data.startTime)) {
+    issues.push('Invalid race start time');
+  }
+
+  // Cross-validation
+  if (data.runners.length > 0 && data.legs.length > 0) {
+    if (!validateRunnerAssignments(data.runners, data.legs)) {
+      warnings.push('Some runners are not assigned to legs');
+    }
+  }
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+    warnings,
+    suggestions
+  };
+};

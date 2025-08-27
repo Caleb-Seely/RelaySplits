@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+
 import { useAnalytics, useRaceTracking, useRunnerTracking, useTimerTracking } from '@/hooks/useAnalytics';
 import { measureAsyncPerformance } from '@/services/performance';
 import { captureSentryError } from '@/services/sentry';

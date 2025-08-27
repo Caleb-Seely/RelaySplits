@@ -1,6 +1,7 @@
+import { toast } from 'sonner';
+
 import { captureSentryError } from '@/services/sentry';
 import { analytics } from '@/services/analytics';
-import { toast } from 'sonner';
 
 export interface ErrorContext {
   component?: string;

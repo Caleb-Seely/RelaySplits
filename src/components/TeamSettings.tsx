@@ -1,18 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { useTeam } from '@/contexts/TeamContext';
-import { useTeamManagement } from '@/hooks/useTeamManagement';
-import { useTeamSync } from '@/hooks/useTeamSync';
-import { useIsMobile } from '@/hooks/use-mobile';
-import AdminRecovery from './AdminRecovery';
-import TimePicker from './TimePicker';
 import { toast } from 'sonner';
 import { 
   Settings, 
@@ -33,9 +19,24 @@ import {
   X,
   ChevronLeft
 } from 'lucide-react';
+
+import AdminRecovery from './AdminRecovery';
+import TimePicker from './TimePicker';
+
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useTeam } from '@/contexts/TeamContext';
+import { useTeamManagement } from '@/hooks/useTeamManagement';
+import { useTeamSync } from '@/hooks/useTeamSync';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useRaceStore } from '@/store/raceStore';
 import { useFeatureUsageTracking } from '@/hooks/useAnalytics';
-
 import { triggerConfetti } from '@/utils/confetti';
 
 interface Device {

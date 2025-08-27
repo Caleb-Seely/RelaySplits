@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Heart, Send, X } from 'lucide-react';
+import { toast } from 'sonner';
+
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Heart, Send, X } from 'lucide-react';
-import { toast } from 'sonner';
 import { submitFeedback } from '@/services/feedback';
 import { useAnalytics } from '@/hooks/useAnalytics';
 

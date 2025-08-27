@@ -1,4 +1,8 @@
 import React, { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
+import { Upload, FileSpreadsheet, Users, AlertCircle, Check, X, RefreshCw } from 'lucide-react';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,9 +16,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRaceStore } from '@/store/raceStore';
 import { Runner } from '@/types/race';
-import * as XLSX from 'xlsx';
-import Papa from 'papaparse';
-import { Upload, FileSpreadsheet, Users, AlertCircle, Check, X, RefreshCw } from 'lucide-react';
 import { useFeatureUsageTracking, useTechnicalTracking } from '@/hooks/useAnalytics';
 
 interface SpreadsheetImportProps {

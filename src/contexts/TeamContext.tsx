@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+
 import { getDeviceId } from '@/integrations/supabase/edge';
 
 interface DeviceInfo {

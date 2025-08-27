@@ -1,13 +1,15 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw, Trophy, Flame, Star, Play, Home } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
 import { fetchLeaderboardData, fetchTeamLeaderboardData, clearTeamLeaderboardCache, clearAllLeaderboardCache } from '@/services/leaderboard';
 import { LoadingSpinner } from '@/components/ui/loading-states';
 import LeaderboardErrorBoundary from '@/components/ErrorBoundary';
 import { useTeam } from '@/contexts/TeamContext';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
-import { RefreshCw, Trophy, Flame, Star, Play, Home } from 'lucide-react';
 import { formatDuration } from '@/utils/raceUtils';
-import { useNavigate } from 'react-router-dom';
+
 
 const PodiumCard = ({ team, position, isCurrentTeam = false }: { team: any; position: number; isCurrentTeam?: boolean }) => {
   const podiumHeight = position === 1 ? 'h-32' : position === 2 ? 'h-24' : 'h-20';

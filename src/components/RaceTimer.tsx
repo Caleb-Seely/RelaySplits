@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
+import { Timer, Flag } from 'lucide-react';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRaceStore } from '@/store/raceStore';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { formatTime, formatDuration } from '@/utils/raceUtils';
-import { Timer, Flag } from 'lucide-react';
 
 const RaceTimer = () => {
   const { startTime, legs } = useRaceStore();

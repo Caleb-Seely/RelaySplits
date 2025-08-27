@@ -1,4 +1,5 @@
 import { supabase } from './client';
+
 import { rateLimitedFetch, isRateLimited, getRetryDelay } from '@/utils/rateLimiter';
 
 // Minimal validation functions to replace the deleted inputValidation.ts

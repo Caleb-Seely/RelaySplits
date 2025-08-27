@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { analytics } from '@/services/analytics';
 
 export interface PerformanceMetric {
@@ -107,9 +109,11 @@ class PerformanceMonitor {
         metadata
       };
 
-      this.metrics.get(name)?.push(metric) || this.metrics.set(name, [metric]);
-      this.checkThresholds(name, metric.duration);
-      this.reportMetric(metric);
+      if (!this.metrics.get(name)?.push(metric)) {
+        this.metrics.set(name, [metric]);
+      }
+      void this.checkThresholds(name, metric.duration);
+      void this.reportMetric(metric);
       
       return result;
     } catch (error) {
@@ -123,8 +127,10 @@ class PerformanceMonitor {
         metadata: { ...metadata, error: true }
       };
 
-      this.metrics.get(metric.name)?.push(metric) || this.metrics.set(metric.name, [metric]);
-      this.reportMetric(metric);
+      if (!this.metrics.get(metric.name)?.push(metric)) {
+        this.metrics.set(metric.name, [metric]);
+      }
+      void this.reportMetric(metric);
       
       throw error;
     }
@@ -195,7 +201,7 @@ export const withPerformanceTracking = <P extends object>(
       endTimer();
     });
     
-    return <Component {...props} />;
+    return React.createElement(Component, props);
   });
 };
 

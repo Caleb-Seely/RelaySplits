@@ -1,5 +1,6 @@
 
 import { format } from 'date-fns';
+
 import type { Leg, Runner, RaceStatus } from '@/types/race';
 import { LEG_DISTANCES, MAJOR_EXCHANGES, getLegDirectionsUrl } from '@/utils/legData';
 
@@ -765,7 +766,7 @@ export function validateTimeUpdate(
  */
 export function autoFixSingleRunnerViolations(legs: Leg[]): { fixed: boolean; changes: string[]; updatedLegs: Leg[] } {
   const changes: string[] = [];
-  let updatedLegs = [...legs];
+  const updatedLegs = [...legs];
   
   // Find all currently running legs
   const runningLegs = updatedLegs.filter(leg => leg.actualStart && !leg.actualFinish);
@@ -820,7 +821,7 @@ export function detectAndRepairImpossibleLegStates(legs: Leg[]): {
   updatedLegs: Leg[] 
 } {
   const changes: string[] = [];
-  let updatedLegs = [...legs];
+  const updatedLegs = [...legs];
   let repaired = false;
 
   // Sort legs by ID to process in order

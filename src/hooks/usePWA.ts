@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+
 import { pwaManager } from '@/utils/serviceWorker';
 
 export const usePWA = () => {

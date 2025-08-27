@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { AlertTriangle, CheckCircle, RefreshCw, Wrench } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
 import { validateAndRepairLegStates } from '@/utils/dataConsistency';
-import { AlertTriangle, CheckCircle, RefreshCw, Wrench } from 'lucide-react';
 
 interface DataIntegrityCheckerProps {
   className?: string;

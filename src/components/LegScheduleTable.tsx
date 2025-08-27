@@ -1,19 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { useRaceStore } from '@/store/raceStore';
-import { useTeamSync } from '@/hooks/useTeamSync';
-import { 
-  getLegStatus, 
-  getRunTime, 
-  formatDuration, 
-  getCountdownTime, 
-  formatCountdown, 
-  calculateActualPace
-} from '@/utils/raceUtils';
-import { MAJOR_EXCHANGES, getLegDirectionsUrl } from '@/utils/legData';
 import { 
   Edit, 
   Clock, 
@@ -30,8 +15,25 @@ import {
   List,
   ChevronRight
 } from 'lucide-react';
+
 import TimePicker from './TimePicker';
 import RunnerAssignmentModal from './RunnerAssignmentModal';
+
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { useRaceStore } from '@/store/raceStore';
+import { useTeamSync } from '@/hooks/useTeamSync';
+import { 
+  getLegStatus, 
+  getRunTime, 
+  formatDuration, 
+  getCountdownTime, 
+  formatCountdown, 
+  calculateActualPace
+} from '@/utils/raceUtils';
+import { MAJOR_EXCHANGES, getLegDirectionsUrl } from '@/utils/legData';
 
 interface LegScheduleTableProps {
   viewMode: 'cards' | 'table';

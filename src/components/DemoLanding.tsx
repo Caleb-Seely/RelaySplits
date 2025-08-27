@@ -1,5 +1,30 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  Play, 
+  Clock, 
+  Users, 
+  MapPin, 
+  Target, 
+  Timer, 
+  Activity,
+  Eye,
+  Plus,
+  Zap,
+  CheckCircle,
+  Grid3X3,
+  List,
+  Trophy,
+  ArrowRight,
+  Download,
+  Smartphone,
+  Info,
+  X
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+import AdminSecretDisplay from './AdminSecretDisplay';
+
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,34 +47,12 @@ import {
   getRunTime,
   calculateActualPace
 } from '@/utils/raceUtils';
-import { 
-  Play, 
-  Clock, 
-  Users, 
-  MapPin, 
-  Target, 
-  Timer, 
-  Activity,
-  Eye,
-  Plus,
-  Zap,
-  CheckCircle,
-  Grid3X3,
-  List,
-  Trophy,
-  ArrowRight,
-  Download,
-  Smartphone,
-  Info,
-  X
-} from 'lucide-react';
 import { getDemoRunners, getDemoStartTime, initializeDemoLegs, demoTeam, updateDemoLeg } from '@/utils/demoData';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useTeam } from '@/contexts/TeamContext';
 import { usePWA } from '@/hooks/usePWA';
-import { toast } from 'sonner';
 import { useRaceStore } from '@/store/raceStore';
-import AdminSecretDisplay from './AdminSecretDisplay';
+
 
 
 

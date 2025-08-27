@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { CloudUpload, CloudOff, Loader2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
 import { useTeamSync } from '@/hooks/useTeamSync';
 import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useRaceStore } from '@/store/raceStore';

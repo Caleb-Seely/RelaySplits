@@ -1,3 +1,5 @@
+import { isDatabaseRecord } from './typeGuards';
+
 import { supabase } from '@/integrations/supabase/client';
 import { ValidationResult, RepairResult } from '@/types/leaderboard';
 import type { Leg, Runner } from '@/types/race';
@@ -29,9 +31,11 @@ const checkDatabaseForLegTime = async (teamId: string, legId: number, field: 'st
     
     if (!data) return false;
     
-    // Type-safe field access using type assertion
-    const typedData = data as any;
-    return typedData[field] !== null;
+    // Type-safe field access using type guards
+    if (!isDatabaseRecord(data)) {
+      return false;
+    }
+    return data[field] !== null;
   } catch (error) {
     console.warn(`[checkDatabaseForLegTime] Exception checking database for leg ${legId} ${field}:`, error);
     return false; // Assume missing if we can't check

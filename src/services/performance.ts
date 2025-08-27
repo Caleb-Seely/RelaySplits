@@ -1,4 +1,5 @@
 import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals';
+
 import { analytics } from './analytics';
 import { captureSentryError } from './sentry';
 

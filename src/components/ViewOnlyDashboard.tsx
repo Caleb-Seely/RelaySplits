@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Eye, Users, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+
+import Dashboard from './Dashboard';
 
 import { useRaceStore } from '@/store/raceStore';
 import { useEnhancedSyncManager } from '@/hooks/useEnhancedSyncManager';
 import { useTeam } from '@/contexts/TeamContext';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
-import Dashboard from './Dashboard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Eye, Users, AlertCircle } from 'lucide-react';
-import { toast } from 'sonner';
+
 
 interface ViewTeamResponse {
   teamId: string;

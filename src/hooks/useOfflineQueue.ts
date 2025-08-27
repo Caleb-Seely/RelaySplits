@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+
 import { useRaceStore } from '@/store/raceStore';
 import { validateDataIntegrity, validateRunner, validateLeg } from '@/utils/validation';
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
+import { withErrorHandling, NetworkError } from '@/utils/errorHandling';
 
 // Define the shape of a queued change
 interface QueuedChange {
@@ -77,10 +79,24 @@ export const useOfflineQueue = () => {
         body = { teamId, deviceId: deviceIdValue, legs: [leg], action: 'upsert' };
       }
 
-      const res = await invokeEdge(edgeName, body);
-      if ((res as any).error) {
-        console.error(`[useOfflineQueue] Edge ${edgeName} error:`, (res as any).error);
-        return { error: (res as any).error };
+      const safeInvokeEdge = withErrorHandling(
+        async () => {
+          const res = await invokeEdge(edgeName, body);
+          if (res && typeof res === 'object' && 'error' in res) {
+            throw new NetworkError(`Edge ${edgeName} failed: ${(res as any).error}`);
+          }
+          return res;
+        },
+        { showToast: false },
+        { component: 'OfflineQueue', operation: 'safeUpdate' }
+      );
+
+      try {
+        const res = await safeInvokeEdge();
+        return { data: payload };
+      } catch (error) {
+        console.error(`[useOfflineQueue] Edge ${edgeName} error:`, error);
+        return { error };
       }
 
       return { data: payload };
@@ -237,7 +253,7 @@ export const useOfflineQueue = () => {
     setIsProcessing(true);
 
     try {
-      let queue = getQueue();
+      const queue = getQueue();
       console.log('[useOfflineQueue] Raw queue from storage:', queue);
       
       if (queue.length === 0) {

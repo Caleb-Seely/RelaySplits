@@ -1,11 +1,12 @@
 
 import React from 'react';
+import { MapPin } from 'lucide-react';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useRaceStore } from '@/store/raceStore';
 import { getMajorExchangeTimes, formatRaceTime } from '@/utils/raceUtils';
 import { getLegDirectionsUrl } from '@/utils/legData';
-import { MapPin } from 'lucide-react';
 
 const MajorExchanges = () => {
   const { legs } = useRaceStore();

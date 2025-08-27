@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { LeaderboardTeam } from '@/types/leaderboard';
 import { formatFinishTime } from '@/services/leaderboard';
 

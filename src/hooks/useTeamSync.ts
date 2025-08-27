@@ -1,9 +1,10 @@
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
 import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { useRaceStore } from '@/store/raceStore';
 import { useTeam } from '@/contexts/TeamContext';
-import { toast } from 'sonner';
 
 interface Team {
   id: string;

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import type { RaceData, Runner, Leg } from '@/types/race';
 
 interface RaceDataStore extends RaceData {

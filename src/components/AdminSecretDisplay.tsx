@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { Copy, Eye, EyeOff, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Copy, Eye, EyeOff, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
 
 interface AdminSecretDisplayProps {
   adminSecret: string;
