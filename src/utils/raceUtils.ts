@@ -174,41 +174,29 @@ export function recalculateProjections(legs: Leg[], updatedIndex: number, runner
     } else {
       const prevLeg = updatedLegs[i - 1];
       
-      // Only update projected start if this leg hasn't actually started yet
-      // This preserves the original projection as a record once the leg begins
-      if (!currentLeg.actualStart) {
-        let newProjectedStart: number;
-        
-        if (prevLeg.actualFinish) {
-          // Previous leg has finished - update projection based on actual finish
-          newProjectedStart = prevLeg.actualFinish;
-        } else {
-          // Previous leg hasn't finished yet - use its projected finish
-          newProjectedStart = prevLeg.projectedFinish;
-        }
-        
-        updatedLegs[i] = {
-          ...currentLeg,
-          projectedStart: newProjectedStart,
-          projectedFinish: calculateProjectedFinish(
-            newProjectedStart,
-            currentLeg.paceOverride ?? runner.pace,
-            currentLeg.distance
-          )
-        };
+      // Determine the start time for this leg
+      let newProjectedStart: number;
+      
+      if (prevLeg.actualFinish) {
+        // Previous leg has finished - use its actual finish time
+        newProjectedStart = prevLeg.actualFinish;
+      } else if (prevLeg.actualStart) {
+        // Previous leg has started but not finished - use its projected finish
+        newProjectedStart = prevLeg.projectedFinish;
       } else {
-        // Leg has already started - preserve original projections but recalculate finish
-        const effectiveStartTime = currentLeg.actualStart;
-        updatedLegs[i] = {
-          ...currentLeg,
-          // Keep original projectedStart as historical record
-          projectedFinish: calculateProjectedFinish(
-            effectiveStartTime,
-            currentLeg.paceOverride ?? runner.pace,
-            currentLeg.distance
-          )
-        };
+        // Previous leg hasn't started - use its projected finish
+        newProjectedStart = prevLeg.projectedFinish;
       }
+      
+      updatedLegs[i] = {
+        ...currentLeg,
+        projectedStart: newProjectedStart,
+        projectedFinish: calculateProjectedFinish(
+          newProjectedStart,
+          currentLeg.paceOverride ?? runner.pace,
+          currentLeg.distance
+        )
+      };
     }
   }
   

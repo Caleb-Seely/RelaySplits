@@ -114,7 +114,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
   
   // Function to format time without seconds, using AM/PM
   const formatTimeShort = (timestamp: number) => {
-    if (!timestamp || timestamp <= 0) return '';
+    if (!timestamp || timestamp <= 0) return 'N/A';
     const date = new Date(timestamp);
     const options: Intl.DateTimeFormatOptions = { 
       hour: "2-digit" as const, 
@@ -126,7 +126,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
 
   // Function to format time with seconds, using AM/PM
   const formatTime = (timestamp: number) => {
-    if (!timestamp || timestamp <= 0) return '';
+    if (!timestamp || timestamp <= 0) return 'N/A';
     const date = new Date(timestamp);
     const options: Intl.DateTimeFormatOptions = { 
       hour: "2-digit" as const, 
@@ -409,32 +409,32 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
             <div className="flex-shrink-0 ml-2">{getStatusBadge(leg)}</div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 text-xs border-t border-slate-100 pt-3">
+          <div className="text-xs border-t border-slate-100 pt-3">
             <div className="space-y-1">
-              <div className="text-slate-500 font-medium">Projected</div>
-              <div className="text-slate-700 font-medium">{formatTime(leg.projectedStart)}</div>
-              <div className="text-slate-500 text-xs">to {formatTime(leg.projectedFinish)}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-slate-500 font-medium">Actual</div>
-              <button
-                className={`text-xs font-medium block text-left ${
-                  leg.actualStart ? 'text-green-600' : 'text-blue-600'
-                } ${!isViewOnly ? 'hover:underline' : ''}`}
-                onClick={isViewOnly ? undefined : () => handleTimeEdit(leg.id, 'actualStart')}
-                disabled={isViewOnly}
-              >
-                {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
-              </button>
-              <button
-                className={`block text-left text-xs font-medium ${
-                  leg.actualFinish ? 'text-green-600' : leg.actualStart ? 'text-blue-600' : 'text-slate-400'
-                } ${!isViewOnly ? 'hover:underline' : ''}`}
-                onClick={isViewOnly ? undefined : () => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
-                disabled={isViewOnly || !leg.actualStart}
-              >
-                {leg.actualFinish ? formatTime(leg.actualFinish) : leg.projectedFinish ? `${formatTime(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
-              </button>
+              <div className={`font-medium ${leg.actualStart ? 'text-green-600' : 'text-blue-600'}`}>
+                {leg.actualStart ? 'Actual' : 'Projected'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className={`text-xs font-medium ${
+                    leg.actualStart ? 'text-green-600' : 'text-blue-600'
+                  } ${!isViewOnly ? 'hover:underline' : ''}`}
+                  onClick={isViewOnly ? undefined : () => handleTimeEdit(leg.id, 'actualStart')}
+                  disabled={isViewOnly}
+                >
+                  {leg.actualStart ? formatTimeShort(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTimeShort(leg.projectedStart)} (proj.)` : 'Set Start')}
+                </button>
+                <span className="text-slate-400">to</span>
+                <button
+                  className={`text-xs font-medium ${
+                    leg.actualFinish ? 'text-green-600' : leg.actualStart ? 'text-blue-600' : 'text-slate-400'
+                  } ${!isViewOnly ? 'hover:underline' : ''}`}
+                  onClick={isViewOnly ? undefined : () => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
+                  disabled={isViewOnly || !leg.actualStart}
+                >
+                  {leg.actualFinish ? formatTimeShort(leg.actualFinish) : leg.projectedFinish ? `${formatTimeShort(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
+                </button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -451,8 +451,7 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
               <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Leg</th>
               <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Runner</th>
               <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide hidden sm:table-cell">Distance</th>
-              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide hidden lg:table-cell">Projected</th>
-              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Actual</th>
+              <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Times</th>
               <th className="text-left px-2 py-2 sm:px-3 sm:py-3 text-xs font-semibold text-slate-700 uppercase tracking-wide">Status</th>
             </tr>
           </thead>
@@ -507,30 +506,32 @@ const LegScheduleTable: React.FC<LegScheduleTableProps> = ({ viewMode, onRunnerC
                     </button>
                   </td>
                   <td className="px-2 py-2 sm:px-3 sm:py-3 text-sm text-slate-700 hidden sm:table-cell">{leg.distance}mi</td>
-                  <td className="px-2 py-2 sm:px-3 sm:py-3 text-xs text-slate-600 hidden lg:table-cell">
-                    <div>{formatTime(leg.projectedStart)}</div>
-                    <div className="text-slate-500">to {formatTime(leg.projectedFinish)}</div>
-                  </td>
                   <td className="px-2 py-2 sm:px-3 sm:py-3">
                     <div className="space-y-1">
-                      <button
-                        className={`text-xs font-medium block ${
-                          leg.actualStart ? 'text-green-600' : 'text-blue-600'
-                        } ${!isViewOnly ? 'hover:underline' : ''}`}
-                        onClick={isViewOnly ? undefined : () => handleTimeEdit(leg.id, 'actualStart')}
-                        disabled={isViewOnly}
-                      >
-                        {leg.actualStart ? formatTime(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTime(leg.projectedStart)} (proj.)` : 'Set Start')}
-                      </button>
-                      <button
-                        className={`block text-left text-xs font-medium ${
-                          leg.actualFinish ? 'text-green-600' : leg.actualStart ? 'text-blue-600' : 'text-slate-400'
-                        } ${!isViewOnly ? 'hover:underline' : ''}`}
-                        onClick={isViewOnly ? undefined : () => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
-                        disabled={isViewOnly || !leg.actualStart}
-                      >
-                        {leg.actualFinish ? formatTime(leg.actualFinish) : leg.projectedFinish ? `${formatTime(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
-                      </button>
+                      <div className={`text-xs font-medium ${leg.actualStart ? 'text-green-600' : 'text-blue-600'}`}>
+                        {leg.actualStart ? 'Actual' : 'Projected'}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          className={`text-xs font-medium ${
+                            leg.actualStart ? 'text-green-600' : 'text-blue-600'
+                          } ${!isViewOnly ? 'hover:underline' : ''}`}
+                          onClick={isViewOnly ? undefined : () => handleTimeEdit(leg.id, 'actualStart')}
+                          disabled={isViewOnly}
+                        >
+                          {leg.actualStart ? formatTimeShort(leg.actualStart) : (leg.projectedStart && leg.projectedStart > 0 ? `${formatTimeShort(leg.projectedStart)} (proj.)` : 'Set Start')}
+                        </button>
+                        <span className="text-slate-400 text-xs">to</span>
+                        <button
+                          className={`text-xs font-medium ${
+                            leg.actualFinish ? 'text-green-600' : leg.actualStart ? 'text-blue-600' : 'text-slate-400'
+                          } ${!isViewOnly ? 'hover:underline' : ''}`}
+                          onClick={isViewOnly ? undefined : () => leg.actualStart && handleTimeEdit(leg.id, 'actualFinish')}
+                          disabled={isViewOnly || !leg.actualStart}
+                        >
+                          {leg.actualFinish ? formatTimeShort(leg.actualFinish) : leg.projectedFinish ? `${formatTimeShort(leg.projectedFinish)} (proj.)` : (leg.actualStart ? 'Set Finish' : 'Pending')}
+                        </button>
+                      </div>
                     </div>
                   </td>
                   <td className="px-2 py-2 sm:px-3 sm:py-3">{getStatusBadge(leg)}</td>
