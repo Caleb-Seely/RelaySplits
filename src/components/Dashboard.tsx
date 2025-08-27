@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +81,7 @@ import AboutMeModal from './AboutMeModal';
 import { triggerConfetti, getConfetti } from '@/utils/confetti';
 import { useNavigate } from 'react-router-dom';
 import { useRaceTracking, useFeatureUsageTracking, useTechnicalTracking } from '@/hooks/useAnalytics';
+import { detectMissingTimeConflicts } from '@/utils/dataConsistency';
 
 interface DashboardProps {
   isViewOnly?: boolean;
@@ -104,13 +105,15 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     isSetupComplete,
     didInitFromTeam,
     validateAndFixRaceState,
+    validateSingleRunnerRule,
+    autoFixSingleRunnerViolations,
     initializeLegs
   } = useRaceStore();
   const { canInstall, install } = usePWA();
   const { onConflictDetected } = useConflictResolution();
   const { performSmartSync, getQueueStatus, isProcessingSync, setupRealtimeSubscriptions, manualRetry, fetchLatestData } = useEnhancedSyncManager();
   const { trackRaceStarted, trackLegCompleted, trackVanSwitched, trackRunnerAdded } = useRaceTracking();
-  const { trackConfettiTest, trackCelebrationButtonClicked } = useFeatureUsageTracking();
+  const { trackConfettiTest, trackConfettiStartRunner, trackConfettiCelebration, trackConfettiFinishRace, trackCelebrationButtonClicked } = useFeatureUsageTracking();
   const { trackSyncError } = useTechnicalTracking();
   const { 
     isSupported: notificationsSupported, 
@@ -122,6 +125,11 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     getPendingNotificationsCount,
     getNotificationState
   } = useDecoupledNotifications();
+  const { trackFeatureUsage } = useFeatureUsageTracking();
+  const { trackTechnicalEvent } = useTechnicalTracking();
+  const { showQuickHelp, hideQuickHelp, isQuickHelpVisible } = useQuickHelp();
+  const { requestNotificationPermission, sendTestNotification } = useDecoupledNotifications();
+  const { trackRaceEvent } = useRaceTracking();
 
   // Ensure enhanced sync is active when Dashboard is mounted (but not in view-only mode)
   useEffect(() => {
@@ -159,8 +167,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     if (!teamId || isViewOnly) return;
     
     const loadDataIfNeeded = async () => {
-      console.log('[Dashboard] Checking if data needs to be loaded...');
-      console.log('[Dashboard] Current state - legs:', legs.length, 'runners:', runners.length, 'isSetupComplete:', isSetupComplete, 'teamId:', teamId);
       
       // CRITICAL FIX: Ensure start time is synchronized before initializing legs
       // Check if we have a stored team start time that differs from the race store
@@ -171,10 +177,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         
         // If the times differ significantly, update the race store first
         if (Math.abs(storedTime - raceStoreTime) > 1000) {
-          console.log('[Dashboard] CRITICAL: Syncing race store start time with stored team start time before initializing legs');
-          console.log('  Stored team start time:', new Date(storedTime).toString());
-          console.log('  Race store start time:', new Date(raceStoreTime).toString());
-          
           // Update the race store's start time to match the stored team start time
           const { setStartTime } = useRaceStore.getState();
           setStartTime(storedTime);
@@ -189,112 +191,49 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         // Check if this is a fresh team that just completed setup
         // In this case, we should initialize legs locally instead of fetching from server
         if (isSetupComplete && runners.length > 0) {
-          console.log('[Dashboard] Fresh team after setup - initializing legs locally...');
           initializeLegs();
           
           // Check state after initialization
           const stateAfterInit = useRaceStore.getState();
-          console.log('[Dashboard] State after local init - legs:', stateAfterInit.legs.length, 'runners:', stateAfterInit.runners.length);
-          
-          // Verify that legs were created with proper projected times
-          if (stateAfterInit.legs.length > 0) {
-            const firstLeg = stateAfterInit.legs[0];
-            console.log('[Dashboard] First leg after init:', {
-              id: firstLeg.id,
-              runnerId: firstLeg.runnerId,
-              projectedStart: firstLeg.projectedStart,
-              projectedFinish: firstLeg.projectedFinish,
-              actualStart: firstLeg.actualStart
-            });
-          }
         } else if (isSetupComplete && runners.length === 0) {
           // Setup is complete but no data - fetch from server
-          console.log('[Dashboard] Setup complete but no data - fetching from server...');
-          
           try {
             // Fetch latest data from server
-            console.log('[Dashboard] Calling fetchLatestData...');
             await fetchLatestData();
-            console.log('[Dashboard] fetchLatestData completed');
             
             // Check if data was loaded
             const currentState = useRaceStore.getState();
-            console.log('[Dashboard] State after fetch - legs:', currentState.legs.length, 'runners:', currentState.runners.length);
             
             if (currentState.legs.length === 0) {
-              console.log('[Dashboard] Still no legs after fetch, initializing legs...');
               initializeLegs();
             }
           } catch (error) {
             console.error('[Dashboard] Error fetching data:', error);
             // Fallback: initialize legs if fetch fails
-            console.log('[Dashboard] Fallback: initializing legs after fetch error');
             initializeLegs();
           }
         } else {
-          console.log('[Dashboard] No legs data found, attempting to load from server...');
-          
           try {
             // First try to fetch latest data from server
-            console.log('[Dashboard] Calling fetchLatestData...');
             await fetchLatestData();
-            console.log('[Dashboard] fetchLatestData completed');
             
             // If still no legs after fetch, initialize them
             const currentState = useRaceStore.getState();
-            console.log('[Dashboard] State after fetch - legs:', currentState.legs.length, 'runners:', currentState.runners.length);
             
             if (currentState.legs.length === 0) {
-              console.log('[Dashboard] Still no legs after fetch, initializing legs...');
               initializeLegs();
-              
-              // Check state after initialization
-              const stateAfterInit = useRaceStore.getState();
-              console.log('[Dashboard] State after init - legs:', stateAfterInit.legs.length, 'runners:', stateAfterInit.runners.length);
-            } else {
-              // Log fetched data for debugging
-              console.log('[Dashboard] Fetched legs from server:', currentState.legs.length);
-              console.log('[Dashboard] Sample leg data:', currentState.legs[0]);
-              
-              // Check if fetched legs have proper projected times
-              if (currentState.legs.length > 0) {
-                const firstLeg = currentState.legs[0];
-                console.log('[Dashboard] First leg from server:', {
-                  id: firstLeg.id,
-                  runnerId: firstLeg.runnerId,
-                  projectedStart: firstLeg.projectedStart,
-                  projectedFinish: firstLeg.projectedFinish,
-                  actualStart: firstLeg.actualStart
-                });
-              }
             }
           } catch (error) {
             console.error('[Dashboard] Error loading data:', error);
             // Fallback: initialize legs if fetch fails
             if (legs.length === 0) {
-              console.log('[Dashboard] Fallback: initializing legs after fetch error');
               initializeLegs();
             }
           }
         }
       } else if (legs.length === 0 && runners.length > 0) {
         // If we have runners but no legs, initialize legs
-        console.log('[Dashboard] Have runners but no legs, initializing legs...');
         initializeLegs();
-      } else if (legs.length > 0) {
-        console.log('[Dashboard] Data already loaded - legs:', legs.length, 'runners:', runners.length);
-        
-        // Log current leg state for debugging
-        if (legs.length > 0) {
-          const firstLeg = legs[0];
-          console.log('[Dashboard] Current first leg:', {
-            id: firstLeg.id,
-            runnerId: firstLeg.runnerId,
-            projectedStart: firstLeg.projectedStart,
-            projectedFinish: firstLeg.projectedFinish,
-            actualStart: firstLeg.actualStart
-          });
-        }
       }
     };
     
@@ -309,8 +248,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     if (!teamId || isViewOnly || legs.length > 0) return;
     
     const fallbackTimer = setTimeout(async () => {
-      console.log('[Dashboard] Fallback: Initializing legs after timeout');
-      
       // CRITICAL FIX: Ensure start time is synchronized before fallback initialization
       const storedTeamStartTime = localStorage.getItem('relay_team_start_time');
       if (storedTeamStartTime) {
@@ -319,10 +256,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
         
         // If the times differ significantly, update the race store first
         if (Math.abs(storedTime - raceStoreTime) > 1000) {
-          console.log('[Dashboard] Fallback: Syncing race store start time with stored team start time');
-          console.log('  Stored team start time:', new Date(storedTime).toString());
-          console.log('  Race store start time:', new Date(raceStoreTime).toString());
-          
           // Update the race store's start time to match the stored team start time
           const { setStartTime } = useRaceStore.getState();
           setStartTime(storedTime);
@@ -346,7 +279,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     const NOTIFICATION_COOLDOWN = 3000; // 3 seconds between notifications
     
     const unsubscribe = eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event) => {
-      console.log('[Dashboard] Received real-time update:', event.payload);
       setLastRealtimeUpdate(Date.now());
       
       // Show a subtle notification for real-time updates (with cooldown to prevent spam)
@@ -426,14 +358,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
   // Use the actual start of leg 1 if available; otherwise use official team start time or fall back to local start time
   // Prioritize team start time over race store start time to avoid showing default 1pm time
   const actualRaceStartTime = (() => {
-    // Debug logging to understand what's happening
-    console.log('[Dashboard] actualRaceStartTime calculation:');
-    console.log('  team?.start_time:', team?.start_time);
-    console.log('  team object:', team);
-    console.log('  localStorage relay_team_start_time:', localStorage.getItem('relay_team_start_time'));
-    console.log('  race store startTime:', startTime, '(', new Date(startTime).toISOString(), ')');
-    console.log('  legs[0].actualStart:', legs.length > 0 ? legs[0].actualStart : 'no legs');
-    
     // CRITICAL FIX: Only use actualStart if the race has actually started
     // Check if legs[0].actualStart is set and if it's a reasonable time (not the current time)
     const hasActualStart = legs.length > 0 && typeof legs[0].actualStart === 'number';
@@ -444,7 +368,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       Math.abs(legs[0].actualStart - now) > 60000; // At least 1 minute different from current time
     
     if (hasActualStart && isActualStartReasonable) {
-      console.log('[Dashboard] Using actual start time from leg 1:', new Date(legs[0].actualStart).toISOString());
       return legs[0].actualStart;
     }
     
@@ -453,7 +376,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       const teamStartTime = new Date(team.start_time);
       const placeholderDate = new Date('2099-12-31T23:59:59Z');
       if (Math.abs(teamStartTime.getTime() - placeholderDate.getTime()) > 1000) {
-        console.log('[Dashboard] Using team start time from context:', teamStartTime.toISOString());
         return teamStartTime.getTime();
       }
     }
@@ -465,7 +387,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       const storedTime = new Date(storedTeamStartTime);
       const placeholderDate = new Date('2099-12-31T23:59:59Z');
       if (Math.abs(storedTime.getTime() - placeholderDate.getTime()) > 1000) {
-        console.log('[Dashboard] Using stored team start time from localStorage:', storedTime.toISOString());
         return storedTime.getTime();
       }
     }
@@ -473,18 +394,15 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
     // Third priority: race store start time (but only if it's not the default)
     const defaultStartTime = new Date('2025-08-22T13:00').getTime();
     if (Math.abs(startTime - defaultStartTime) > 1000) {
-      console.log('[Dashboard] Using race store start time:', new Date(startTime).toISOString());
       return startTime;
     }
     
     // If we have a teamId but no valid start time found, return null to indicate we're waiting for data
     if (teamId) {
-      console.log('[Dashboard] Team data not loaded yet or no valid start time found, returning null to wait for data');
       return null;
     }
     
     // Last resort: return the race store time even if it's default (for non-team scenarios)
-    console.log('[Dashboard] No valid start time found, using race store time as last resort');
     return startTime;
   })();
 
@@ -545,10 +463,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       
       // If the times differ significantly, update the race store
       if (Math.abs(teamStartTime - raceStoreTime) > 1000) {
-        console.log('[Dashboard] Syncing race store start time with team start time');
-        console.log('  Team start time:', new Date(teamStartTime).toString());
-        console.log('  Race store start time:', new Date(raceStoreTime).toString());
-        
         // Update the race store's start time to match the team's start time
         const { setStartTime } = useRaceStore.getState();
         setStartTime(teamStartTime);
@@ -651,6 +565,11 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
       // Trigger confetti
       console.log('Triggering confetti for start runner');
       triggerConfetti({ particleCount: 100, spread: 70 });
+      trackConfettiStartRunner({
+        team_id: teamId,
+        leg_number: nextRunner?.id,
+        runner_id: nextRunner?.runnerId
+      });
       
       // Use the improved atomic start runner function that handles all scenarios
       // It will automatically determine the correct action based on the current state
@@ -802,6 +721,37 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
 
   const progress = getRaceProgress();
 
+  // Add a utility function to manually check for missing times
+  const checkForMissingTimes = useCallback(async () => {
+    const missingTimeConflicts = await detectMissingTimeConflicts(legs, runners, teamId);
+    if (missingTimeConflicts.length > 0) {
+      console.log('[Dashboard] Found missing time conflicts:', missingTimeConflicts);
+      missingTimeConflicts.forEach(conflict => {
+        onConflictDetected({ type: 'missing_time', ...conflict });
+      });
+    } else {
+      console.log('[Dashboard] No missing time conflicts found');
+    }
+  }, [legs, runners, onConflictDetected]);
+
+  const checkSingleRunnerRule = useCallback(() => {
+    const validation = validateSingleRunnerRule();
+    if (!validation.isValid) {
+      console.log('[Dashboard] Single runner rule violations found:', validation.issues);
+      const result = autoFixSingleRunnerViolations();
+      if (result.fixed) {
+        console.log('[Dashboard] Auto-fixed violations:', result.changes);
+        // Show a toast or notification
+        trackTechnicalEvent('single_runner_rule_auto_fixed', {
+          issues_count: validation.issues.length,
+          changes_count: result.changes.length
+        });
+      }
+    } else {
+      console.log('[Dashboard] No single runner rule violations found');
+    }
+  }, [validateSingleRunnerRule, autoFixSingleRunnerViolations, trackTechnicalEvent]);
+
   return (
     <>
       <div className="relative min-h-screen bg-background pb-4 overflow-hidden">
@@ -869,6 +819,30 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                 <div className="justify-self-center text-center">
                   <div className="flex items-center justify-center gap-2">
                     <SyncStatusIndicator />
+                    {!isViewOnly && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={checkForMissingTimes}
+                          className="flex items-center gap-2"
+                          title="Check for missing times"
+                        >
+                          <Clock className="h-4 w-4" />
+                          Check Times
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={checkSingleRunnerRule}
+                          className="flex items-center gap-2"
+                          title="Check for multiple runners running simultaneously"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          Validate Race
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="justify-self-end text-right">
@@ -1244,6 +1218,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                           onClick={() => {
                             console.log('Triggering confetti for celebrate');
                             triggerConfetti({ particleCount: 150, spread: 80 });
+                            trackConfettiCelebration({
+                              team_id: teamId
+                            });
                             trackCelebrationButtonClicked({
                               team_id: teamId
                             });
@@ -1424,6 +1401,10 @@ const Dashboard: React.FC<DashboardProps> = ({ isViewOnly = false, viewOnlyTeamN
                                     updateLegActualTime(36, 'actualFinish', Date.now());
                                     console.log('Triggering confetti for finish race');
                                     triggerConfetti({ particleCount: 200, spread: 100 });
+                                    trackConfettiFinishRace({
+                                      team_id: teamId,
+                                      leg_number: 36
+                                    });
                                     trackCelebrationButtonClicked({
                                       team_id: teamId
                                     });

@@ -66,6 +66,10 @@ export const EVENT_ACTIONS = {
   SPREADSHEET_IMPORT_USED: 'spreadsheet_import_used',
   PACE_OVERRIDE_USED: 'pace_override_used',
   CONFETTI_TEST: 'confetti_test',
+  CONFETTI_START_RUNNER: 'confetti_start_runner',
+  CONFETTI_CELEBRATION: 'confetti_celebration',
+  CONFETTI_FINISH_RACE: 'confetti_finish_race',
+  CONFETTI_SETTINGS_TEST: 'confetti_settings_test',
   CELEBRATION_BUTTON_CLICKED: 'celebration_button_clicked',
   
   // Sync and technical

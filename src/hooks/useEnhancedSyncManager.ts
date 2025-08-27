@@ -7,11 +7,13 @@ import { invokeEdge, getDeviceId } from '@/integrations/supabase/edge';
 import { supabase } from '@/integrations/supabase/client';
 import type { Runner, Leg } from '@/types/race';
 import type { Tables } from '@/integrations/supabase/types';
-import { recalculateProjections } from '@/utils/raceUtils';
+import { recalculateProjections, clearRunnerCache } from '@/utils/raceUtils';
 import { syncLogger } from '@/utils/logger';
 import { validateForSync, validateLeg } from '@/utils/validation';
+import { detectAndRepairImpossibleLegStates, validateLegStateIntegrity } from '@/utils/raceUtils';
 import { getSynchronizedTime } from '@/services/clockSync';
 import { useTechnicalTracking } from '@/hooks/useAnalytics';
+import { detectMissingTimeConflicts, shouldCheckForMissingTimes } from '@/utils/dataConsistency';
 
 // Enhanced sync manager that prioritizes data accuracy and integrates with existing systems
 export const useEnhancedSyncManager = () => {
@@ -36,6 +38,9 @@ export const useEnhancedSyncManager = () => {
   // Debounce real-time update data fetching
   const realtimeUpdateTimeout = useRef<NodeJS.Timeout | null>(null);
   
+  // Add detection when a leg is manually updated
+  const lastMissingTimeCheck = useRef(0);
+  
   // Store refs for stable access to frequently changing values
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -43,12 +48,12 @@ export const useEnhancedSyncManager = () => {
   // Subscribe to high-priority data events for immediate sync
   useEffect(() => {
     const unsubscribeLegUpdates = eventBus.subscribe(EVENT_TYPES.LEG_UPDATE, async (event) => {
-      const { legId, field, value, previousValue, runnerId, timestamp } = event.payload;
+      const { legId, field, value, previousValue, runnerId, timestamp, source } = event.payload;
       
-      console.log('[useEnhancedSyncManager] Received LEG_UPDATE event for leg:', legId, 'field:', field);
+      console.log('[useEnhancedSyncManager] Received LEG_UPDATE event for leg:', legId, 'field:', field, 'source:', source);
       
-      // Skip if no actual change
-      if (value === previousValue) {
+      // Skip if no actual change (except for auto-repair events which might have null previousValue)
+      if (value === previousValue && source !== 'autoRepair') {
         console.log('[useEnhancedSyncManager] Skipping LEG_UPDATE - no actual change');
         return;
       }
@@ -59,9 +64,9 @@ export const useEnhancedSyncManager = () => {
         return;
       }
       
-      // Rate limiting
+      // Rate limiting (but allow auto-repair events to bypass rate limiting)
       const now = Date.now();
-      if (now - lastSyncAttempt.current < SYNC_COOLDOWN_MS) {
+      if (now - lastSyncAttempt.current < SYNC_COOLDOWN_MS && source !== 'autoRepair') {
         console.log('[useEnhancedSyncManager] Skipping LEG_UPDATE - rate limited');
         return;
       }
@@ -246,10 +251,9 @@ export const useEnhancedSyncManager = () => {
       const payload = {
         id: leg.remoteId,
         number: leg.id,
-        distance: leg.distance,
+        distance: leg.distance || 0, // Ensure distance is never undefined
         start_time: leg.actualStart ? new Date(leg.actualStart).toISOString() : null,
-        finish_time: leg.actualFinish ? new Date(leg.actualFinish).toISOString() : null,
-        synchronized_timestamp: getSynchronizedTime(),
+        finish_time: leg.actualFinish ? new Date(leg.actualFinish).toISOString() : null
         // Include any other fields that should be preserved
       };
 
@@ -287,6 +291,25 @@ export const useEnhancedSyncManager = () => {
         
         // Update last synced timestamp
         storeRef.current.setLastSyncedAt(Date.now());
+
+        // After successful sync, check for related missing times
+        if (value !== null) {
+          const updatedLegs = storeRef.current.legs;
+          detectMissingTimeConflicts(updatedLegs, storeRef.current.runners, storeRef.current.teamId).then(missingTimeConflicts => {
+            // Only show conflicts related to the current leg or adjacent legs
+            const relevantConflicts = missingTimeConflicts.filter(conflict => 
+              Math.abs(conflict.legId - leg.id) <= 1
+            );
+            
+            if (relevantConflicts.length > 0) {
+              console.log('[useEnhancedSyncManager] Detected missing time conflicts after leg sync:', relevantConflicts);
+              // Handle multiple conflicts by passing them all to the conflict resolution system
+              relevantConflicts.forEach(conflict => {
+                onConflictDetected({ type: 'missing_time', ...conflict });
+              });
+            }
+          });
+        }
       }
     } catch (error) {
       console.error(`[useEnhancedSyncManager] Error syncing leg ${leg.id}:`, error);
@@ -308,7 +331,7 @@ export const useEnhancedSyncManager = () => {
       pendingSyncs.current.delete(syncKey);
       isProcessingSync.current = false;
     }
-  }, [queueChange]);
+  }, [queueChange, onConflictDetected]);
 
   // Handle atomic start runner synchronization
   const handleStartRunnerSync = useCallback(async (
@@ -753,13 +776,91 @@ export const useEnhancedSyncManager = () => {
         }).filter(Boolean) as Leg[];
 
         // Merge with conflict detection and recalculate projections
-        mergeWithConflictDetection(legs, storeRef.current.legs, (items) => {
+        await mergeWithConflictDetection(legs, storeRef.current.legs, async (items) => {
           console.log('[useEnhancedSyncManager] Updating legs with new data:', items.length);
           storeRef.current.setRaceData({ legs: items });
           if (items.length > 0) {
             const recalculatedLegs = recalculateProjections(items, 0, storeRef.current.runners, storeRef.current.startTime);
             storeRef.current.setRaceData({ legs: recalculatedLegs });
             console.log('[useEnhancedSyncManager] Legs updated and projections recalculated');
+            
+            // ENHANCED: Check for and repair impossible leg states
+            const integrityValidation = validateLegStateIntegrity(recalculatedLegs);
+            if (!integrityValidation.isValid) {
+              console.warn('[useEnhancedSyncManager] Detected impossible leg states after data fetch:', integrityValidation.issues);
+              
+              // Attempt to repair the impossible states
+              const repairResult = detectAndRepairImpossibleLegStates(recalculatedLegs);
+              if (repairResult.repaired) {
+                console.log('[useEnhancedSyncManager] Auto-repaired impossible leg states:', repairResult.changes);
+                
+                // Update the store with repaired legs
+                const repairedLegs = recalculateProjections(repairResult.updatedLegs, 0, storeRef.current.runners, storeRef.current.startTime);
+                storeRef.current.setRaceData({ legs: repairedLegs });
+                
+                // Clear runner cache to ensure immediate UI updates
+                clearRunnerCache();
+                
+                // Save only the legs that were actually repaired to the database
+                try {
+                  // Find which legs were actually changed by comparing with the original legs
+                  const originalLegs = recalculatedLegs;
+                  const changedLegs = repairedLegs.filter(repairedLeg => {
+                    const originalLeg = originalLegs.find(l => l.id === repairedLeg.id);
+                    return originalLeg && (
+                      originalLeg.actualFinish !== repairedLeg.actualFinish ||
+                      originalLeg.actualStart !== repairedLeg.actualStart
+                    );
+                  });
+                  
+                  if (changedLegs.length > 0) {
+                    const repairedLegPayloads = changedLegs.map(leg => ({
+                      id: leg.remoteId || crypto.randomUUID(),
+                      number: leg.id,
+                      distance: leg.distance || 0, // Ensure distance is never undefined
+                      start_time: leg.actualStart ? new Date(leg.actualStart).toISOString() : null,
+                      finish_time: leg.actualFinish ? new Date(leg.actualFinish).toISOString() : null
+                    }));
+                    
+                    console.log('[useEnhancedSyncManager] Saving repaired legs to database:', repairedLegPayloads);
+                    console.log('[useEnhancedSyncManager] Changed legs count:', changedLegs.length);
+                    console.log('[useEnhancedSyncManager] Changed leg IDs:', changedLegs.map(l => l.id));
+                    
+                    const saveResult = await invokeEdge('legs-upsert', {
+                      teamId: storeRef.current.teamId,
+                      deviceId: await getDeviceId(),
+                      legs: repairedLegPayloads,
+                      action: 'upsert'
+                    });
+                    
+                    if ((saveResult as any).error) {
+                      console.error('[useEnhancedSyncManager] Failed to save repaired legs:', (saveResult as any).error);
+                    } else {
+                      console.log('[useEnhancedSyncManager] Successfully saved repaired legs to database');
+                    }
+                  } else {
+                    console.log('[useEnhancedSyncManager] No legs were actually changed by repair, skipping database save');
+                  }
+                } catch (error) {
+                  console.error('[useEnhancedSyncManager] Error saving repaired legs to database:', error);
+                }
+              }
+            }
+            
+            // Smart missing time detection
+            if (shouldCheckForMissingTimes(recalculatedLegs, lastMissingTimeCheck.current)) {
+              detectMissingTimeConflicts(recalculatedLegs, storeRef.current.runners, storeRef.current.teamId).then(missingTimeConflicts => {
+                if (missingTimeConflicts.length > 0) {
+                  console.log('[useEnhancedSyncManager] Detected missing time conflicts:', missingTimeConflicts);
+                  lastMissingTimeCheck.current = Date.now();
+                  
+                  // Handle multiple conflicts by passing them all to the conflict resolution system
+                  missingTimeConflicts.forEach(conflict => {
+                    onConflictDetected({ type: 'missing_time', ...conflict });
+                  });
+                }
+              });
+            }
           }
         }, 'legs');
       }
@@ -770,13 +871,13 @@ export const useEnhancedSyncManager = () => {
     } finally {
       isProcessingSync.current = false;
     }
-  }, []);
+  }, [onConflictDetected]);
 
   // Merge function with conflict detection and field-level merging
-  const mergeWithConflictDetection = useCallback((
+  const mergeWithConflictDetection = useCallback(async (
     incomingItems: any[],
     localItems: any[],
-    updateAction: (items: any[]) => void,
+    updateAction: (items: any[]) => void | Promise<void>,
     table: 'runners' | 'legs'
   ) => {
     const localItemsMap = new Map(localItems.map((item) => [item.id, item]));
@@ -797,7 +898,7 @@ export const useEnhancedSyncManager = () => {
         // Check for start time conflicts
         if (localLeg.actualStart && serverLeg.actualStart && 
             Math.abs(localLeg.actualStart - serverLeg.actualStart) > 60000) { // 1 minute difference
-          console.log(`[useEnhancedSyncManager] Timing conflict detected for leg ${localLeg.id} start time`);
+          console.warn(`[useEnhancedSyncManager] Timing conflict detected for leg ${localLeg.id} start time`);
           onConflictDetected({
             type: 'timing',
             localLeg,
@@ -811,7 +912,7 @@ export const useEnhancedSyncManager = () => {
         // Check for finish time conflicts
         if (localLeg.actualFinish && serverLeg.actualFinish && 
             Math.abs(localLeg.actualFinish - serverLeg.actualFinish) > 60000) { // 1 minute difference
-          console.log(`[useEnhancedSyncManager] Timing conflict detected for leg ${localLeg.id} finish time`);
+          console.warn(`[useEnhancedSyncManager] Timing conflict detected for leg ${localLeg.id} finish time`);
           onConflictDetected({
             type: 'timing',
             localLeg,
@@ -867,7 +968,7 @@ export const useEnhancedSyncManager = () => {
 
     if (hasChanges) {
       syncLogger.sync(`Applied ${updatedCount} updates to ${table} (${conflictCount} conflicts)`);
-      updateAction(mergedItems);
+      await updateAction(mergedItems);
     } else {
       syncLogger.debug(`No changes needed for ${table}`);
     }
@@ -1131,6 +1232,25 @@ export const useEnhancedSyncManager = () => {
     manualRetry: () => {
       console.log('[useEnhancedSyncManager] Manual retry triggered');
       performSmartSync();
+    },
+    // Data integrity and repair
+    validateAndRepairLegStates: () => {
+      console.log('[useEnhancedSyncManager] Validating and repairing leg states...');
+      const result = storeRef.current.validateAndRepairLegStates();
+      
+      if (result.repaired) {
+        console.log('[useEnhancedSyncManager] Leg states repaired:', result.changes);
+        // Trigger sync after repair to ensure consistency
+        setTimeout(() => {
+          if (navigator.onLine && storeRef.current.teamId) {
+            console.log('[useEnhancedSyncManager] Triggering sync after leg state repair');
+            needsFullDataFetch.current = true;
+            performSmartSync();
+          }
+        }, 1000);
+      }
+      
+      return result;
     }
   };
 };

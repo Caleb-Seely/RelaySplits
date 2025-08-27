@@ -1,5 +1,230 @@
 import { supabase } from '@/integrations/supabase/client';
 import { ValidationResult, RepairResult } from '@/types/leaderboard';
+import type { Leg, Runner } from '@/types/race';
+import { getCurrentRunner } from '@/utils/raceUtils';
+
+export interface MissingTimeConflict {
+  legId: number;
+  runnerName: string;
+  field: 'actualStart' | 'actualFinish';
+  suggestedTime?: number;
+  previousLegFinishTime?: number;
+  nextLegStartTime?: number;
+}
+
+// Helper function to check if data exists in database
+const checkDatabaseForLegTime = async (teamId: string, legId: number, field: 'start_time' | 'finish_time'): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('legs')
+      .select(field)
+      .eq('team_id', teamId)
+      .eq('number', legId)
+      .single();
+    
+    if (error) {
+      console.warn(`[checkDatabaseForLegTime] Error checking database for leg ${legId} ${field}:`, error);
+      return false; // Assume missing if we can't check
+    }
+    
+    if (!data) return false;
+    
+    // Type-safe field access using type assertion
+    const typedData = data as any;
+    return typedData[field] !== null;
+  } catch (error) {
+    console.warn(`[checkDatabaseForLegTime] Exception checking database for leg ${legId} ${field}:`, error);
+    return false; // Assume missing if we can't check
+  }
+};
+
+export const detectMissingTimeConflicts = async (legs: Leg[], runners: Runner[], teamId?: string): Promise<MissingTimeConflict[]> => {
+  const conflicts: MissingTimeConflict[] = [];
+
+  console.log('[detectMissingTimeConflicts] Checking for missing times');
+
+  // Find the current runner
+  const currentRunner = getCurrentRunner(legs, new Date());
+  console.log(`[detectMissingTimeConflicts] Current runner: ${currentRunner ? `Leg ${currentRunner.id} (${runners.find(r => r.id === currentRunner.runnerId)?.name || 'Unknown'})` : 'None'}`);
+
+  // Determine which legs should be checked based on race progression
+  const legsToCheck: Leg[] = [];
+
+  if (currentRunner) {
+    // Check ALL previous legs - they should all have finished
+    for (let i = 1; i < currentRunner.id; i++) {
+      const previousLeg = legs.find(l => l.id === i);
+      if (previousLeg && !previousLeg.actualFinish) {
+        legsToCheck.push(previousLeg);
+      }
+    }
+
+    // Check the current leg - it should have started (unless it's leg 1)
+    if (currentRunner.id > 1 && !currentRunner.actualStart) {
+      legsToCheck.push(currentRunner);
+    }
+  } else {
+    // No current runner - check if there's a leg that should have started but hasn't
+    const lastCompletedLeg = legs
+      .filter(leg => leg.actualFinish)
+      .sort((a, b) => b.id - a.id)[0];
+
+    if (lastCompletedLeg && lastCompletedLeg.id < legs.length) {
+      const nextLeg = legs.find(l => l.id === lastCompletedLeg.id + 1);
+      if (nextLeg && !nextLeg.actualStart) {
+        legsToCheck.push(nextLeg);
+      }
+    }
+  }
+
+  console.log(`[detectMissingTimeConflicts] Checking ${legsToCheck.length} relevant legs`);
+
+  // Check each relevant leg for missing times
+  for (const leg of legsToCheck) {
+    const runner = runners.find(r => r.id === leg.runnerId);
+    const runnerName = runner?.name || `Runner ${leg.runnerId}`;
+
+    // Check for missing start time
+    if (!leg.actualStart && leg.id > 1) {
+      // Check if the database has this data before flagging as missing
+      let databaseHasData = false;
+      if (teamId) {
+        databaseHasData = await checkDatabaseForLegTime(teamId, leg.id, 'start_time');
+        console.log(`[detectMissingTimeConflicts] Database check for leg ${leg.id} start_time: ${databaseHasData ? 'EXISTS' : 'MISSING'}`);
+      }
+      
+      // Only flag as missing if database also doesn't have the data
+      if (!databaseHasData) {
+        const previousLeg = legs.find(l => l.id === leg.id - 1);
+        const suggestedTime = previousLeg?.actualFinish;
+        
+        console.log(`[detectMissingTimeConflicts] Found missing start time for leg ${leg.id} (${runnerName}) - both local and database missing`);
+        
+        conflicts.push({
+          legId: leg.id,
+          runnerName,
+          field: 'actualStart',
+          suggestedTime,
+          previousLegFinishTime: previousLeg?.actualFinish
+        });
+      } else {
+        console.log(`[detectMissingTimeConflicts] Skipping missing start time check for leg ${leg.id} (${runnerName}) - database has the data, local sync issue`);
+      }
+    }
+
+    // Check for missing finish time
+    if (!leg.actualFinish && leg.id < legs.length) {
+      // Check if the database has this data before flagging as missing
+      let databaseHasData = false;
+      if (teamId) {
+        databaseHasData = await checkDatabaseForLegTime(teamId, leg.id, 'finish_time');
+        console.log(`[detectMissingTimeConflicts] Database check for leg ${leg.id} finish_time: ${databaseHasData ? 'EXISTS' : 'MISSING'}`);
+      }
+      
+      // Only flag as missing if database also doesn't have the data
+      if (!databaseHasData) {
+        const nextLeg = legs.find(l => l.id === leg.id + 1);
+        const suggestedTime = nextLeg?.actualStart || Date.now();
+        
+        console.log(`[detectMissingTimeConflicts] Found missing finish time for leg ${leg.id} (${runnerName}) - both local and database missing`);
+        
+        conflicts.push({
+          legId: leg.id,
+          runnerName,
+          field: 'actualFinish',
+          suggestedTime,
+          nextLegStartTime: nextLeg?.actualStart
+        });
+      } else {
+        console.log(`[detectMissingTimeConflicts] Skipping missing finish time check for leg ${leg.id} (${runnerName}) - database has the data, local sync issue`);
+      }
+    }
+  }
+
+  console.log('[detectMissingTimeConflicts] Found', conflicts.length, 'conflicts');
+  return conflicts;
+};
+
+// Smart detection that only triggers in specific scenarios
+export const shouldCheckForMissingTimes = (legs: Leg[], lastCheckTime: number): boolean => {
+  const now = Date.now();
+  const timeSinceLastCheck = now - lastCheckTime;
+  
+  // Don't check more than once every 30 seconds
+  if (timeSinceLastCheck < 30000) {
+    return false;
+  }
+
+  // Find the current runner
+  const currentRunner = getCurrentRunner(legs, new Date());
+
+  // Check if there are any legs that should have times but don't
+  const hasIncompleteLegs = legs.some(leg => {
+    // Leg 1 might not have started yet
+    if (leg.id === 1) return false;
+    
+    // Don't check the current runner
+    if (currentRunner && currentRunner.id === leg.id) return false;
+    
+    // Check if previous leg finished but current leg hasn't started
+    const previousLeg = legs.find(l => l.id === leg.id - 1);
+    if (previousLeg?.actualFinish && !leg.actualStart) {
+      return true;
+    }
+    
+    // Check if current leg started but hasn't finished AND next leg has started
+    // (this indicates the current leg should have finished)
+    const nextLeg = legs.find(l => l.id === leg.id + 1);
+    if (leg.actualStart && !leg.actualFinish && nextLeg?.actualStart) {
+      return true;
+    }
+    
+    // Check if this is a previous leg that should have finished
+    if (currentRunner && leg.id < currentRunner.id && !leg.actualFinish) {
+      return true;
+    }
+    
+    return false;
+  });
+
+  return hasIncompleteLegs;
+};
+
+/**
+ * User-friendly function to validate and repair impossible leg states
+ * This can be called from the UI to fix data inconsistencies
+ */
+export const validateAndRepairLegStates = async (legs: Leg[], runners: Runner[], teamId?: string): Promise<{
+  repaired: boolean;
+  changes: string[];
+  issues: string[];
+  warnings: string[];
+}> => {
+  console.log('[validateAndRepairLegStates] Starting validation and repair...');
+  
+  // Import the repair function from raceUtils
+  const { detectAndRepairImpossibleLegStates, validateLegStateIntegrity } = await import('@/utils/raceUtils');
+  
+  // First, validate the current state
+  const integrityValidation = validateLegStateIntegrity(legs);
+  
+  // Then attempt to repair any impossible states
+  const repairResult = detectAndRepairImpossibleLegStates(legs);
+  
+  if (repairResult.repaired) {
+    console.log('[validateAndRepairLegStates] Auto-repaired impossible leg states:', repairResult.changes);
+  }
+  
+  // Also check for missing time conflicts
+  const missingTimeConflicts = await detectMissingTimeConflicts(legs, runners, teamId);
+  
+  return {
+    repaired: repairResult.repaired,
+    changes: repairResult.changes,
+    issues: integrityValidation.issues,
+    warnings: [...integrityValidation.warnings, ...missingTimeConflicts.map(c => `Missing ${c.field} for Leg ${c.legId} (${c.runnerName})`)]
+  };
+};
 
 export class DataConsistencyManager {
   private processingTeams = new Set<string>();

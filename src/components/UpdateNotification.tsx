@@ -77,3 +77,4 @@ const UpdateNotification: React.FC = () => {
 };
 
 export default UpdateNotification;
+

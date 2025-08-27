@@ -191,6 +191,14 @@ export function useFeatureUsageTracking() {
       trackFeature('pace_override', EVENT_ACTIONS.PACE_OVERRIDE_USED, params),
     trackConfettiTest: (params?: CustomEventParams) => 
       trackFeature('confetti', EVENT_ACTIONS.CONFETTI_TEST, params),
+    trackConfettiStartRunner: (params?: CustomEventParams) => 
+      trackFeature('confetti', EVENT_ACTIONS.CONFETTI_START_RUNNER, params),
+    trackConfettiCelebration: (params?: CustomEventParams) => 
+      trackFeature('confetti', EVENT_ACTIONS.CONFETTI_CELEBRATION, params),
+    trackConfettiFinishRace: (params?: CustomEventParams) => 
+      trackFeature('confetti', EVENT_ACTIONS.CONFETTI_FINISH_RACE, params),
+    trackConfettiSettingsTest: (params?: CustomEventParams) => 
+      trackFeature('confetti', EVENT_ACTIONS.CONFETTI_SETTINGS_TEST, params),
     trackCelebrationButtonClicked: (params?: CustomEventParams) => 
       trackFeature('celebration', EVENT_ACTIONS.CELEBRATION_BUTTON_CLICKED, params),
     trackOfflineModeUsed: (params?: CustomEventParams) => 

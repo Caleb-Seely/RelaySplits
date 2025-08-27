@@ -181,16 +181,10 @@ const Index = () => {
         // Only use team start time if it's not the placeholder
         if (Math.abs(teamStartTime - placeholderDate.getTime()) > 1000) {
           actualStartTime = teamStartTime;
-          console.log('[Index] Using team start time from localStorage for auto-start:', new Date(actualStartTime).toISOString());
-        } else {
-          console.log('[Index] Team start time is placeholder, using race store time');
         }
-      } else {
-        console.log('[Index] No team start time in localStorage, using race store time');
       }
       
       if (typeof firstLeg.actualStart !== 'number' && now >= actualStartTime) {
-        console.log('[Index] Auto-starting race at team start time:', new Date(actualStartTime).toISOString());
         updateLegActualTime(1, 'actualStart', actualStartTime);
       }
     }, 1000);

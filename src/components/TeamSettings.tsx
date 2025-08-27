@@ -85,7 +85,7 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
   const { updateTeamInviteToken } = useTeamSync();
   const { undoLastStartRunner, canUndo, getUndoDescription } = useRaceStore();
   const isMobile = useIsMobile();
-  const { trackConfettiTest, trackSettingsAccessed } = useFeatureUsageTracking();
+  const { trackConfettiSettingsTest, trackSettingsAccessed } = useFeatureUsageTracking();
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [teamName, setTeamName] = useState(team?.name || '');
@@ -176,6 +176,12 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
 
   const handleUndoStartRunner = () => {
     try {
+      // Check if undo is actually possible before executing
+      if (!canUndo()) {
+        toast.error('Nothing to undo');
+        return;
+      }
+      
       const undoDescription = getUndoDescription();
       undoLastStartRunner();
       toast.success(`${undoDescription || 'Action'} undone successfully!`);
@@ -220,7 +226,7 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
   const testConfetti = () => {
     console.log('Testing confetti');
     triggerConfetti({ particleCount: 50, spread: 50 });
-    trackConfettiTest({ team_id: team?.id });
+    trackConfettiSettingsTest({ team_id: team?.id });
   };
 
   return (
@@ -243,11 +249,11 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
                 <Button 
                   variant="outline" 
                   onClick={handleUndoStartRunner}
-                  disabled={!canUndo}
+                  disabled={!canUndo()}
                   className="h-10 text-xs text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 disabled:text-gray-400 disabled:bg-gray-50 disabled:border-gray-200 rounded-lg font-medium"
                 >
                   <Undo className="h-3 w-3 mr-1" />
-                  {canUndo ? "Undo Last Start/Finish" : "No Actions"}
+                  {canUndo() ? (getUndoDescription() || "Undo Last Action") : "No Actions"}
                 </Button>
                 
                 <Button 
@@ -522,11 +528,11 @@ const TeamSettings: React.FC<TeamSettingsProps> = ({ onClose }) => {
                 <Button 
                   variant="outline" 
                   onClick={handleUndoStartRunner}
-                  disabled={!canUndo}
+                  disabled={!canUndo()}
                   className="h-12 text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 disabled:text-gray-400 disabled:bg-gray-50 disabled:border-gray-200 rounded-lg font-medium"
                 >
                   <Undo className="h-4 w-4 mr-2" />
-                  {canUndo ? "Undo Last Start/Finish" : "No Actions to Undo"}
+                  {canUndo() ? (getUndoDescription() || "Undo Last Action") : "No Actions to Undo"}
                 </Button>
                 
                 <Button 

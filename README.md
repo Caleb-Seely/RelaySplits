@@ -190,3 +190,37 @@ This project is built with modern web technologies and is designed to be maintai
 
 **Ready to track your next relay race?** Get started with RelayTracker today!
 
+# RelaySplits
+
+A real-time relay race tracking application with offline support and multi-device synchronization.
+
+## Features
+
+### Missing Time Detection & Resolution
+
+The app includes an intelligent system to detect and resolve missing race times:
+
+#### Automatic Detection
+- **Smart Detection**: Automatically detects missing start/finish times during sync operations
+- **Throttled Checks**: Only checks every 30 seconds to prevent performance issues
+- **Context-Aware**: Only triggers when there are likely missing times (e.g., previous leg finished but current leg hasn't started)
+
+#### Manual Resolution
+- **Conflict Dialog**: When missing times are detected, users see a dialog with options:
+  - **Use Suggested Time**: Automatically use the previous runner's finish time or next runner's start time
+  - **Set Time Manually**: Open a time picker to set the exact time
+  - **Skip for Now**: Dismiss the dialog and handle later
+
+#### Manual Check
+- **Check Times Button**: Users can manually trigger a check for missing times from the dashboard
+- **Immediate Feedback**: Shows success message if no issues found, or opens resolution dialog if issues exist
+
+#### Detection Logic
+- **Missing Start Time**: Detected when a leg (except leg 1) has no start time but the previous leg has finished
+- **Missing Finish Time**: Detected when a leg has no finish time but the next leg has started
+- **Smart Suggestions**: Suggests times based on adjacent leg data when available
+
+This system helps prevent the NULL time issues that can occur during multi-device synchronization and ensures data integrity across all team devices.
+
+## Getting Started
+

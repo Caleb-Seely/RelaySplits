@@ -11,6 +11,7 @@ import ConflictResolutionModal from "@/components/ConflictResolutionModal";
 import { notificationManager } from "@/utils/notifications";
 import { useSessionDurationTracking } from "@/hooks/useAnalytics";
 import UpdateNotification from '@/components/UpdateNotification';
+import MissingTimeConflictModal from '@/components/MissingTimeConflictModal';
 
 // Route-level code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -75,6 +76,7 @@ const App = () => {
             </Suspense>
           </BrowserRouter>
           <ConflictResolutionModal />
+          <MissingTimeConflictModal />
         </ConflictResolutionProvider>
       </TeamProvider>
     </TooltipProvider>

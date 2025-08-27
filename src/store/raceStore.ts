@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { RaceData, Runner, Leg } from '@/types/race';
-import { initializeRace, recalculateProjections, validateRaceState, clearRunnerCache } from '@/utils/raceUtils';
-import { validateRaceData, createValidationReport } from '@/utils/validation';
 import { eventBus, EVENT_TYPES } from '@/utils/eventBus';
+import { recalculateProjections, clearRunnerCache, validateTimeUpdate, autoFixSingleRunnerViolations, initializeRace, validateRaceState, validateSingleRunnerRule, detectAndRepairImpossibleLegStates, validateLegStateIntegrity } from '@/utils/raceUtils';
+import type { RaceData, Runner, Leg } from '@/types/race';
+import { validateRaceData, createValidationReport } from '@/utils/validation';
 
 // Subscribe to real-time updates from other devices
 eventBus.subscribe(EVENT_TYPES.REALTIME_UPDATE, (event) => {
@@ -103,7 +103,10 @@ interface RaceStore extends RaceData {
   canUndo: () => boolean;
   getUndoDescription: () => string | null;
   validateAndFixRaceState: () => { isValid: boolean; issues: string[]; fixed: boolean };
-  validateRaceData: () => { isValid: boolean; issues: string[]; warnings: string[]; suggestions: string[] };
+  validateRaceData: () => { isValid: boolean; issues: string[]; warnings: string[] };
+  validateSingleRunnerRule: () => { isValid: boolean; issues: string[]; runningLegs: Leg[] };
+  autoFixSingleRunnerViolations: () => { fixed: boolean; changes: string[] };
+  validateAndRepairLegStates: () => { isValid: boolean; issues: string[]; repaired: boolean; changes: string[] };
   getValidationReport: () => string;
 }
 
@@ -205,10 +208,24 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
   }),
 
   setRunners: (runners) => {
-    set((state) => ({ 
-      ...state,
-      runners: [...runners]
-    }));
+    set((state) => { 
+      const updatedRunners = [...runners];
+      
+      // CRITICAL FIX: Save runner data to localStorage immediately to prevent data loss
+      if (state.teamId) {
+        try {
+          localStorage.setItem(`relay_runners_${state.teamId}`, JSON.stringify(updatedRunners));
+          localStorage.setItem(`relay_runners_timestamp_${state.teamId}`, Date.now().toString());
+        } catch (error) {
+          console.error('[RaceStore] Failed to save runners to localStorage:', error);
+        }
+      }
+      
+      return { 
+        ...state,
+        runners: updatedRunners
+      };
+    });
   },
 
   updateLegDistance: (id, distance) => set((state) => {
@@ -229,32 +246,61 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     const currentLeg = state.legs[legIndex];
     const previousValue = currentLeg[field];
 
-    const updatedLegs = [...state.legs];
+    // ENHANCED VALIDATION: Check for impossible states before making changes
+    const validation = validateTimeUpdate(state.legs, id, field, time);
+    if (!validation.isValid) {
+      console.warn('[RaceStore] Time update validation failed:', validation.issues);
+      // For now, we'll still allow the update but log the issues
+      // In the future, we could show a confirmation dialog or prevent the update
+    }
+
+    // Check for warnings about potential issues
+    if (validation.warnings.length > 0) {
+      console.warn('[RaceStore] Time update warnings:', validation.warnings);
+    }
+
+    let updatedLegs = [...state.legs];
     updatedLegs[legIndex] = { ...updatedLegs[legIndex], [field]: time };
 
-    // Only auto-set next leg start if we're setting a finish time (not clearing it)
+    // CRITICAL FIX: Auto-start next runner when current runner finishes
     if (field === 'actualFinish' && time !== null && legIndex < updatedLegs.length - 1) {
       const nextLeg = updatedLegs[legIndex + 1];
       if (!nextLeg.actualStart) {
+        console.log(`[RaceStore] Auto-starting next runner for leg ${nextLeg.id} at ${new Date(time).toISOString()}`);
         updatedLegs[legIndex + 1] = { ...nextLeg, actualStart: time };
       }
+    }
+
+    // AUTO-REPAIR: Fix any impossible leg states that might exist
+    const impossibleStateRepair = detectAndRepairImpossibleLegStates(updatedLegs);
+    if (impossibleStateRepair.repaired) {
+      console.log('[RaceStore] Auto-repaired impossible leg states:', impossibleStateRepair.changes);
+      updatedLegs = impossibleStateRepair.updatedLegs;
+    }
+
+    // Auto-fix any single runner rule violations
+    const autoFix = autoFixSingleRunnerViolations(updatedLegs);
+    if (autoFix.fixed) {
+      console.log('[RaceStore] Auto-fixed single runner violations:', autoFix.changes);
+      updatedLegs.splice(0, updatedLegs.length, ...autoFix.updatedLegs);
     }
 
     const finalLegs = recalculateProjections(updatedLegs, legIndex, state.runners, state.startTime);
 
     // Clear runner cache to ensure immediate UI updates
     clearRunnerCache();
-
+    
     // Publish high-priority data event for sync
     eventBus.publish({
       type: EVENT_TYPES.LEG_UPDATE,
       payload: {
         legId: id,
-        field,
+        field: field === 'actualStart' ? 'start' : 'finish',
         value: time,
         previousValue,
         runnerId: currentLeg.runnerId,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        source: 'raceStore'
       },
       priority: 'high',
       source: 'raceStore'
@@ -325,12 +371,31 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
       }
     }
 
+    // Validate that starting the next leg won't violate the single runner rule
+    const proposedLegs = updatedLegs.map((leg, index) => 
+      index === nextLegIndex ? { ...leg, actualStart: now } : leg
+    );
+    
+    const validation = validateSingleRunnerRule(proposedLegs);
+    if (!validation.isValid) {
+      console.warn('[startNextRunner] Starting next runner would violate single runner rule:', validation.issues);
+      // For now, we'll still allow it but log the warning
+      // In the future, we could show a confirmation dialog
+    }
+
     // Start the next leg
     console.log('[startNextRunner] Starting leg:', nextLegId);
     updatedLegs[nextLegIndex] = { 
       ...updatedLegs[nextLegIndex], 
       actualStart: now 
     };
+
+    // Auto-fix any single runner rule violations
+    const autoFix = autoFixSingleRunnerViolations(updatedLegs);
+    if (autoFix.fixed) {
+      console.log('[startNextRunner] Auto-fixed single runner violations:', autoFix.changes);
+      updatedLegs.splice(0, updatedLegs.length, ...autoFix.updatedLegs);
+    }
 
     const finalLegs = recalculateProjections(updatedLegs, nextLegIndex, state.runners, state.startTime);
 
@@ -661,14 +726,56 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     }
   },
 
+  // CRITICAL FIX: Enhanced data recovery that prioritizes stored data over defaults
   restoreFromOffline: (runners: Runner[], legs: Leg[], isSetupComplete: boolean) => {
-    set((state) => ({
-      ...state,
-      runners: [...runners],
-      legs: [...legs],
-      isSetupComplete,
-      setupStep: isSetupComplete ? 3 : 1
-    }));
+    set((state) => {
+      // CRITICAL FIX: Always try to recover runner data from localStorage first
+      let recoveredRunners = runners;
+      if (state.teamId) {
+        try {
+          const storedRunners = localStorage.getItem(`relay_runners_${state.teamId}`);
+          const storedTimestamp = localStorage.getItem(`relay_runners_timestamp_${state.teamId}`);
+          
+          if (storedRunners && storedTimestamp) {
+            const parsedRunners = JSON.parse(storedRunners);
+            const timestamp = parseInt(storedTimestamp);
+            
+            // Use stored data if it's recent (within last 24 hours) and has real names
+            if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+              // CRITICAL FIX: Only use stored data if it has real runner names (not defaults)
+              const hasRealNames = parsedRunners.some((r: Runner) => 
+                r.name && !r.name.startsWith('Runner ')
+              );
+              
+              if (hasRealNames) {
+                console.log('[RaceStore] Recovered runner data from localStorage');
+                recoveredRunners = parsedRunners;
+              } else {
+                console.log('[RaceStore] Stored data has default names, using provided data');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[RaceStore] Failed to recover runner data from localStorage:', error);
+        }
+      }
+      
+      // CRITICAL FIX: Ensure we never display default names if we have real data
+      const finalRunners = recoveredRunners.map(runner => {
+        // If we have a real name, use it; otherwise keep the provided name
+        if (runner.name && !runner.name.startsWith('Runner ')) {
+          return runner;
+        }
+        return runner;
+      });
+      
+      return {
+        ...state,
+        runners: finalRunners,
+        legs: legs,
+        isSetupComplete: isSetupComplete
+      };
+    });
   },
 
   assignRunnerToLegs: (runnerId, legIds) => set((state) => {
@@ -748,68 +855,250 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
     // This preserves the actual start time of the final runner while allowing
     // the race to continue from where it was "unfinished".
     if (isFinalLeg && hasBothStartAndFinish) {
-      get().updateLegActualTime(mostRecentLeg.id, 'actualFinish', null);
+      console.log('[undoLastStartRunner] Undoing race finish for final leg');
+      
+      // Use direct sync for final leg undo to avoid duplicate events
+      set((state) => {
+        const updatedLegs = state.legs.map(leg => 
+          leg.id === mostRecentLeg.id 
+            ? { ...leg, actualFinish: null }
+            : leg
+        );
+        
+        const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
+        
+        // Sync directly to database
+        import('@/integrations/supabase/edge').then(async ({ invokeEdge }) => {
+          try {
+            const deviceId = localStorage.getItem('relay_device_id') || 'unknown';
+            const leg = finalLegs.find(l => l.id === mostRecentLeg.id);
+            
+            if (leg?.remoteId) {
+              const legUpdate = {
+                id: leg.remoteId,
+                number: leg.id,
+                distance: leg.distance || 0,
+                start_time: leg.actualStart ? new Date(leg.actualStart).toISOString() : null,
+                finish_time: null // This is the undo action
+              };
+              
+              console.log('[undoLastStartRunner] Syncing final leg undo:', legUpdate);
+              
+              const result = await invokeEdge('legs-upsert', {
+                teamId: state.teamId,
+                deviceId,
+                legs: [legUpdate],
+                action: 'upsert'
+              });
+              
+              if ((result as any).error) {
+                console.error('[undoLastStartRunner] Failed to sync final leg undo:', (result as any).error);
+              } else {
+                console.log('[undoLastStartRunner] Successfully synced final leg undo');
+              }
+            }
+          } catch (error) {
+            console.error('[undoLastStartRunner] Error syncing final leg undo:', error);
+          }
+        }).catch(error => {
+          console.error('[undoLastStartRunner] Failed to import sync function for final leg:', error);
+        });
+        
+        return { legs: finalLegs, lastSyncedAt: Date.now() };
+      });
+      
       return;
     }
     
-    // Standard case: Remove the start time from the most recent leg
-    get().updateLegActualTime(mostRecentLeg.id, 'actualStart', null);
+    // LOGICAL UNDO: Undo the last start/finish action
+    // Batch all changes together to avoid validation conflicts
+    
+    // Prepare all the changes we need to make
+    const changes: Array<{legId: number, field: 'actualStart' | 'actualFinish', value: number | null}> = [];
+    
+    // Remove the start time from the most recent leg
+    changes.push({
+      legId: mostRecentLeg.id,
+      field: 'actualStart',
+      value: null
+    });
     
     // If this leg also has a finish time, remove it too
     if (mostRecentLeg.actualFinish !== undefined && mostRecentLeg.actualFinish !== null) {
-      get().updateLegActualTime(mostRecentLeg.id, 'actualFinish', null);
+      changes.push({
+        legId: mostRecentLeg.id,
+        field: 'actualFinish',
+        value: null
+      });
     }
     
-    // If this isn't the first leg, also remove the finish time from the previous leg
-    // to restore the previous runner to "running" state
+    // If this isn't the first leg, restore the previous runner to "running" state
     if (mostRecentLeg.id > 1) {
       const previousLeg = legs.find(leg => leg.id === mostRecentLeg.id - 1);
       if (previousLeg && previousLeg.actualFinish !== undefined && previousLeg.actualFinish !== null) {
-        get().updateLegActualTime(previousLeg.id, 'actualFinish', null);
+        changes.push({
+          legId: previousLeg.id,
+          field: 'actualFinish',
+          value: null
+        });
       }
     }
+    
+    // Apply all changes at once to avoid validation conflicts
+    set((state) => {
+      let updatedLegs = [...state.legs];
+      
+      // Capture previous values BEFORE making changes
+      const previousValues = new Map();
+      changes.forEach(change => {
+        const originalLeg = state.legs.find(leg => leg.id === change.legId);
+        if (originalLeg) {
+          previousValues.set(change.legId, originalLeg[change.field]);
+        }
+      });
+      
+      console.log('[undoLastStartRunner] Changes to apply:', changes);
+      console.log('[undoLastStartRunner] Previous values:', Object.fromEntries(previousValues));
+      
+      // Apply all changes
+      changes.forEach(change => {
+        updatedLegs = updatedLegs.map(leg => 
+          leg.id === change.legId 
+            ? { ...leg, [change.field]: change.value }
+            : leg
+        );
+      });
+      
+      // Verify changes were applied
+      changes.forEach(change => {
+        const updatedLeg = updatedLegs.find(leg => leg.id === change.legId);
+        console.log(`[undoLastStartRunner] After update - Leg ${change.legId} ${change.field}:`, updatedLeg?.[change.field]);
+      });
+      
+      // IMPORTANT: Skip auto-repair during undo operations to avoid interference
+      // The undo operation intentionally creates temporary "impossible" states
+      // that will be resolved when the user takes the next action
+      console.log('[undoLastStartRunner] Skipping auto-repair during undo operation');
+      
+      // Recalculate projections after all changes (without auto-repair)
+      const finalLegs = recalculateProjections(updatedLegs, 0, state.runners, state.startTime);
+      
+      // Verify final state
+      changes.forEach(change => {
+        const finalLeg = finalLegs.find(leg => leg.id === change.legId);
+        console.log(`[undoLastStartRunner] Final state - Leg ${change.legId} ${change.field}:`, finalLeg?.[change.field]);
+      });
+      
+      // For undo operations, sync directly to avoid race conditions
+      // This bypasses the event bus and syncs immediately
+      console.log('[undoLastStartRunner] Syncing undo changes directly to database');
+      
+      // Import the sync function directly
+      import('@/integrations/supabase/edge').then(async ({ invokeEdge }) => {
+        try {
+          const deviceId = localStorage.getItem('relay_device_id') || 'unknown';
+          
+          // Prepare all leg updates for batch sync
+          const legUpdates = changes.map(change => {
+            const leg = finalLegs.find(l => l.id === change.legId);
+            if (!leg?.remoteId) {
+              console.warn(`[undoLastStartRunner] Leg ${change.legId} has no remoteId, skipping sync`);
+              return null;
+            }
+            
+            return {
+              id: leg.remoteId,
+              number: leg.id,
+              distance: leg.distance || 0,
+              start_time: change.field === 'actualStart' ? (change.value ? new Date(change.value).toISOString() : null) : (leg.actualStart ? new Date(leg.actualStart).toISOString() : null),
+              finish_time: change.field === 'actualFinish' ? (change.value ? new Date(change.value).toISOString() : null) : (leg.actualFinish ? new Date(leg.actualFinish).toISOString() : null)
+            };
+          }).filter(Boolean);
+          
+          if (legUpdates.length > 0) {
+            console.log('[undoLastStartRunner] Syncing leg updates:', legUpdates);
+            
+            const result = await invokeEdge('legs-upsert', {
+              teamId: state.teamId,
+              deviceId,
+              legs: legUpdates,
+              action: 'upsert'
+            });
+            
+            if ((result as any).error) {
+              console.error('[undoLastStartRunner] Failed to sync undo changes:', (result as any).error);
+            } else {
+              console.log('[undoLastStartRunner] Successfully synced undo changes');
+            }
+          }
+        } catch (error) {
+          console.error('[undoLastStartRunner] Error syncing undo changes:', error);
+        }
+      }).catch(error => {
+        console.error('[undoLastStartRunner] Failed to import sync function:', error);
+      });
+      
+      // Clear runner cache to ensure immediate UI updates
+      clearRunnerCache();
+      
+      // Update last synced timestamp to indicate local change
+      return { legs: finalLegs, lastSyncedAt: Date.now() };
+    });
   },
 
   canUndo: () => {
-    const { legs } = get();
+    const { legs, startTime } = get();
+    
+    console.log('[canUndo] Checking undo availability:', { startTime, legsCount: legs.length });
     
     // Find legs with actual start times
     const legsWithStartTimes = legs.filter(leg => leg.actualStart !== undefined && leg.actualStart !== null);
     
-    // Check if there are currently running runners (legs with start but no finish)
-    const currentlyRunning = legs.some(leg => 
-      leg.actualStart !== undefined && 
-      leg.actualStart !== null && 
-      (leg.actualFinish === undefined || leg.actualFinish === null)
-    );
+    console.log('[canUndo] Legs with start times:', legsWithStartTimes.length);
     
-    // Can undo if there are legs with start times AND there are currently running runners
-    // This prevents undo when no one is currently running
-    return legsWithStartTimes.length > 0 && currentlyRunning;
+    // Can undo if there are any legs with start times
+    // This allows undo in these scenarios:
+    // 1. When someone is currently running (can undo their start)
+    // 2. When the race is finished (can undo the finish to continue)
+    // 3. When someone has both start and finish times (can undo both)
+    const canUndo = legsWithStartTimes.length > 0;
+    console.log('[canUndo] Final result:', canUndo);
+    return canUndo;
   },
 
   // Helper function to get what the undo action will do
   getUndoDescription: () => {
-    const { legs } = get();
+    const { legs, startTime } = get();
+    
+    console.log('[getUndoDescription] Getting description:', { startTime, legsCount: legs.length });
     
     // Find the most recent leg with an actual start time
     const legsWithStartTimes = legs
       .filter(leg => leg.actualStart !== undefined && leg.actualStart !== null)
       .sort((a, b) => (b.actualStart || 0) - (a.actualStart || 0));
     
-    if (legsWithStartTimes.length === 0) return null;
+    console.log('[getUndoDescription] Legs with start times:', legsWithStartTimes.length);
+    
+    if (legsWithStartTimes.length === 0) {
+      console.log('[getUndoDescription] No legs with start times, returning null');
+      return null;
+    }
     
     const mostRecentLeg = legsWithStartTimes[0];
     const isFinalLeg = mostRecentLeg.id === 36;
     const hasBothStartAndFinish = mostRecentLeg.actualStart !== null && mostRecentLeg.actualFinish !== null;
     
+    let description;
     if (isFinalLeg && hasBothStartAndFinish) {
-      return "Undo Race Finish";
+      description = "Restore Race (Continue)";
     } else if (mostRecentLeg.actualFinish !== null) {
-      return "Undo Last Start/Finish";
+      description = "Restore Previous Runner";
     } else {
-      return "Undo Last Start";
+      description = "Restore Previous Runner";
     }
+    
+    console.log('[getUndoDescription] Final description:', description);
+    return description;
   },
 
   // Validate and fix race state inconsistencies
@@ -833,12 +1122,86 @@ export const useRaceStore = create<RaceStore>((set, get) => ({
 
   validateRaceData: () => {
     const state = get();
-    const validation = validateRaceData(state.runners, state.legs, state.startTime);
-    return validation;
+    return validateRaceData(state.runners, state.legs);
+  },
+
+  validateSingleRunnerRule: () => {
+    const state = get();
+    return validateSingleRunnerRule(state.legs);
+  },
+
+  autoFixSingleRunnerViolations: () => {
+    const state = get();
+    const result = autoFixSingleRunnerViolations(state.legs);
+    if (result.fixed) {
+      set({ legs: result.updatedLegs });
+    }
+    return { fixed: result.fixed, changes: result.changes };
   },
 
   getValidationReport: () => {
     const state = get();
     return createValidationReport(state.runners, state.legs, state.startTime);
+  },
+
+  validateAndRepairLegStates: () => {
+    const state = get();
+    
+    // First, validate the current state
+    const integrityValidation = validateLegStateIntegrity(state.legs);
+    
+    // Then attempt to repair any impossible states
+    const repairResult = detectAndRepairImpossibleLegStates(state.legs);
+    
+    if (repairResult.repaired) {
+      console.log('[validateAndRepairLegStates] Auto-repaired impossible leg states:', repairResult.changes);
+      
+      // Update the store with repaired legs
+      set({ legs: repairResult.updatedLegs });
+      
+      // Recalculate projections after repair
+      const updatedLegs = recalculateProjections(repairResult.updatedLegs, 0, state.runners, state.startTime);
+      set({ legs: updatedLegs });
+      
+      // Clear runner cache to ensure immediate UI updates
+      clearRunnerCache();
+      
+      // CRITICAL: Publish sync events for each repaired leg
+      repairResult.changes.forEach(change => {
+        // Extract leg ID from change message (e.g., "Auto-finished Leg 3 because Leg 4 started")
+        const legMatch = change.match(/Leg (\d+)/);
+        if (legMatch) {
+          const legId = parseInt(legMatch[1]);
+          const repairedLeg = updatedLegs.find(l => l.id === legId);
+          
+          if (repairedLeg && repairedLeg.actualFinish) {
+            console.log(`[validateAndRepairLegStates] Publishing sync event for repaired leg ${legId}`);
+            
+            // Publish sync event for the repaired finish time
+            eventBus.publish({
+              type: EVENT_TYPES.LEG_UPDATE,
+              payload: {
+                legId: legId,
+                field: 'finish',
+                value: repairedLeg.actualFinish,
+                previousValue: null, // We don't know the previous value
+                runnerId: repairedLeg.runnerId,
+                timestamp: Date.now(),
+                source: 'autoRepair'
+              },
+              priority: 'high',
+              source: 'autoRepair'
+            });
+          }
+        }
+      });
+    }
+    
+    return {
+      isValid: integrityValidation.isValid && !repairResult.repaired,
+      issues: integrityValidation.issues,
+      repaired: repairResult.repaired,
+      changes: repairResult.changes
+    };
   }
 }));
