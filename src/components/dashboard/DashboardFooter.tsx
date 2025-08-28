@@ -335,6 +335,19 @@ const DashboardFooter: React.FC<DashboardFooterProps> = ({
                     <Undo className="h-4 w-4 mr-1" />
                     Clear Queue
                   </Button>
+
+                  {/* Notification Diagnostics Link */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      window.open('/notifications-test', '_blank');
+                    }}
+                    title="Open notification diagnostics"
+                  >
+                    <HelpCircle className="h-4 w-4 mr-1" />
+                    Diagnostics
+                  </Button>
                 </>
               )}
 

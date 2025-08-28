@@ -6,6 +6,7 @@ import { Bell, AlertTriangle, CheckCircle, XCircle, Info, Lightbulb } from 'luci
 import { notificationManager } from '@/utils/notifications';
 import { useDecoupledNotifications } from '@/hooks/useDecoupledNotifications';
 import { notificationTester, NotificationTestResult } from '@/utils/notificationTest';
+import NotificationTest from './NotificationTest';
 
 const NotificationDebugger: React.FC = () => {
   const [debugInfo, setDebugInfo] = useState<any>({});
@@ -13,7 +14,15 @@ const NotificationDebugger: React.FC = () => {
   const [comprehensiveResults, setComprehensiveResults] = useState<NotificationTestResult[]>([]);
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [isRunningTests, setIsRunningTests] = useState(false);
-  const { isSupported, getPermission, requestPermission, isNotificationPreferenceEnabled } = useDecoupledNotifications();
+  const { 
+    isSupported, 
+    getPermission, 
+    requestPermission, 
+    isNotificationPreferenceEnabled,
+    forceProcessPendingNotifications,
+    getPendingNotificationsCount,
+    getNotificationState
+  } = useDecoupledNotifications();
 
   const addTestResult = (result: string) => {
     setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${result}`]);
@@ -75,6 +84,45 @@ const NotificationDebugger: React.FC = () => {
     addTestResult('Notification preference cleared (disabled)');
   };
 
+  const forceProcessNotifications = async () => {
+    addTestResult('Manually forcing notification processing...');
+    try {
+      await forceProcessPendingNotifications();
+      addTestResult('Notification processing completed');
+    } catch (error) {
+      addTestResult(`Notification processing failed: ${error}`);
+    }
+  };
+
+  const showNotificationState = () => {
+    const state = getNotificationState();
+    const pendingCount = getPendingNotificationsCount();
+    addTestResult(`Notification state - Pending: ${pendingCount}, Processing: ${state.isProcessing}, Enabled: ${state.isEnabled}`);
+    addTestResult(`Last processed events: ${state.lastProcessedEvents.size} entries`);
+  };
+
+  const testRealtimeConnection = () => {
+    addTestResult('Testing real-time connection...');
+    try {
+      // Import and test the real-time connection
+      import('@/integrations/supabase/client').then(({ supabase }) => {
+        const channel = supabase.channel('test-connection');
+        channel.subscribe((status) => {
+          addTestResult(`Real-time connection status: ${status}`);
+          if (status === 'SUBSCRIBED') {
+            addTestResult('Real-time connection successful!');
+            supabase.removeChannel(channel);
+          } else if (status === 'TIMED_OUT') {
+            addTestResult('Real-time connection timed out');
+            supabase.removeChannel(channel);
+          }
+        });
+      });
+    } catch (error) {
+      addTestResult(`Real-time connection test failed: ${error}`);
+    }
+  };
+
   const getStatusIcon = (status: boolean) => {
     return status ? <CheckCircle className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-500" />;
   };
@@ -94,12 +142,15 @@ const NotificationDebugger: React.FC = () => {
         preferenceEnabled: isNotificationPreferenceEnabled(),
         preferenceValue: notificationManager.getNotificationPreferenceValue(),
         queueStatus: notificationManager.getQueueStatus(),
+        pendingNotificationsCount: getPendingNotificationsCount(),
         userAgent: navigator.userAgent,
         protocol: window.location.protocol,
         hostname: window.location.hostname,
         pageVisible: !document.hidden,
         serviceWorkerSupported: 'serviceWorker' in navigator,
-        notificationSupported: 'Notification' in window
+        notificationSupported: 'Notification' in window,
+        online: navigator.onLine,
+        connectionType: (navigator as any).connection?.type || 'unknown'
       });
     };
 
@@ -149,6 +200,24 @@ const NotificationDebugger: React.FC = () => {
                 {debugInfo.preferenceEnabled ? 'Enabled' : 'Disabled'}
               </Badge>
             </div>
+            <div className="flex items-center justify-between p-3 border rounded">
+              <span>Pending Notifications</span>
+              <Badge variant={debugInfo.pendingNotificationsCount > 0 ? 'default' : 'secondary'}>
+                {debugInfo.pendingNotificationsCount}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 border rounded">
+              <span>Network Status</span>
+              <Badge variant={debugInfo.online ? 'default' : 'destructive'}>
+                {debugInfo.online ? 'Online' : 'Offline'}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 border rounded">
+              <span>Connection Type</span>
+              <Badge variant="secondary">
+                {debugInfo.connectionType}
+              </Badge>
+            </div>
           </div>
 
           {/* Action Buttons */}
@@ -160,6 +229,15 @@ const NotificationDebugger: React.FC = () => {
             <Button onClick={testBackgroundNotification} variant="outline">
               <Bell className="h-4 w-4 mr-2" />
               Test Background
+            </Button>
+            <Button onClick={forceProcessNotifications} variant="outline">
+              Force Process
+            </Button>
+            <Button onClick={showNotificationState} variant="outline">
+              Show State
+            </Button>
+            <Button onClick={testRealtimeConnection} variant="outline">
+              Test Real-time
             </Button>
             <Button onClick={resetNotificationPreference} variant="outline">
               Reset Preference
@@ -218,6 +296,9 @@ const NotificationDebugger: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Notification Test */}
+          <NotificationTest />
 
           {/* Debug Info */}
           <details className="border rounded p-3">

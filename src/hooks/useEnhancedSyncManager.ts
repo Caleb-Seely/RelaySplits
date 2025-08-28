@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 
 import { useRaceStore } from '@/store/raceStore';
 import { useConflictResolution } from '@/contexts/ConflictResolutionContext';
@@ -46,6 +46,9 @@ export const useEnhancedSyncManager = () => {
   // Store refs for stable access to frequently changing values
   const storeRef = useRef(store);
   storeRef.current = store;
+
+  // Real-time subscription retry tracking
+  const [realtimeRetryCount, setRealtimeRetryCount] = useState(0);
 
   // Subscribe to high-priority data events for immediate sync
   useEffect(() => {
@@ -956,8 +959,17 @@ export const useEnhancedSyncManager = () => {
       realtimeSubscription.current = null;
     }
     
-    // Create new real-time subscription
-    const channel = supabase.channel(`team-${teamId}`)
+    // Create new real-time subscription with better configuration
+    const channel = supabase.channel(`team-${teamId}`, {
+      config: {
+        presence: {
+          key: deviceId.current,
+        },
+        broadcast: {
+          self: false,
+        },
+      },
+    })
       .on('broadcast', { event: 'data_updated' }, (payload) => {
         console.log('[useEnhancedSyncManager] Received real-time update:', payload);
         
@@ -1005,9 +1017,24 @@ export const useEnhancedSyncManager = () => {
       })
       .subscribe((status) => {
         syncLogger.sync('Real-time subscription status:', status);
-        // Only warn about unexpected closures if we're not in cleanup mode
-        if (status === 'CLOSED' && realtimeSubscription.current) {
+        
+        // Handle different subscription statuses
+        if (status === 'TIMED_OUT') {
+          syncLogger.warn('Real-time subscription timed out, will retry...');
+          // Retry subscription after a delay
+          setTimeout(() => {
+            if (storeRef.current.teamId && navigator.onLine) {
+              syncLogger.sync('Retrying real-time subscription after timeout');
+              // This will trigger the useEffect to recreate the subscription
+              setRealtimeRetryCount(prev => prev + 1);
+            }
+          }, 5000); // 5 second delay before retry
+        } else if (status === 'CLOSED' && realtimeSubscription.current) {
           syncLogger.warn('Real-time subscription was closed unexpectedly');
+        } else if (status === 'SUBSCRIBED') {
+          syncLogger.sync('Real-time subscription established successfully');
+        } else if (status === 'CHANNEL_ERROR') {
+          syncLogger.error('Real-time subscription channel error');
         }
       });
     
@@ -1034,9 +1061,19 @@ export const useEnhancedSyncManager = () => {
         performSmartSync();
       }
     }, 120000);
+
+    // Set up more frequent sync when real-time is not working (every 30 seconds)
+    const fallbackSyncInterval = setInterval(() => {
+      if (navigator.onLine && storeRef.current.teamId && !realtimeSubscription.current) {
+        syncLogger.sync('Real-time not available, performing fallback sync');
+        needsFullDataFetch.current = true;
+        performSmartSync();
+      }
+    }, 30000);
     
     return () => {
       clearInterval(syncInterval);
+      clearInterval(fallbackSyncInterval);
       if (realtimeUpdateTimeout.current) {
         clearTimeout(realtimeUpdateTimeout.current);
         realtimeUpdateTimeout.current = null;
@@ -1047,7 +1084,7 @@ export const useEnhancedSyncManager = () => {
         realtimeSubscription.current = null;
       }
     };
-  }, [performSmartSync, fetchLatestData]);
+  }, [performSmartSync, fetchLatestData, realtimeRetryCount]);
 
   // Save initial team data (for setup wizard)
   const saveInitialRows = useCallback(async (teamId: string) => {

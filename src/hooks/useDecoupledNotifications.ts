@@ -174,12 +174,15 @@ export const useDecoupledNotifications = () => {
 
   // Process pending notifications with rate limiting
   const processPendingNotifications = useCallback(async () => {
+    console.log('[useDecoupledNotifications] processPendingNotifications called, pending count:', notificationState.current.pendingNotifications.length);
+    
     if (notificationState.current.isProcessing) {
       console.log('[useDecoupledNotifications] Already processing notifications, skipping');
       return;
     }
     
     if (notificationState.current.pendingNotifications.length === 0) {
+      console.log('[useDecoupledNotifications] No pending notifications to process');
       return;
     }
     
@@ -258,8 +261,13 @@ export const useDecoupledNotifications = () => {
     const unsubscribeLegUpdates = eventBus.subscribe(EVENT_TYPES.LEG_UPDATE, (event) => {
       const { legId, field, value, previousValue } = event.payload;
       
+      console.log('[useDecoupledNotifications] Received LEG_UPDATE event:', { legId, field, value, previousValue });
+      
       // Only process if we have a value change
-      if (value === previousValue) return;
+      if (value === previousValue) {
+        console.log('[useDecoupledNotifications] Skipping event - no value change');
+        return;
+      }
       
       const currentLegs = legs;
       const prevLegs = prevLegsRef.current;
@@ -271,11 +279,12 @@ export const useDecoupledNotifications = () => {
       if (!currentLeg || !prevLeg) return;
       
       // Check if a runner just started (actualStart was added) - only for first leg
-      if (field === 'actualStart' && currentLeg.actualStart && !prevLeg.actualStart && currentLeg.id === 1) {
+      if (field === 'start' && currentLeg.actualStart && !prevLeg.actualStart && currentLeg.id === 1) {
         const runner = runners.find(r => r.id === currentLeg.runnerId);
         if (runner) {
           // Skip notification if the current user is the one who performed this action
           if (deviceInfo?.displayName && runner.name === deviceInfo.displayName) {
+            console.log('[useDecoupledNotifications] Skipping first leg start notification - current user performed this action');
             return;
           }
 
@@ -296,15 +305,26 @@ export const useDecoupledNotifications = () => {
           });
           
           console.log('[useDecoupledNotifications] Queued first leg start notification');
+          
+          // Process notifications immediately if page is not visible
+          if (!isPageVisible.current) {
+            console.log('[useDecoupledNotifications] Processing notifications immediately due to page not being visible');
+            processPendingNotifications();
+          } else {
+            // For testing: also process when page is visible (remove this in production)
+            console.log('[useDecoupledNotifications] Processing notifications immediately for testing (page visible)');
+            processPendingNotifications();
+          }
         }
       }
 
       // Check if a runner just finished (actualFinish was added)
-      if (field === 'actualFinish' && currentLeg.actualFinish && !prevLeg.actualFinish) {
+      if (field === 'finish' && currentLeg.actualFinish && !prevLeg.actualFinish) {
         const runner = runners.find(r => r.id === currentLeg.runnerId);
         if (runner) {
           // Skip notification if the current user is the one who performed this action
           if (deviceInfo?.displayName && runner.name === deviceInfo.displayName) {
+            console.log('[useDecoupledNotifications] Skipping finish notification - current user performed this action');
             return;
           }
 
@@ -327,6 +347,16 @@ export const useDecoupledNotifications = () => {
               timestamp: eventTimestamp
             });
             console.log('[useDecoupledNotifications] Queued final leg finish notification');
+            
+            // Process notifications immediately if page is not visible
+            if (!isPageVisible.current) {
+              console.log('[useDecoupledNotifications] Processing notifications immediately due to page not being visible');
+              processPendingNotifications();
+            } else {
+              // For testing: also process when page is visible (remove this in production)
+              console.log('[useDecoupledNotifications] Processing notifications immediately for testing (page visible)');
+              processPendingNotifications();
+            }
           }
           // For all other legs, send a handoff notification (combines finish + start)
           else {
@@ -343,6 +373,16 @@ export const useDecoupledNotifications = () => {
                 timestamp: eventTimestamp
               });
               console.log('[useDecoupledNotifications] Queued handoff notification');
+              
+              // Process notifications immediately if page is not visible
+              if (!isPageVisible.current) {
+                console.log('[useDecoupledNotifications] Processing notifications immediately due to page not being visible');
+                processPendingNotifications();
+              } else {
+                // For testing: also process when page is visible (remove this in production)
+                console.log('[useDecoupledNotifications] Processing notifications immediately for testing (page visible)');
+                processPendingNotifications();
+              }
             }
           }
         }
@@ -356,7 +396,9 @@ export const useDecoupledNotifications = () => {
 
   // Process pending notifications when page is not visible
   useEffect(() => {
+    console.log('[useDecoupledNotifications] Page visibility effect triggered, pageVisible:', isPageVisible.current, 'pendingCount:', notificationState.current.pendingNotifications.length);
     if (!isPageVisible.current && notificationState.current.pendingNotifications.length > 0) {
+      console.log('[useDecoupledNotifications] Processing notifications due to page not being visible');
       processPendingNotifications();
     }
   }, [processPendingNotifications]);
